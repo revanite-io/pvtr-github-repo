@@ -5,9 +5,9 @@ go 1.23.4
 require (
 	github.com/ossf/si-tooling/v2 v2.0.4
 	github.com/privateerproj/privateer-sdk v1.0.2
-	github.com/revanite-io/sci v0.1.8
+	github.com/revanite-io/sci v0.1.9
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
-	golang.org/x/oauth2 v0.18.0
+	golang.org/x/oauth2 v0.28.0
 )
 
 require (
@@ -41,7 +41,6 @@ require (
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240314234333-6e1732d8331c // indirect
 	google.golang.org/grpc v1.62.1 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
