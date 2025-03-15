@@ -10,6 +10,43 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
+func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+
+	//https://securitylab.github.com/resources/github-actions-untrusted-input/
+	// List of untrusted inputs
+	// github.event.issue.title
+	// github.event.issue.body
+	// github.event.pull_request.title
+	// github.event.pull_request.body
+	// github.event.comment.body
+	// github.event.review.body
+	// github.event.pages.*.page_name
+	// github.event.commits.*.message
+	// github.event.head_commit.message
+	// github.event.head_commit.author.email
+	// github.event.head_commit.author.name
+	// github.event.commits.*.author.email
+	// github.event.commits.*.author.name
+	// github.event.pull_request.head.ref
+	// github.event.pull_request.head.label
+	// github.event.pull_request.head.repo.default_branch
+	// github.head_ref
+
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	for _, tool := range data.Insights.Repository.Security.Tools {
+		if tool.Results.CI.Comment == "test"{
+			return layer4.Passed, "All CI/CD tools sanitize input parameters"
+		}
+	}
+
+	return layer4.Failed, "Not all CI/CD tools sanitize input parameters"
+
+}
+
 func releaseHasUniqueIdentifier(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {

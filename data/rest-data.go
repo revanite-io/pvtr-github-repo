@@ -26,6 +26,7 @@ type RestData struct {
 	Contents     struct {
 		TopLevel []DirContents
 		ForgeDir []DirContents
+		WorkFlows []DirFile
 	}
 }
 
@@ -59,6 +60,19 @@ type DirContents struct {
 	GitURL      string `json:"git_url"`
 	DownloadURL string `json:"download_url"`
 	Type        string `json:"type"`
+}
+
+type DirFile struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	SHA         string `json:"sha"`
+	Size        int    `json:"size"`
+	URL         string `json:"url"`
+	HTMLURL     string `json:"html_url"`
+	GitURL      string `json:"git_url"`
+	DownloadURL string `json:"download_url"`
+	Type        string `json:"type"`
+	Content     string `json:"content"`
 }
 
 type FileAPIResponse struct {
@@ -100,6 +114,7 @@ func (r *RestData) Setup() error {
 	r.getWorkflow()
 	r.getReleases()
 	r.loadOrgData()
+	r.loadWorkflows()
 	return nil
 }
 
@@ -162,6 +177,23 @@ func (r *RestData) loadSecurityInsights() {
 			return
 		}
 	}
+}
+
+func (r *RestData) loadWorkflows() {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/workflows", APIBase, r.owner, r.repo)
+	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("error getting workflows: %s", err.Error()))
+		return
+	}
+	var workflows []DirFile
+	err = json.Unmarshal(responseData, &workflows)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("error unmarshalling API response for workflows: %s", err.Error()))
+		return
+	}
+	r.Contents.WorkFlows = workflows
+
 }
 
 func (r *RestData) foundSecurityInsights(content DirContents) bool {
