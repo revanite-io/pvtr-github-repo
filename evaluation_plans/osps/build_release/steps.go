@@ -10,41 +10,61 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
+//https://securitylab.github.com/resources/github-actions-untrusted-input/
+// List of untrusted inputs
+var regex = 
+	`.*(github.event\.issue\.title|` +
+	`github.event\.issue\.body|` +
+	`github.event\.pull_request\.title|` +
+	`github.event\.pull_request\.body|` +
+	`github.event\.comment\.body|` +
+	`github.event\.review\.body|` +
+	`github.event\.pages.*\.page_name|` +
+	`github.event\.commits.*\.message|` +
+	`github.event\.head_commit\.message|` +
+	`github.event\.head_commit\.author\.email|` +
+	`github.event\.head_commit\.author\.name|` +
+	`github.event\.commits.*\.author\.email|` +
+	`github.event\.commits.*\.author\.name|` +
+	`github.event\.pull_request\.head\.ref|` +
+	`github.event\.pull_request\.head\.label|` +
+	`github.event\.pull_request\.head\.repo\.default_branch|` +
+	`github\.head_ref).*`
+
 func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 
-	//https://securitylab.github.com/resources/github-actions-untrusted-input/
-	// List of untrusted inputs
-	// github.event.issue.title
-	// github.event.issue.body
-	// github.event.pull_request.title
-	// github.event.pull_request.body
-	// github.event.comment.body
-	// github.event.review.body
-	// github.event.pages.*.page_name
-	// github.event.commits.*.message
-	// github.event.head_commit.message
-	// github.event.head_commit.author.email
-	// github.event.head_commit.author.name
-	// github.event.commits.*.author.email
-	// github.event.commits.*.author.name
-	// github.event.pull_request.head.ref
-	// github.event.pull_request.head.label
-	// github.event.pull_request.head.repo.default_branch
-	// github.head_ref
+
+	fmt.Printf("Regex: %v", regex)
+
 	
 	//parse the payload and see if we pass our checks
-	// actionlint takes a byte array, which I assume is the 
+	// data, message := reusable_steps.VerifyPayload(payloadData)
+	// if message != "" {
+	// 	return layer4.Unknown, message
+	// }
 
-	data, message := reusable_steps.VerifyPayload(payloadData)
-	if message != "" {
-		return layer4.Unknown, message
-	}
+	//For each file in the payload
+	// for _, file := range data.WorkflowFiles {
+		//Decode the file content
+		// decoded, _ := base64.StdEncoding.DecodeString(file.Content)
+		//Parse the workflow
+		// workflow, err := actionlint.Parse(decoded)
 
-	for _, tool := range data.Insights.Repository.Security.Tools {
-		if tool.Results.CI.Comment == "test"{
-			return layer4.Passed, "All CI/CD tools sanitize input parameters"
-		}
-	}
+		// if err != nil {
+		// 	return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", err)
+		// }
+
+		// //Check the workflow for untrusted inputs
+		// for _, job := range workflow.Jobs {
+		// 	//Check the step for untrusted inputs
+		// 	for _ step range 
+		// }
+	// }
+	// base64.StdEncoding.DecodeString()
+
+	// for _, tool := range data.Insights.Repository.Security.Tools {
+
+	// }
 
 	return layer4.Failed, "Not all CI/CD tools sanitize input parameters"
 
