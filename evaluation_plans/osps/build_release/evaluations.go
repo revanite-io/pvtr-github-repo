@@ -24,7 +24,6 @@ func OSPS_BR_01() (evaluation *layer4.ControlEvaluation) {
 		},
 		[]layer4.AssessmentStep{
 			cicdSanitizedInputParameters,
-			reusable_steps.NotImplemented,
 		},
 	)
 

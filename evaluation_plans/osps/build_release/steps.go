@@ -31,6 +31,9 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	// github.event.pull_request.head.label
 	// github.event.pull_request.head.repo.default_branch
 	// github.head_ref
+	
+	//parse the payload and see if we pass our checks
+	// actionlint takes a byte array, which I assume is the 
 
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {

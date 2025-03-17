@@ -63,16 +63,9 @@ type DirContents struct {
 }
 
 type DirFile struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	SHA         string `json:"sha"`
-	Size        int    `json:"size"`
-	URL         string `json:"url"`
-	HTMLURL     string `json:"html_url"`
-	GitURL      string `json:"git_url"`
-	DownloadURL string `json:"download_url"`
-	Type        string `json:"type"`
+	DirContents
 	Content     string `json:"content"`
+	Encoding    string `json:"encoding"`
 }
 
 type FileAPIResponse struct {
@@ -114,7 +107,7 @@ func (r *RestData) Setup() error {
 	r.getWorkflow()
 	r.getReleases()
 	r.loadOrgData()
-	r.loadWorkflows()
+	r.getWorkflowFiles()
 	return nil
 }
 
@@ -179,20 +172,42 @@ func (r *RestData) loadSecurityInsights() {
 	}
 }
 
-func (r *RestData) loadWorkflows() {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/workflows", APIBase, r.owner, r.repo)
+func (r *RestData) getWorkflowFiles() {
+	//Only get top level for now, will need to recurse later
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents/.github/workflows", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
 		r.Config.Logger.Error(fmt.Sprintf("error getting workflows: %s", err.Error()))
 		return
 	}
-	var workflows []DirFile
-	err = json.Unmarshal(responseData, &workflows)
+	
+	var workflowFileList []DirContents
+	json.Unmarshal(responseData, &workflowFileList)
+
+
+	//For each file, listed we need to get it and put it in a format the action parser can use
+	var dirFiles = make([]DirFile, len(workflowFileList))
+	for i, workflowFile := range workflowFileList {
+
+		//TODO: log error
+		response , _:= r.MakeApiCall(workflowFile.URL, true)
+
+		var dirFile DirFile
+		err := json.Unmarshal(response, &dirFile)
+		if( err != nil ){
+			//TODO do some logging
+		}
+		
+		dirFiles[i] = dirFile;
+	}
+
+	r.Contents.WorkFlows = dirFiles
+
 	if err != nil {
 		r.Config.Logger.Error(fmt.Sprintf("error unmarshalling API response for workflows: %s", err.Error()))
 		return
 	}
-	r.Contents.WorkFlows = workflows
+	// r.Contents.WorkFlows = workflows
 
 }
 
