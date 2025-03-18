@@ -1,10 +1,13 @@
 package build_release
 
 import (
+	"encoding/base64"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/rhysd/actionlint"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
@@ -36,30 +39,63 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 
 	fmt.Printf("Regex: %v", regex)
 
-	
-	//parse the payload and see if we pass our checks
-	// data, message := reusable_steps.VerifyPayload(payloadData)
-	// if message != "" {
-	// 	return layer4.Unknown, message
-	// }
+	// parse the payload and see if we pass our checks
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
 
-	//For each file in the payload
-	// for _, file := range data.WorkflowFiles {
-		//Decode the file content
-		// decoded, _ := base64.StdEncoding.DecodeString(file.Content)
-		//Parse the workflow
-		// workflow, err := actionlint.Parse(decoded)
+	// For each file in the payload
+	for _, file := range data.Contents.WorkFlows {
+		
+		if file.Encoding != "base64" {
+			return layer4.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name)
+		}
 
-		// if err != nil {
-		// 	return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", err)
-		// }
+		// Decode the file content
+		decoded, _ := base64.StdEncoding.DecodeString(file.Content)
+		
+		// Parse the workflow
+		workflow, err := actionlint.Parse(decoded)
 
-		// //Check the workflow for untrusted inputs
-		// for _, job := range workflow.Jobs {
-		// 	//Check the step for untrusted inputs
-		// 	for _ step range 
-		// }
-	// }
+		if err != nil {
+			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", err)
+		}
+
+		//Check the workflow for untrusted inputs
+		for _, job := range workflow.Jobs {
+
+			if job == nil {
+				continue
+			}
+
+			//Check the step for untrusted inputs
+			for _, step := range job.Steps {
+
+				if step == nil {
+					continue
+				}
+
+				// if it isn't an exec run get out of dodge
+				run, ok := step.Exec.(*actionlint.ExecRun)
+				if !ok || run.Run == nil {
+					continue
+				}
+
+				varList := pullVariablesFromScript(run.Run.Value)
+
+				expression,_ := regexp.Compile(regex)
+
+				for _, name := range varList {
+					if expression.Match([]byte(name)) {
+						return layer4.Failed, fmt.Sprintf("Untrusted input found in step %v: %v", step.Name, name)
+					}
+				}
+
+			}
+
+		}
+	}
 	// base64.StdEncoding.DecodeString()
 
 	// for _, tool := range data.Insights.Repository.Security.Tools {
@@ -69,6 +105,26 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	return layer4.Failed, "Not all CI/CD tools sanitize input parameters"
 
 }
+
+func pullVariablesFromScript(script string) [] string {
+
+		// Regular expression to match variable names inside ${{ }}
+		varRegex := regexp.MustCompile(`\$\{\{\s*(.*)\s*\}\}`)
+
+		// Find all matches
+		matches := varRegex.FindAllStringSubmatch(script, -1)
+	
+		// Extract variable names
+		varNames := []string{}
+		for _, match := range matches {
+			if len(match) > 1 {
+				varNames = append(varNames, strings.TrimSpace(match[1]))
+			}
+		}
+	
+		return varNames
+}
+
 
 func releaseHasUniqueIdentifier(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
