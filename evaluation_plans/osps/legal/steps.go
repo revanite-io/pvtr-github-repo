@@ -81,6 +81,9 @@ func goodLicense(payloadData interface{}, _ map[string]*layer4.Change) (result l
 	spdx_ids := append(spdx_ids_a, spdx_ids_b...)
 	badLicenses := []string{}
 	for _, spdx_id := range spdx_ids {
+		if spdx_id == "" {
+			continue
+		}
 		var validId bool
 		for _, license := range licenses.Licenses {
 			if license.LicenseID == spdx_id {
