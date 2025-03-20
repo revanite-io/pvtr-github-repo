@@ -58,8 +58,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/privateerproj/privateer-sdk v1.0.3 h1:IJfmrNMHTwFnFxtsqH9N5A8hNZP4aocx1nYH83Fki7k=
 github.com/privateerproj/privateer-sdk v1.0.3/go.mod h1:DcgUeWEDhqhg8fNWfx3qwH3J86YMe16Ibzg5H4Rx9PM=
-github.com/revanite-io/sci v0.1.9 h1:DnQ3NB1pqLhbRFYUM6CoA6hYbIJtRas1M6bJbsWL5VA=
-github.com/revanite-io/sci v0.1.9/go.mod h1:KNBMtb28TKYJ0aq6P0jX1XaIBYQdAziTvnI7uU2H+5Q=
+github.com/revanite-io/sci v0.2.0 h1:F5LiIwQlwW90F/4Up6ibACzUBna7DuPDri4ir4nbosA=
+github.com/revanite-io/sci v0.2.0/go.mod h1:KNBMtb28TKYJ0aq6P0jX1XaIBYQdAziTvnI7uU2H+5Q=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
