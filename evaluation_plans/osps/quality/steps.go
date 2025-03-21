@@ -125,3 +125,17 @@ func statusChecksAreRequiredByBranchProtection(payloadData interface{}, _ map[st
 
 	return layer4.Passed, "No status checks were run that are not required by branch protection"
 }
+
+// TODO: after 3 layers of depth, make additional API calls if a tree is found.
+// TODO: Examine more than just the file name.
+func noBinariesInRepo(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if len(data.SuspectedBinaries) == 0 {
+		return layer4.Passed, "No binaries were found in the repository (Note: this check only examines file names at this time)"
+	}
+	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(data.SuspectedBinaries, ", "))
+}
