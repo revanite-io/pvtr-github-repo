@@ -155,7 +155,7 @@ func OSPS_QA_05() (evaluation *layer4.ControlEvaluation) {
 		[]layer4.AssessmentStep{
 			reusable_steps.HasSecurityInsightsFile,
 			reusable_steps.IsActive,
-			reusable_steps.NotImplemented,
+			noBinariesInRepo,
 		},
 	)
 

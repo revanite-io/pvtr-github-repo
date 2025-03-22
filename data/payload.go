@@ -10,34 +10,41 @@ import (
 )
 
 type Payload struct {
-	GraphqlData
-	*RestData // Pointer in case more data is added during tests
-	Config    *config.Config
+	*GraphqlRepoData
+	*RestData
+	Config            *config.Config
+	SuspectedBinaries []string
 }
 
 func Loader(config *config.Config) (payload interface{}, err error) {
-	graphql, err := getGraphqlData(config)
+	graphql, client, err := getGraphqlRepoData(config)
 	if err != nil {
 		return nil, err
 	}
+
+	suspectedBinaries, err := getSuspectedBinaries(client, config, graphql.Repository.DefaultBranchRef.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	rest, err := getRestData(config)
 	if err != nil {
 		return nil, err
 	}
 	return interface{}(Payload{
-		GraphqlData: graphql,
-		RestData:    rest,
-		Config:      config,
+		GraphqlRepoData:   graphql,
+		RestData:          rest,
+		Config:            config,
+		SuspectedBinaries: suspectedBinaries,
 	}), nil
 }
 
-func getGraphqlData(config *config.Config) (data GraphqlData, err error) {
+func getGraphqlRepoData(config *config.Config) (data *GraphqlRepoData, client *githubv4.Client, err error) {
 	src := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: config.GetString("token")},
 	)
 	httpClient := oauth2.NewClient(context.Background(), src)
-
-	client := githubv4.NewClient(httpClient)
+	client = githubv4.NewClient(httpClient)
 
 	variables := map[string]interface{}{
 		"owner": githubv4.String(config.GetString("owner")),
@@ -48,7 +55,7 @@ func getGraphqlData(config *config.Config) (data GraphqlData, err error) {
 	if err != nil {
 		config.Logger.Error(fmt.Sprintf("Error querying GitHub GraphQL API: %s", err.Error()))
 	}
-	return
+	return data, client, err
 }
 
 func getRestData(config *config.Config) (data *RestData, err error) {
