@@ -152,8 +152,9 @@ func (r *RestData) loadSecurityInsights() {
 		return
 	}
 	for _, dirContents := range r.Contents.TopLevel {
-		if r.foundSecurityInsights(dirContents) {
-			insights, err := si.Read(r.owner, r.repo, "security-insights.yml")
+		insightsFileName := r.foundSecurityInsights(dirContents)
+		if insightsFileName != "" {
+			insights, err := si.Read(r.owner, r.repo, insightsFileName)
 			r.Insights = insights
 			if err != nil {
 				r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
@@ -163,8 +164,9 @@ func (r *RestData) loadSecurityInsights() {
 	}
 	r.getForgeDirContents()
 	for _, dirContents := range r.Contents.ForgeDir {
-		if r.foundSecurityInsights(dirContents) {
-			insights, err := si.Read(r.owner, r.repo, ".github/security-insights.yml")
+		insightsFileName := r.foundSecurityInsights(dirContents)
+		if insightsFileName != "" {
+			insights, err := si.Read(r.owner, r.repo, fmt.Sprintf(".github/%s", insightsFileName))
 			r.Insights = insights
 			if err != nil {
 				r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
@@ -174,17 +176,17 @@ func (r *RestData) loadSecurityInsights() {
 	}
 }
 
-func (r *RestData) foundSecurityInsights(content DirContents) bool {
+func (r *RestData) foundSecurityInsights(content DirContents) string {
 	if strings.Contains(strings.ToLower(content.Name), "security-insights.") {
 		response, err := r.getSourceFile(r.owner, r.repo, content.Path)
 		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("error unmarshalling API response for security insights file: %s", err.Error()))
-			return false
+			return ""
 		}
 		r.Config.Logger.Trace(fmt.Sprintf("Security Insights Exists - SHA: %v", response.SHA))
-		return true
+		return content.Name
 	}
-	return false
+	return ""
 }
 
 func (r *RestData) getTopDirContents() {
