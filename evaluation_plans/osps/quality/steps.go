@@ -139,3 +139,30 @@ func noBinariesInRepo(payloadData interface{}, _ map[string]*layer4.Change) (res
 	}
 	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(data.SuspectedBinaries, ", "))
 }
+
+func requiresNonAuthorApproval(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	protection := data.Repository.DefaultBranchRef.BranchProtectionRule
+
+	// Check if reviews are required
+	if !protection.RequiresApprovingReviews {
+		return layer4.Failed, "Branch protection rule does not require reviews"
+	}
+
+	// Check if at least one review is required
+	reviewCount := data.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
+	if reviewCount < 1 {
+		return layer4.Failed, "Branch protection rule requires 0 approving reviews"
+	}
+
+	// Check if new commits dismiss previous approvals
+	if !protection.RequireLastPushApproval {
+		return layer4.Failed, "Branch protection does not require re-approval after new commits"
+	}
+
+	return layer4.Passed, fmt.Sprintf("Branch protection requires %d approving reviews and re-approval after new commits", reviewCount)
+}

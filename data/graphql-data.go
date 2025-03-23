@@ -30,6 +30,7 @@ type GraphqlRepoData struct {
 				RequiresApprovingReviews    bool // This gave an accurate result
 				RequiresCommitSignatures    bool
 				RequiresStatusChecks        bool
+				RequireLastPushApproval     bool
 				RequiredStatusCheckContexts []string
 			}
 			Target struct {
