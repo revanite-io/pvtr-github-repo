@@ -176,7 +176,7 @@ func OSPS_QA_06() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.NotImplemented,
+			hasOneOrMoreStatusChecks,
 		},
 	)
 

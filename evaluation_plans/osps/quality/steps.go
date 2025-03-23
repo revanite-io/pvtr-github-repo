@@ -139,3 +139,26 @@ func noBinariesInRepo(payloadData interface{}, _ map[string]*layer4.Change) (res
 	}
 	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(data.SuspectedBinaries, ", "))
 }
+
+func hasOneOrMoreStatusChecks(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	// get the name of all status checks that were run
+	var statusChecks []string
+	for _, check := range data.Repository.DefaultBranchRef.Target.Commit.AssociatedPullRequests.Nodes {
+		for _, run := range check.StatusCheckRollup.Commit.CheckSuites.Nodes {
+			for _, checkRun := range run.CheckRuns.Nodes {
+				statusChecks = append(statusChecks, checkRun.Name)
+			}
+		}
+	}
+
+	if len(statusChecks) > 0 {
+		return layer4.Passed, fmt.Sprintf("%d status checks were run", len(statusChecks))
+	}
+
+	return layer4.Failed, "No status checks were run"
+}
