@@ -102,6 +102,7 @@ func (r *RestData) Setup() error {
 	r.repo = r.Config.GetString("repo")
 	r.token = r.Config.GetString("token")
 
+	//TODO are we returning the error properly?
 	r.getMetadata()
 	r.loadSecurityInsights()
 	r.getWorkflow()
@@ -172,13 +173,14 @@ func (r *RestData) loadSecurityInsights() {
 	}
 }
 
-func (r *RestData) getWorkflowFiles() {
-	//Only get top level for now, will need to recurse later
+func (r *RestData) getWorkflowFiles() error {
+
+	//Only subdirectories are not allowed in the .github/workflows directory, so no need to recurse
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents/.github/workflows", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error getting workflows: %s", err.Error()))
-		return
+		r.Config.Logger.Error(fmt.Sprintf("Error calling github to retrive workflow files list: %s", err.Error()))
+		return err
 	}
 	
 	var workflowFileList []DirContents
@@ -190,12 +192,17 @@ func (r *RestData) getWorkflowFiles() {
 	for i, workflowFile := range workflowFileList {
 
 		//TODO: log error
-		response , _:= r.MakeApiCall(workflowFile.URL, true)
+		response , err:= r.MakeApiCall(workflowFile.URL, true)
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("Could not get workflow file data from github, error: %s", err.Error()))
+			return err
+		}
 
 		var dirFile DirFile
-		err := json.Unmarshal(response, &dirFile)
+		err = json.Unmarshal(response, &dirFile)
 		if( err != nil ){
-			//TODO do some logging
+			r.Config.Logger.Error(fmt.Sprintf("Could not Unmarshal json response for file data, error: %s", err.Error()))
+			return err
 		}
 		
 		dirFiles[i] = dirFile;
@@ -203,12 +210,7 @@ func (r *RestData) getWorkflowFiles() {
 
 	r.Contents.WorkFlows = dirFiles
 
-	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error unmarshalling API response for workflows: %s", err.Error()))
-		return
-	}
-	// r.Contents.WorkFlows = workflows
-
+	return err;
 }
 
 func (r *RestData) foundSecurityInsights(content DirContents) bool {
@@ -268,10 +270,11 @@ func (r *RestData) getWorkflow() error {
 	if err != nil {
 		return err
 	}
+	//This is where we set the data in the restdata struct r.Workflow
 	if err := json.Unmarshal(responseData, &r.Workflow); err != nil {
 		return fmt.Errorf("failed to parse permissions: %v", err)
 	}
-	return nil
+	return err
 }
 
 
@@ -283,6 +286,4 @@ func (r *RestData) loadOrgData() {
 		return
 	}
 	json.Unmarshal(responseData, &r.Organization)
-
-	return
 }
