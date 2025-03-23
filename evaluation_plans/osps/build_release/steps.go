@@ -16,28 +16,26 @@ import (
 //https://securitylab.github.com/resources/github-actions-untrusted-input/
 // List of untrusted inputs
 var regex = 
-	`.*(github.event\.issue\.title|` +
-	`github.event\.issue\.body|` +
-	`github.event\.pull_request\.title|` +
-	`github.event\.pull_request\.body|` +
-	`github.event\.comment\.body|` +
-	`github.event\.review\.body|` +
-	`github.event\.pages.*\.page_name|` +
-	`github.event\.commits.*\.message|` +
-	`github.event\.head_commit\.message|` +
-	`github.event\.head_commit\.author\.email|` +
-	`github.event\.head_commit\.author\.name|` +
-	`github.event\.commits.*\.author\.email|` +
-	`github.event\.commits.*\.author\.name|` +
-	`github.event\.pull_request\.head\.ref|` +
-	`github.event\.pull_request\.head\.label|` +
-	`github.event\.pull_request\.head\.repo\.default_branch|` +
+	`.*(github\.event\.issue\.title|` +
+	`github\.event\.issue\.body|` +
+	`github\.event\.pull_request\.title|` +
+	`github\.event\.pull_request\.body|` +
+	`github\.event\.comment\.body|` +
+	`github\.event\.review\.body|` +
+	`github\.event\.pages.*\.page_name|` +
+	`github\.event\.commits.*\.message|` +
+	`github\.event\.head_commit\.message|` +
+	`github\.event\.head_commit\.author\.email|` +
+	`github\.event\.head_commit\.author\.name|` +
+	`github\.event\.commits.*\.author\.email|` +
+	`github\.event\.commits.*\.author\.name|` +
+	`github\.event\.pull_request\.head\.ref|` +
+	`github\.event\.pull_request\.head\.label|` +
+	`github\.event\.pull_request\.head\.repo\.default_branch|` +
 	`github\.head_ref).*`
 
 func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 
-
-	fmt.Printf("Regex: %v", regex)
 
 	// parse the payload and see if we pass our checks
 	data, message := reusable_steps.VerifyPayload(payloadData)
@@ -48,63 +46,85 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	// For each file in the payload
 	for _, file := range data.Contents.WorkFlows {
 		
-		if file.Encoding != "base64" {
-			return layer4.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name)
-		}
+		//TODO make sure we print all the errors and return so we don't just fail fast,
+		// but we can find all the violations
 
 		// Decode the file content
-		decoded, _ := base64.StdEncoding.DecodeString(file.Content)
-		
-		// Parse the workflow
-		workflow, err := actionlint.Parse(decoded)
+		// decoded, err := decodeWorkflowFile(file)
+		if file.Encoding != "base64" {
+			return layer4.Failed, fmt.Sprintf( "File %v is not base64 encoded", file.Name )
+		}
+	
+		// Decode the file content
+		decoded, err := base64.StdEncoding.DecodeString(file.Content)
 
 		if err != nil {
-			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", err)
+			return layer4.Failed, fmt.Sprintf("Error decoding workflow file: %v", err)
+		}
+		
+		
+		// Parse the workflow
+		workflow, actionError := actionlint.Parse(decoded)
+		if actionError != nil {
+			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", actionError)
 		}
 
-		//Check the workflow for untrusted inputs
-		for _, job := range workflow.Jobs {
+		// Check the workflow for untrusted inputs
+		ok, message := checkWorkflowFileForUntrustedInputs(workflow)
 
-			if job == nil {
-				continue
-			}
-
-			//Check the step for untrusted inputs
-			for _, step := range job.Steps {
-
-				if step == nil {
-					continue
-				}
-
-				// if it isn't an exec run get out of dodge
-				run, ok := step.Exec.(*actionlint.ExecRun)
-				if !ok || run.Run == nil {
-					continue
-				}
-
-				varList := pullVariablesFromScript(run.Run.Value)
-
-				expression,_ := regexp.Compile(regex)
-
-				for _, name := range varList {
-					if expression.Match([]byte(name)) {
-						return layer4.Failed, fmt.Sprintf("Untrusted input found in step %v: %v", step.Name, name)
-					}
-				}
-
-			}
-
+		if !ok {
+			return layer4.Failed, message
 		}
+
 	}
-	// base64.StdEncoding.DecodeString()
-
-	// for _, tool := range data.Insights.Repository.Security.Tools {
-
-	// }
 
 	return layer4.Failed, "Not all CI/CD tools sanitize input parameters"
 
 }
+
+func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
+
+	//Check the workflow for untrusted inputs
+	expression,_ := regexp.Compile(regex)
+	var message strings.Builder
+
+	for _, job := range workflow.Jobs {
+
+		if job == nil {
+			continue
+		}
+
+		//Check the step for untrusted inputs
+		for _, step := range job.Steps {
+
+			if step == nil {
+				continue
+			}
+
+			// if it isn't an exec run get out of dodge
+			run, ok := step.Exec.(*actionlint.ExecRun)
+			if !ok || run.Run == nil {
+				continue
+			}
+
+			varList := pullVariablesFromScript(run.Run.Value)
+
+			
+			for _, name := range varList {
+				if expression.Match([]byte(name)) {
+					message.WriteString( fmt.Sprintf( "Untrusted input found in step %v: %v\n", step.Name, name ) )
+				}
+			}
+		}
+	}
+
+	if message.Len() > 0 {
+		return false, message.String()
+	}
+	return true, ""
+
+}
+
 
 func pullVariablesFromScript(script string) [] string {
 
