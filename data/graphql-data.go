@@ -168,7 +168,7 @@ func isBinaryFile(filename string) bool {
 func fetchGraphqlRepoTree(config *config.Config, client *githubv4.Client, branch string) (tree *GraphqlRepoTree, err error) {
 	path := "" // TODO: I suspected we should be able to target subdirectories this way, but it hasn't succeeded
 
-	fullPath := fmt.Sprintf("%s:%s", "devtest", path) // Ensure correct format
+	fullPath := fmt.Sprintf("%s:%s", branch, path) // Ensure correct format
 
 	variables := map[string]interface{}{
 		"owner":  githubv4.String(config.GetString("owner")),
