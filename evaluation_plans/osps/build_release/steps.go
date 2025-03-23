@@ -78,7 +78,7 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 
 	}
 
-	return layer4.Failed, "Not all CI/CD tools sanitize input parameters"
+	return layer4.Passed, "CI/CD tools input sanitized"
 
 }
 
