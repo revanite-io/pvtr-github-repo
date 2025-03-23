@@ -274,13 +274,6 @@ func (r *RestData) getWorkflow() error {
 	return nil
 }
 
-func (r *RestData) getFileContentByURL(downloadURL string) (string, error) {
-	responseData, err := r.MakeApiCall(downloadURL, true)
-	if err != nil {
-		return "", err
-	}
-	return string(responseData), nil
-}
 
 func (r *RestData) loadOrgData() {
 	endpoint := fmt.Sprintf("%s/orgs/%s", APIBase, r.owner)
