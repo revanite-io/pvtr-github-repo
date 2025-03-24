@@ -5,7 +5,7 @@ go 1.23.4
 require (
 	github.com/ossf/si-tooling/v2 v2.0.4
 	github.com/privateerproj/privateer-sdk v1.0.3
-	github.com/revanite-io/sci v0.1.9
+	github.com/revanite-io/sci v0.2.0
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	golang.org/x/oauth2 v0.28.0
 )
