@@ -117,7 +117,7 @@ func (r *RestData) Setup() error {
 	_ = r.getWorkflow()
 	_ = r.getReleases()
 	r.loadOrgData()
-	r.getWorkflowFiles()
+	_ = r.getWorkflowFiles()
 	return nil
 }
 
@@ -195,7 +195,11 @@ func (r *RestData) getWorkflowFiles() error {
 	}
 
 	var workflowFileList []DirContents
-	json.Unmarshal(responseData, &workflowFileList)
+	err = json.Unmarshal(responseData, &workflowFileList)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("Error unmarshalling json response for workflow files list: %s", err.Error()))
+		return err
+	}
 
 	//For each file, listed we need to get it and put it in a format the action parser can use
 	var dirFiles = make([]DirFile, len(workflowFileList))
@@ -304,6 +308,6 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	}
 
 	_ = json.Unmarshal(responseData, &r.Rulesets)
-	json.Unmarshal(responseData, &r.Organization)
+	_ = json.Unmarshal(responseData, &r.Organization)
 	return r.Rulesets
 }
