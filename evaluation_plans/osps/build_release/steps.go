@@ -104,7 +104,7 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 
 			for _, name := range varList {
 				if expression.Match([]byte(name)) {
-					message.WriteString( fmt.Sprintf( "Untrusted input found.  step: \"%v\", input: %v\n", 
+					message.WriteString( fmt.Sprintf( "Untrusted input found: %v\n", 
 					step.Name.Value, name) )
 				}
 			}
