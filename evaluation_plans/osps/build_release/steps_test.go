@@ -74,11 +74,6 @@ type testingData struct {
 }
 
 
-
-
-
-
-
 func TestCicdSanitizedInputParameters (t * testing.T) {
 
 	testData := []testingData {
