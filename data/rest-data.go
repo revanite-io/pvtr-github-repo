@@ -190,7 +190,6 @@ func (r *RestData) getWorkflowFiles() error {
 	var dirFiles = make([]DirFile, len(workflowFileList))
 	for i, workflowFile := range workflowFileList {
 
-		//TODO: log error
 		response , err:= r.MakeApiCall(workflowFile.URL, true)
 		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("Could not get workflow file data from github, error: %s", err.Error()))
