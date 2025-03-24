@@ -119,14 +119,15 @@ func TestVariableExtraction(t *testing.T) {
 }
 
 
-// func TestMultipleVariables(t *testing.T) {
+func TestMultipleVariables(t *testing.T) {
 
-// 	var testScript = `sed -i 's/{{ TOKEN }}/${{ secrets.TOKEN }}/g' ${{ github.event.review.body }}/.github/pvtr-config.yml`
+	var testScript = `sed -i 's/{{ TOKEN }}/${{ secrets.TOKEN }}/g' ${{ github.event.review.body }}/.github/pvtr-config.yml`
 
-// 	varNames := pullVariablesFromScript(testScript)
-// 	assert.Equal(t, varNames, "github.event.review.body", "Variable extraction failed")
+	varNames := pullVariablesFromScript(testScript)
+	assert.Equal(t, varNames[0], "secrets.TOKEN", "Variable extraction failed")
+	assert.Equal(t, varNames[1], "github.event.review.body", "Variable extraction failed")
 
-// }
+}
 
 
 func TestRegex ( t * testing.T ) {

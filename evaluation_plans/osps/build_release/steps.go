@@ -49,20 +49,15 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	for _, file := range data.Contents.WorkFlows {
 		
 
-		// Decode the file content
 		if file.Encoding != "base64" {
 			return layer4.Failed, fmt.Sprintf( "File %v is not base64 encoded", file.Name )
 		}
 	
-		// Decode the file content
 		decoded, err := base64.StdEncoding.DecodeString(file.Content)
-
 		if err != nil {
 			return layer4.Failed, fmt.Sprintf("Error decoding workflow file: %v", err)
 		}
 		
-		
-		// Parse the workflow
 		workflow, actionError := actionlint.Parse(decoded)
 		if actionError != nil {
 			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", actionError)
@@ -83,7 +78,6 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 
 func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
 
-	//Check the workflow for untrusted inputs
 	expression,_ := regexp.Compile(regex)
 	var message strings.Builder
 
@@ -108,11 +102,10 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 
 			varList := pullVariablesFromScript(run.Run.Value)
 
-			
 			for _, name := range varList {
 				if expression.Match([]byte(name)) {
-					message.WriteString( fmt.Sprintf( "Untrusted input found in step %v Line: %d Column: %d\n", 
-					step.Name.Value, step.Pos.Line, step.Pos.Col) )
+					message.WriteString( fmt.Sprintf( "Untrusted input found.  step: \"%v\", input: %v\n", 
+					step.Name.Value, name) )
 				}
 			}
 		}
@@ -128,23 +121,35 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 
 func pullVariablesFromScript(script string) [] string {
 
-		// Regular expression to match variable names inside ${{ }}
-		varRegex := regexp.MustCompile(`\$\{\{\s*(.*)\s*\}\}`)
+	varlist := []string{}
 
-		// Find all matches
-		matches := varRegex.FindAllStringSubmatch(script, -1)
-	
-		// Extract variable names
-		varNames := []string{}
-		for _, match := range matches {
-			if len(match) > 1 {
-				varNames = append(varNames, strings.TrimSpace(match[1]))
-			}
+	for {
+
+		//strings.Inex returns the first instance of a string
+		//if the string is not found it returns -1 indicating the end of the scan
+		//if the string is found it returns the index of the first character of the string
+		start := strings.Index(script, "${{")
+		if(start == -1) {
+			break
 		}
-	
-		return varNames
-}
 
+		//Scanning a new slice gives us the length of the varialbe at the index of the closing bracket
+		len := strings.Index(script[start:], "}}")
+		if len == -1 {
+			//script is malformed somehow
+			return nil
+		}
+
+		//Create a new slice starting at the first character after the opening bracket of len
+		varlist = append( varlist, strings.TrimSpace(script[start+3:start+len]) )
+
+		script = script[start+len:]
+
+	}
+
+	return varlist
+
+}
 
 func releaseHasUniqueIdentifier(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
