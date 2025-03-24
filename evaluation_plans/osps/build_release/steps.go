@@ -1,14 +1,150 @@
 package build_release
 
 import (
+	"encoding/base64"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/rhysd/actionlint"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
+
+//https://securitylab.github.com/resources/github-actions-untrusted-input/
+// List of untrusted inputs
+var regex = 
+	`.*(github\.event\.issue\.title|` +
+	`github\.event\.issue\.body|` +
+	`github\.event\.pull_request\.title|` +
+	`github\.event\.pull_request\.body|` +
+	`github\.event\.comment\.body|` +
+	`github\.event\.review\.body|` +
+	`github\.event\.pages.*\.page_name|` +
+	`github\.event\.commits.*\.message|` +
+	`github\.event\.head_commit\.message|` +
+	`github\.event\.head_commit\.author\.email|` +
+	`github\.event\.head_commit\.author\.name|` +
+	`github\.event\.commits.*\.author\.email|` +
+	`github\.event\.commits.*\.author\.name|` +
+	`github\.event\.pull_request\.head\.ref|` +
+	`github\.event\.pull_request\.head\.label|` +
+	`github\.event\.pull_request\.head\.repo\.default_branch|` +
+	`github\.head_ref).*`
+
+
+
+func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+
+
+	// parse the payload and see if we pass our checks
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	// For each file in the payload
+	for _, file := range data.Contents.WorkFlows {
+		
+
+		// Decode the file content
+		if file.Encoding != "base64" {
+			return layer4.Failed, fmt.Sprintf( "File %v is not base64 encoded", file.Name )
+		}
+	
+		// Decode the file content
+		decoded, err := base64.StdEncoding.DecodeString(file.Content)
+
+		if err != nil {
+			return layer4.Failed, fmt.Sprintf("Error decoding workflow file: %v", err)
+		}
+		
+		
+		// Parse the workflow
+		workflow, actionError := actionlint.Parse(decoded)
+		if actionError != nil {
+			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", actionError)
+		}
+
+		// Check the workflow for untrusted inputs
+		ok, message := checkWorkflowFileForUntrustedInputs(workflow)
+
+		if !ok {
+			return layer4.Failed, message
+		}
+
+	}
+
+	return layer4.Passed, "CI/CD tools input sanitized"
+
+}
+
+func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
+
+	//Check the workflow for untrusted inputs
+	expression,_ := regexp.Compile(regex)
+	var message strings.Builder
+
+	for _, job := range workflow.Jobs {
+
+		if job == nil {
+			continue
+		}
+
+		//Check the step for untrusted inputs
+		for _, step := range job.Steps {
+
+			if step == nil {
+				continue
+			}
+
+			// if it isn't an exec run get out of dodge
+			run, ok := step.Exec.(*actionlint.ExecRun)
+			if !ok || run.Run == nil {
+				continue
+			}
+
+			varList := pullVariablesFromScript(run.Run.Value)
+
+			
+			for _, name := range varList {
+				if expression.Match([]byte(name)) {
+					message.WriteString( fmt.Sprintf( "Untrusted input found in step %v Line: %d Column: %d\n", 
+					step.Name.Value, step.Pos.Line, step.Pos.Col) )
+				}
+			}
+		}
+	}
+
+	if message.Len() > 0 {
+		return false, message.String()
+	}
+	return true, ""
+
+}
+
+
+func pullVariablesFromScript(script string) [] string {
+
+		// Regular expression to match variable names inside ${{ }}
+		varRegex := regexp.MustCompile(`\$\{\{\s*(.*)\s*\}\}`)
+
+		// Find all matches
+		matches := varRegex.FindAllStringSubmatch(script, -1)
+	
+		// Extract variable names
+		varNames := []string{}
+		for _, match := range matches {
+			if len(match) > 1 {
+				varNames = append(varNames, strings.TrimSpace(match[1]))
+			}
+		}
+	
+		return varNames
+}
+
 
 func releaseHasUniqueIdentifier(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
