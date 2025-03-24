@@ -30,8 +30,8 @@ You may also pull the code locally and run the local Dockerfile:
 
 1. Pull the repo
 2. Modify `example-config.yml` to use your values, and rename it to `config.yml`
-3. Build the Docker Image: `make docker build`
-4. Run the Docker Image: `make docker run`
+3. Build the Docker Image: `make docker-build`
+4. Run the Docker Image: `make docker-run`
 5. Review the output in the directory you've specified in your config file
 
 ## Required Token Scopes

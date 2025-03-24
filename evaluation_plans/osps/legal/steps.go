@@ -33,7 +33,7 @@ func getLicenseList(data data.Payload) (LicenseList, string) {
 	if err != nil {
 		return goodLicenseList, fmt.Sprintf("Failed to unmarshal good license data: %s", err.Error())
 	}
-	if goodLicenseList.Licenses == nil || len(goodLicenseList.Licenses) == 0 {
+	if len(goodLicenseList.Licenses) == 0 {
 		return goodLicenseList, "Good license data was unexpectedly empty"
 	}
 	return goodLicenseList, ""
@@ -43,9 +43,7 @@ func splitSpdxExpression(expression string) (spdx_ids []string) {
 	a := strings.Split(expression, " AND ")
 	for _, aa := range a {
 		b := strings.Split(aa, " OR ")
-		for _, bb := range b {
-			spdx_ids = append(spdx_ids, bb)
-		}
+		spdx_ids = append(spdx_ids, b...)
 	}
 	return
 }
@@ -83,6 +81,9 @@ func goodLicense(payloadData interface{}, _ map[string]*layer4.Change) (result l
 	spdx_ids := append(spdx_ids_a, spdx_ids_b...)
 	badLicenses := []string{}
 	for _, spdx_id := range spdx_ids {
+		if spdx_id == "" {
+			continue
+		}
 		var validId bool
 		for _, license := range licenses.Licenses {
 			if license.LicenseID == spdx_id {

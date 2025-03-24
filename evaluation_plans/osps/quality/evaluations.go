@@ -92,7 +92,8 @@ func OSPS_QA_03() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.NotImplemented,
+			statusChecksAreRequiredByRulesets,
+			statusChecksAreRequiredByBranchProtection,
 		},
 	)
 
@@ -154,7 +155,7 @@ func OSPS_QA_05() (evaluation *layer4.ControlEvaluation) {
 		[]layer4.AssessmentStep{
 			reusable_steps.HasSecurityInsightsFile,
 			reusable_steps.IsActive,
-			reusable_steps.NotImplemented,
+			noBinariesInRepo,
 		},
 	)
 
@@ -175,7 +176,7 @@ func OSPS_QA_06() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.NotImplemented,
+			hasOneOrMoreStatusChecks,
 		},
 	)
 
@@ -221,7 +222,7 @@ func OSPS_QA_07() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.NotImplemented,
+			requiresNonAuthorApproval,
 		},
 	)
 

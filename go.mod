@@ -5,11 +5,11 @@ go 1.23.4
 require (
 	github.com/magiconair/properties v1.8.7
 	github.com/ossf/si-tooling/v2 v2.0.4
-	github.com/privateerproj/privateer-sdk v1.0.2
-	github.com/revanite-io/sci v0.1.8
+	github.com/privateerproj/privateer-sdk v1.0.3
+	github.com/revanite-io/sci v0.1.9
 	github.com/rhysd/actionlint v1.7.7
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
-	golang.org/x/oauth2 v0.18.0
+	golang.org/x/oauth2 v0.28.0
 )
 
 require (
@@ -44,11 +44,10 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
+	golang.org/x/net v0.36.0 // indirect
+	golang.org/x/sync v0.11.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240314234333-6e1732d8331c // indirect
 	google.golang.org/grpc v1.62.1 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect

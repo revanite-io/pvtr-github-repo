@@ -24,10 +24,20 @@ type RestData struct {
 	WebsiteURL   string `json:"websiteUrl"`
 	Releases     []ReleaseData
 	Contents     struct {
-		TopLevel []DirContents
-		ForgeDir []DirContents
+		TopLevel  []DirContents
+		ForgeDir  []DirContents
 		WorkFlows []DirFile
 	}
+	Rulesets []Ruleset
+}
+
+type Ruleset struct {
+	Type       string `json:"type"`
+	Parameters struct {
+		RequiredChecks []struct {
+			Context string `json:"context"`
+		} `json:"required_status_checks"`
+	} `json:"parameters"`
 }
 
 type OrgData struct {
@@ -64,8 +74,8 @@ type DirContents struct {
 
 type DirFile struct {
 	DirContents
-	Content     string `json:"content"`
-	Encoding    string `json:"encoding"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
 }
 
 type FileAPIResponse struct {
@@ -102,10 +112,10 @@ func (r *RestData) Setup() error {
 	r.repo = r.Config.GetString("repo")
 	r.token = r.Config.GetString("token")
 
-	r.getMetadata()
+	_ = r.getMetadata()
 	r.loadSecurityInsights()
-	r.getWorkflow()
-	r.getReleases()
+	_ = r.getWorkflow()
+	_ = r.getReleases()
 	r.loadOrgData()
 	r.getWorkflowFiles()
 	return nil
@@ -150,8 +160,9 @@ func (r *RestData) loadSecurityInsights() {
 		return
 	}
 	for _, dirContents := range r.Contents.TopLevel {
-		if r.foundSecurityInsights(dirContents) {
-			insights, err := si.Read(r.owner, r.repo, "security-insights.yml")
+		insightsFileName := r.foundSecurityInsights(dirContents)
+		if insightsFileName != "" {
+			insights, err := si.Read(r.owner, r.repo, insightsFileName)
 			r.Insights = insights
 			if err != nil {
 				r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
@@ -161,8 +172,9 @@ func (r *RestData) loadSecurityInsights() {
 	}
 	r.getForgeDirContents()
 	for _, dirContents := range r.Contents.ForgeDir {
-		if r.foundSecurityInsights(dirContents) {
-			insights, err := si.Read(r.owner, r.repo, ".github/security-insights.yml")
+		insightsFileName := r.foundSecurityInsights(dirContents)
+		if insightsFileName != "" {
+			insights, err := si.Read(r.owner, r.repo, fmt.Sprintf(".github/%s", insightsFileName))
 			r.Insights = insights
 			if err != nil {
 				r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
@@ -181,16 +193,15 @@ func (r *RestData) getWorkflowFiles() error {
 		r.Config.Logger.Error(fmt.Sprintf("Error calling github to retrive workflow files list: %s", err.Error()))
 		return err
 	}
-	
+
 	var workflowFileList []DirContents
 	json.Unmarshal(responseData, &workflowFileList)
-
 
 	//For each file, listed we need to get it and put it in a format the action parser can use
 	var dirFiles = make([]DirFile, len(workflowFileList))
 	for i, workflowFile := range workflowFileList {
 
-		response , err:= r.MakeApiCall(workflowFile.URL, true)
+		response, err := r.MakeApiCall(workflowFile.URL, true)
 		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("Could not get workflow file data from github, error: %s", err.Error()))
 			return err
@@ -198,30 +209,30 @@ func (r *RestData) getWorkflowFiles() error {
 
 		var dirFile DirFile
 		err = json.Unmarshal(response, &dirFile)
-		if( err != nil ){
+		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("Could not Unmarshal json response for file data, error: %s", err.Error()))
 			return err
 		}
-		
-		dirFiles[i] = dirFile;
+
+		dirFiles[i] = dirFile
 	}
 
 	r.Contents.WorkFlows = dirFiles
 
-	return err;
+	return err
 }
 
-func (r *RestData) foundSecurityInsights(content DirContents) bool {
+func (r *RestData) foundSecurityInsights(content DirContents) string {
 	if strings.Contains(strings.ToLower(content.Name), "security-insights.") {
 		response, err := r.getSourceFile(r.owner, r.repo, content.Path)
 		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("error unmarshalling API response for security insights file: %s", err.Error()))
-			return false
+			return ""
 		}
 		r.Config.Logger.Trace(fmt.Sprintf("Security Insights Exists - SHA: %v", response.SHA))
-		return true
+		return content.Name
 	}
-	return false
+	return ""
 }
 
 func (r *RestData) getTopDirContents() {
@@ -231,7 +242,7 @@ func (r *RestData) getTopDirContents() {
 		r.Config.Logger.Error(fmt.Sprintf("error getting top level contents: %s", err.Error()))
 		return
 	}
-	json.Unmarshal(responseData, &r.Contents.TopLevel)
+	_ = json.Unmarshal(responseData, &r.Contents.TopLevel)
 }
 
 func (r *RestData) getForgeDirContents() {
@@ -241,7 +252,7 @@ func (r *RestData) getForgeDirContents() {
 		r.Config.Logger.Error(fmt.Sprintf("error getting forge contents: %s", err.Error()))
 		return
 	}
-	json.Unmarshal(responseData, &r.Contents.ForgeDir)
+	_ = json.Unmarshal(responseData, &r.Contents.ForgeDir)
 }
 
 func (r *RestData) getMetadata() error {
@@ -275,7 +286,6 @@ func (r *RestData) getWorkflow() error {
 	return err
 }
 
-
 func (r *RestData) loadOrgData() {
 	endpoint := fmt.Sprintf("%s/orgs/%s", APIBase, r.owner)
 	responseData, err := r.MakeApiCall(endpoint, true)
@@ -283,5 +293,17 @@ func (r *RestData) loadOrgData() {
 		r.Config.Logger.Error(fmt.Sprintf("error getting org data: %s (%s)", err.Error(), endpoint))
 		return
 	}
+	_ = json.Unmarshal(responseData, &r.Organization)
+}
+
+func (r *RestData) GetRulesets(branchName string) []Ruleset {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/rules/branches/%s", APIBase, r.owner, r.repo, branchName)
+	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("error getting rulesets: %s", err.Error()))
+	}
+
+	_ = json.Unmarshal(responseData, &r.Rulesets)
 	json.Unmarshal(responseData, &r.Organization)
+	return r.Rulesets
 }

@@ -19,19 +19,6 @@ func hasUserGuides(payloadData interface{}, _ map[string]*layer4.Change) (result
 	return layer4.Passed, "User guide was specified in Security Insights data"
 }
 
-func hasDefectReportingGuide(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
-	// data, message := reusable_steps.VerifyPayload(payloadData)
-	// if message != "" {
-	// 	return layer4.Unknown, message
-	// }
-
-	// if data.Insights.Project.Documentation.BugReportGuide == "" {
-	// 	return layer4.Failed, "Defect report guide was NOT specified in Security Insights data"
-	// }
-
-	return layer4.Unknown, "Defect report guide was specified in Security Insights data"
-}
-
 func acceptsVulnReports(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {

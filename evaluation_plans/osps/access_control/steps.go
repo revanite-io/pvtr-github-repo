@@ -61,24 +61,6 @@ func branchProtectionPreventsDeletion(payloadData interface{}, _ map[string]*lay
 	return
 }
 
-func workflowPermissionsRestricted(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
-	payload, message := reusable_steps.VerifyPayload(payloadData)
-	if message != "" {
-		return layer4.Unknown, message
-	}
-
-	workflowPermissions := payload.Repository.HasIssuesEnabled
-
-	if workflowPermissions {
-		result = layer4.Passed
-		message = "Workflow permissions are restricted"
-	} else {
-		result = layer4.Failed
-		message = "Workflow permissions are NOT restricted"
-	}
-	return
-}
-
 func workflowDefaultReadPermissions(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
