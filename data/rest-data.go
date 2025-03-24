@@ -102,7 +102,6 @@ func (r *RestData) Setup() error {
 	r.repo = r.Config.GetString("repo")
 	r.token = r.Config.GetString("token")
 
-	//TODO are we returning the error properly?
 	r.getMetadata()
 	r.loadSecurityInsights()
 	r.getWorkflow()

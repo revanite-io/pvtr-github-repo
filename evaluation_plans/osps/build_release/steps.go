@@ -34,6 +34,8 @@ var regex =
 	`github\.event\.pull_request\.head\.repo\.default_branch|` +
 	`github\.head_ref).*`
 
+
+
 func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 
 
@@ -46,11 +48,8 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	// For each file in the payload
 	for _, file := range data.Contents.WorkFlows {
 		
-		//TODO make sure we print all the errors and return so we don't just fail fast,
-		// but we can find all the violations
 
 		// Decode the file content
-		// decoded, err := decodeWorkflowFile(file)
 		if file.Encoding != "base64" {
 			return layer4.Failed, fmt.Sprintf( "File %v is not base64 encoded", file.Name )
 		}
@@ -112,7 +111,8 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 			
 			for _, name := range varList {
 				if expression.Match([]byte(name)) {
-					message.WriteString( fmt.Sprintf( "Untrusted input found in step %v: %v\n", step.Name, name ) )
+					message.WriteString( fmt.Sprintf( "Untrusted input found in step %v Line: %d Column: %d\n", 
+					step.Name.Value, step.Pos.Line, step.Pos.Col) )
 				}
 			}
 		}
