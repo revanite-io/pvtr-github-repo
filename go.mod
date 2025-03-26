@@ -3,10 +3,10 @@ module github.com/revanite-io/pvtr-github-repo // Replace this globally with you
 go 1.23.4
 
 require (
-	github.com/magiconair/properties v1.8.7
+	github.com/magiconair/properties v1.8.9
 	github.com/ossf/si-tooling/v2 v2.0.4
 	github.com/privateerproj/privateer-sdk v1.0.3
-	github.com/revanite-io/sci v0.1.9
+	github.com/revanite-io/sci v0.2.0
 	github.com/rhysd/actionlint v1.7.7
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	golang.org/x/oauth2 v0.28.0
