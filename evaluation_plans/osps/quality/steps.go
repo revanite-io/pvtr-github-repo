@@ -2,6 +2,7 @@ package quality
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
@@ -145,7 +146,7 @@ func requiresNonAuthorApproval(payloadData interface{}, _ map[string]*layer4.Cha
 	if message != "" {
 		return layer4.Unknown, message
 	}
-  	protection := data.Repository.DefaultBranchRef.BranchProtectionRule
+	protection := data.Repository.DefaultBranchRef.BranchProtectionRule
 
 	// Check if reviews are required
 	if !protection.RequiresApprovingReviews {
@@ -187,4 +188,152 @@ func hasOneOrMoreStatusChecks(payloadData interface{}, _ map[string]*layer4.Chan
 	}
 
 	return layer4.Failed, "No status checks were run"
+}
+
+func verifyDependencyManagement(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	// Validate required fields
+	if data.Repository.Name == "" || data.Repository.DefaultBranchRef.Name == "" ||
+		data.Repository.DefaultBranchRef.Target.OID == "" {
+		return layer4.Unknown, "Missing required repository data"
+	}
+
+	// Check dependency manifests
+	result, message = verifyDependencyManifests(data)
+	if result != layer4.Passed {
+		return result, message
+	}
+
+	return layer4.Passed, "Dependency management files and SBOM requirements met"
+}
+
+type DependencyManifest struct {
+	Filename    string
+	LockFile    string
+	Language    string
+	IsMandatory bool
+}
+
+// Known dependency management files for various languages
+var knownManifests = []DependencyManifest{
+	{"go.mod", "go.sum", "Go", true},
+	{"package.json", "package-lock.json", "JavaScript/Node.js", true},
+	{"pom.xml", "", "Java (Maven)", false},
+	{"build.gradle", "gradle.lockfile", "Java (Gradle)", false},
+	{"requirements.txt", "", "Python", false},
+	{"Pipfile", "Pipfile.lock", "Python (Pipenv)", true},
+	{"poetry.lock", "pyproject.toml", "Python (Poetry)", true},
+	{"Gemfile", "Gemfile.lock", "Ruby", true},
+	{"composer.json", "composer.lock", "PHP", true},
+	{"Cargo.toml", "Cargo.lock", "Rust", true},
+	{"*.csproj", "packages.lock.json", ".NET", false},
+	{"mix.exs", "mix.lock", "Elixir", true},
+}
+
+// ManifestResult stores the validation result for a manifest
+type ManifestResult struct {
+	Found     bool
+	LockFound bool
+	Language  string
+	HasDeps   bool
+	Manifest  string
+}
+
+func isManifestFile(filename string, pattern string) bool {
+	if strings.Contains(pattern, "*") {
+		matched, _ := filepath.Match(pattern, filename)
+		return matched
+	}
+	return filename == pattern
+}
+
+func verifyDependencyManifests(payloadData interface{}) (layer4.Result, string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if data.Repository.DefaultBranchRef.Target.Tree.Entries == nil {
+		return layer4.Unknown, "Repository tree entries not available"
+	}
+
+	entries := data.Repository.DefaultBranchRef.Target.Tree.Entries
+	manifests := data.Repository.DependencyGraphManifests.Nodes
+
+	foundManifests := make(map[string]ManifestResult)
+	manifestErrors := []string{}
+
+	// Check repository contents for dependency files
+	for _, entry := range entries {
+		for _, manifest := range knownManifests {
+			if isManifestFile(entry.Name, manifest.Filename) {
+				result := ManifestResult{
+					Found:    true,
+					Language: manifest.Language,
+					Manifest: entry.Name,
+				}
+
+				// Check for lock file if required
+				if manifest.LockFile != "" {
+					lockFound := false
+					for _, lockEntry := range entries {
+						if isManifestFile(lockEntry.Name, manifest.LockFile) {
+							result.LockFound = true
+							lockFound = true
+							break
+						}
+					}
+
+					if manifest.IsMandatory && !lockFound {
+						manifestErrors = append(manifestErrors,
+							fmt.Sprintf("%s: missing mandatory lock file %s",
+								manifest.Language, manifest.LockFile))
+						continue
+					}
+				}
+
+				foundManifests[manifest.Language] = result
+			}
+		}
+	}
+
+	if len(manifestErrors) > 0 {
+		return layer4.Failed, fmt.Sprintf("Dependency management issues found:\n%s",
+			strings.Join(manifestErrors, "\n"))
+	}
+
+	if len(foundManifests) == 0 {
+		return layer4.Failed, "No dependency management files found"
+	}
+
+	for _, manifest := range manifests {
+		if manifest.Dependencies.TotalCount > 0 {
+			for lang, result := range foundManifests {
+				if manifest.Filename == result.Manifest {
+					result.HasDeps = true
+					foundManifests[lang] = result
+					break
+				}
+			}
+		}
+	}
+
+	missingDeps := []string{}
+	for lang, result := range foundManifests {
+		if !result.HasDeps {
+			missingDeps = append(missingDeps,
+				fmt.Sprintf("%s (%s)", result.Manifest, lang))
+		}
+	}
+
+	if len(missingDeps) > 0 {
+		return layer4.Failed, fmt.Sprintf("No dependencies declared in: %s",
+			strings.Join(missingDeps, ", "))
+	}
+
+	return layer4.Passed, "Dependency management files present and properly configured"
 }
