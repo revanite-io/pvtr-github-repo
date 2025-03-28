@@ -5,3 +5,6 @@ evaluation_results
 
 # ignore any local dev config file
 config.yml
+
+.vscode
+output
