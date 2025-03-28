@@ -149,8 +149,8 @@ func identifyBinaries(binariesFound []string, filetype string, filename string) 
 // but I didn't manage to get that query working as expected.
 func isBinaryFile(filename string) bool {
 	binaryExtensions := map[string]bool{
-		"": true, ".exe": true, ".dll": true, ".so": true, ".png": true, ".jpg": true,
-		".pdf": true, ".zip": true, ".tar": true, ".mp4": true, ".mp3": true,
+		"": true, ".exe": true, ".dll": true, ".so": true, ".pdf": true,
+		".zip": true, ".tar": true, ".mp4": true, ".mp3": true,
 	}
 	knownFilenames := map[string]bool{
 		// Extend this with more known filenames as needed
