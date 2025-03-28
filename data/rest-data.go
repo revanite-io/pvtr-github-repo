@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/ast"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/privateerproj/privateer-sdk/config"
 )
@@ -23,12 +25,14 @@ type RestData struct {
 	Private      bool   `json:"private"`
 	WebsiteURL   string `json:"websiteUrl"`
 	Releases     []ReleaseData
-	Contents     struct {
-		TopLevel  []DirContents
-		ForgeDir  []DirContents
-		WorkFlows []DirFile
-	}
-	Rulesets []Ruleset
+	Contents     Contents
+	Rulesets     []Ruleset
+}
+
+type Contents struct {
+	TopLevel  []DirContents
+	ForgeDir  []DirContents
+	WorkFlows []DirFile
 }
 
 type Ruleset struct {
@@ -113,6 +117,8 @@ func (r *RestData) Setup() error {
 	r.token = r.Config.GetString("token")
 
 	_ = r.getMetadata()
+	r.getTopDirContents()
+	r.getForgeDirContents()
 	r.loadSecurityInsights()
 	_ = r.getWorkflow()
 	_ = r.getReleases()
@@ -153,35 +159,27 @@ func (r *RestData) getSourceFile(owner, repo, path string) (response FileAPIResp
 	return
 }
 
-func (r *RestData) loadSecurityInsights() {
-	r.getTopDirContents()
-	if len(r.Contents.TopLevel) == 0 {
-		r.Config.Logger.Error("no contents retrieved from the top level of the repository")
-		return
-	}
+// checkFile accepts a filename like security-insights.yml or security.md and returns the path to that file
+// if it exists in the root directory or forge directory of the repository or returns "" when the file is not found
+func (r *RestData) checkFile(filename string) (filepath string) {
+	filepath = ""
 	for _, dirContents := range r.Contents.TopLevel {
-		insightsFileName := r.foundSecurityInsights(dirContents)
-		if insightsFileName != "" {
-			insights, err := si.Read(r.owner, r.repo, insightsFileName)
-			r.Insights = insights
-			if err != nil {
-				r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
-			}
-			return
+		if strings.EqualFold(dirContents.Name, filename) {
+			filepath = dirContents.Path
+			break
 		}
 	}
-	r.getForgeDirContents()
+	// prefer files found in the root directory
+	if filepath != "" {
+		return filepath
+	}
 	for _, dirContents := range r.Contents.ForgeDir {
-		insightsFileName := r.foundSecurityInsights(dirContents)
-		if insightsFileName != "" {
-			insights, err := si.Read(r.owner, r.repo, fmt.Sprintf(".github/%s", insightsFileName))
-			r.Insights = insights
-			if err != nil {
-				r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
-			}
-			return
+		if strings.EqualFold(dirContents.Name, filename) {
+			filepath = dirContents.Path
+			break
 		}
 	}
+	return filepath
 }
 
 func (r *RestData) getWorkflowFiles() error {
@@ -226,17 +224,61 @@ func (r *RestData) getWorkflowFiles() error {
 	return err
 }
 
-func (r *RestData) foundSecurityInsights(content DirContents) string {
-	if strings.Contains(strings.ToLower(content.Name), "security-insights.") {
-		response, err := r.getSourceFile(r.owner, r.repo, content.Path)
-		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("error unmarshalling API response for security insights file: %s", err.Error()))
-			return ""
-		}
-		r.Config.Logger.Trace(fmt.Sprintf("Security Insights Exists - SHA: %v", response.SHA))
-		return content.Name
+// returns true when a file with case insensitive name matching support.md is found in the root or forge directories or when the readme.md contains a heading named "Support"
+func (r *RestData) HasSupportMarkdown() bool {
+	if r.checkFile("support.md") != "" {
+		return true
 	}
-	return ""
+	readmePath := r.checkFile("readme.md")
+	if readmePath != "" {
+		contents, err := r.getSourceFile(r.owner, r.repo, readmePath)
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("error getting readme contents: %s", err.Error()))
+			return false
+		}
+
+		headings := parseMarkdownHeadings(contents.ByteContent)
+		for _, heading := range headings {
+			if heading == "Support" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func parseMarkdownHeadings(content []byte) []string {
+	var headings []string
+
+	// Parse markdown into AST
+	md := markdown.Parse(content, nil)
+
+	// Walk the AST and collect headings
+	ast.WalkFunc(md, func(node ast.Node, entering bool) ast.WalkStatus {
+		if heading, ok := node.(*ast.Heading); ok && entering {
+			// Get the text content of the heading
+			if len(heading.Children) > 0 {
+				if text, ok := heading.Children[0].(*ast.Text); ok {
+					headings = append(headings, string(text.Literal))
+				}
+			}
+		}
+		return ast.GoToNext
+	})
+
+	return headings
+}
+
+func (r *RestData) loadSecurityInsights() {
+	filepath := r.checkFile(si.SecurityInsightsFilename)
+	if filepath != "" {
+		insights, err := si.Read(r.owner, r.repo, filepath)
+		r.Insights = insights
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
+		}
+		return
+	}
 }
 
 func (r *RestData) getTopDirContents() {
@@ -247,6 +289,11 @@ func (r *RestData) getTopDirContents() {
 		return
 	}
 	_ = json.Unmarshal(responseData, &r.Contents.TopLevel)
+
+	if len(r.Contents.TopLevel) == 0 {
+		r.Config.Logger.Error("no contents retrieved from the top level of the repository")
+		return
+	}
 }
 
 func (r *RestData) getForgeDirContents() {

@@ -6,6 +6,20 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
+func hasSupportDocs(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if data.HasSupportMarkdown() {
+		return layer4.Passed, "A support.md file or support statements in the readme.md was found"
+
+	}
+
+	return layer4.Failed, "A support.md file or support statements in the readme.md was NOT found"
+}
+
 func hasUserGuides(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {

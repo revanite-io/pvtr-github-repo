@@ -103,7 +103,7 @@ func OSPS_DO_04() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.NotImplemented,
+			hasSupportDocs,
 		},
 	)
 
@@ -123,7 +123,7 @@ func OSPS_DO_05() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.NotImplemented,
+			hasSupportDocs,
 		},
 	)
 
