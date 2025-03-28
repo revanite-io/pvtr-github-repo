@@ -12,6 +12,8 @@ func hasSecContact(payloadData interface{}, _ map[string]*layer4.Change) (result
 		return layer4.Unknown, message
 	}
 
+	// TODO: Check for a contact email in SECURITY.md
+
 	if data.Insights.Project.Vulnerability.Contact.Email != "" {
 		return layer4.Passed, "Security contacts were specified in Security Insights data"
 	}
@@ -21,5 +23,5 @@ func hasSecContact(payloadData interface{}, _ map[string]*layer4.Change) (result
 		}
 	}
 
-	return layer4.Failed, "Security contacts were NOT specified in Security Insights data"
+	return layer4.Failed, "Security contacts were not specified in Security Insights data"
 }
