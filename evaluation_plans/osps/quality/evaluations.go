@@ -23,8 +23,6 @@ func OSPS_QA_01() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.HasSecurityInsightsFile,
-			reusable_steps.IsActive,
 			repoIsPublic,
 		},
 	)
@@ -115,8 +113,6 @@ func OSPS_QA_04() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.HasSecurityInsightsFile,
-			reusable_steps.IsActive,
 			insightsListsRepositories,
 		},
 	)
@@ -153,8 +149,6 @@ func OSPS_QA_05() (evaluation *layer4.ControlEvaluation) {
 		},
 		// TODO: Figure out how to walk the repo tree and check for isBinary
 		[]layer4.AssessmentStep{
-			reusable_steps.HasSecurityInsightsFile,
-			reusable_steps.IsActive,
 			noBinariesInRepo,
 		},
 	)
@@ -187,8 +181,6 @@ func OSPS_QA_06() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.HasSecurityInsightsFile,
-			reusable_steps.IsActive,
 			reusable_steps.NotImplemented,
 		},
 	)
@@ -200,8 +192,6 @@ func OSPS_QA_06() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.HasSecurityInsightsFile,
-			reusable_steps.IsActive,
 			reusable_steps.NotImplemented,
 		},
 	)
