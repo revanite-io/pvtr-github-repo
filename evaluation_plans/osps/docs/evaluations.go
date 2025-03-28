@@ -70,6 +70,7 @@ func OSPS_DO_03() (evaluation *layer4.ControlEvaluation) {
 		},
 		[]layer4.AssessmentStep{
 			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
 			hasSignatureVerificationGuide,
 		},
 	)
@@ -145,6 +146,7 @@ func OSPS_DO_06() (evaluation *layer4.ControlEvaluation) {
 		},
 		[]layer4.AssessmentStep{
 			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
 			hasDependencyManagementPolicy,
 		},
 	)
