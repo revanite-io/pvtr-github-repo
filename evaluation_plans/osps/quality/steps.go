@@ -212,35 +212,32 @@ func verifyDependencyManagement(payloadData interface{}, _ map[string]*layer4.Ch
 }
 
 type DependencyManifest struct {
-	Filename    string
-	LockFile    string
-	Language    string
-	IsMandatory bool
+	Filename string
+	Language string
 }
 
 // Known dependency management files for various languages
 var knownManifests = []DependencyManifest{
-	{"go.mod", "go.sum", "Go", true},
-	{"package.json", "package-lock.json", "JavaScript/Node.js", true},
-	{"pom.xml", "", "Java (Maven)", false},
-	{"build.gradle", "gradle.lockfile", "Java (Gradle)", false},
-	{"requirements.txt", "", "Python", false},
-	{"Pipfile", "Pipfile.lock", "Python (Pipenv)", true},
-	{"poetry.lock", "pyproject.toml", "Python (Poetry)", true},
-	{"Gemfile", "Gemfile.lock", "Ruby", true},
-	{"composer.json", "composer.lock", "PHP", true},
-	{"Cargo.toml", "Cargo.lock", "Rust", true},
-	{"*.csproj", "packages.lock.json", ".NET", false},
-	{"mix.exs", "mix.lock", "Elixir", true},
+	{"go.mod", "Go"},
+	{"package.json", "JavaScript/Node.js"},
+	{"pom.xml", "Java (Maven)"},
+	{"build.gradle", "Java (Gradle)"},
+	{"requirements.txt", "Python"},
+	{"Pipfile", "Python (Pipenv)"},
+	{"pyproject.toml", "Python (Poetry)"},
+	{"Gemfile", "Ruby"},
+	{"composer.json", "PHP"},
+	{"Cargo.toml", "Rust"},
+	{"*.csproj", ".NET"},
+	{"mix.exs", "Elixir"},
 }
 
 // ManifestResult stores the validation result for a manifest
 type ManifestResult struct {
-	Found     bool
-	LockFound bool
-	Language  string
-	HasDeps   bool
-	Manifest  string
+	Found    bool
+	Language string
+	HasDeps  bool
+	Manifest string
 }
 
 func isManifestFile(filename string, pattern string) bool {
@@ -276,26 +273,6 @@ func verifyDependencyManifests(payloadData interface{}) (layer4.Result, string) 
 					Language: manifest.Language,
 					Manifest: entry.Name,
 				}
-
-				// Check for lock file if required
-				if manifest.LockFile != "" {
-					lockFound := false
-					for _, lockEntry := range entries {
-						if isManifestFile(lockEntry.Name, manifest.LockFile) {
-							result.LockFound = true
-							lockFound = true
-							break
-						}
-					}
-
-					if manifest.IsMandatory && !lockFound {
-						manifestErrors = append(manifestErrors,
-							fmt.Sprintf("%s: missing mandatory lock file %s",
-								manifest.Language, manifest.LockFile))
-						continue
-					}
-				}
-
 				foundManifests[manifest.Language] = result
 			}
 		}
