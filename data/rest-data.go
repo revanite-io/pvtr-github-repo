@@ -24,8 +24,9 @@ type RestData struct {
 	WebsiteURL   string `json:"websiteUrl"`
 	Releases     []ReleaseData
 	Contents     struct {
-		TopLevel []DirContents
-		ForgeDir []DirContents
+		TopLevel  []DirContents
+		ForgeDir  []DirContents
+		WorkFlows []DirFile
 	}
 	Rulesets []Ruleset
 }
@@ -71,6 +72,12 @@ type DirContents struct {
 	Type        string `json:"type"`
 }
 
+type DirFile struct {
+	DirContents
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
 type FileAPIResponse struct {
 	ByteContent []byte `json:"content"`
 	SHA         string `json:"sha"`
@@ -110,6 +117,7 @@ func (r *RestData) Setup() error {
 	_ = r.getWorkflow()
 	_ = r.getReleases()
 	r.loadOrgData()
+	_ = r.getWorkflowFiles()
 	return nil
 }
 
@@ -176,6 +184,48 @@ func (r *RestData) loadSecurityInsights() {
 	}
 }
 
+func (r *RestData) getWorkflowFiles() error {
+
+	//Only subdirectories are not allowed in the .github/workflows directory, so no need to recurse
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents/.github/workflows", APIBase, r.owner, r.repo)
+	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("Error calling github to retrive workflow files list: %s", err.Error()))
+		return err
+	}
+
+	var workflowFileList []DirContents
+	err = json.Unmarshal(responseData, &workflowFileList)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("Error unmarshalling json response for workflow files list: %s", err.Error()))
+		return err
+	}
+
+	//For each file, listed we need to get it and put it in a format the action parser can use
+	var dirFiles = make([]DirFile, len(workflowFileList))
+	for i, workflowFile := range workflowFileList {
+
+		response, err := r.MakeApiCall(workflowFile.URL, true)
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("Could not get workflow file data from github, error: %s", err.Error()))
+			return err
+		}
+
+		var dirFile DirFile
+		err = json.Unmarshal(response, &dirFile)
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("Could not Unmarshal json response for file data, error: %s", err.Error()))
+			return err
+		}
+
+		dirFiles[i] = dirFile
+	}
+
+	r.Contents.WorkFlows = dirFiles
+
+	return err
+}
+
 func (r *RestData) foundSecurityInsights(content DirContents) string {
 	if strings.Contains(strings.ToLower(content.Name), "security-insights.") {
 		response, err := r.getSourceFile(r.owner, r.repo, content.Path)
@@ -233,10 +283,11 @@ func (r *RestData) getWorkflow() error {
 	if err != nil {
 		return err
 	}
+	//This is where we set the data in the restdata struct r.Workflow
 	if err := json.Unmarshal(responseData, &r.Workflow); err != nil {
 		return fmt.Errorf("failed to parse permissions: %v", err)
 	}
-	return nil
+	return err
 }
 
 func (r *RestData) loadOrgData() {
@@ -257,5 +308,6 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	}
 
 	_ = json.Unmarshal(responseData, &r.Rulesets)
+	_ = json.Unmarshal(responseData, &r.Organization)
 	return r.Rulesets
 }

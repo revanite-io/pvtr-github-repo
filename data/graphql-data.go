@@ -33,7 +33,15 @@ type GraphqlRepoData struct {
 				RequireLastPushApproval     bool
 				RequiredStatusCheckContexts []string
 			}
+
 			Target struct {
+				Tree struct {
+					Entries []struct {
+						Name string
+						Type string
+						Path string
+					}
+				}
 				OID    string `graphql:"oid"` // Latest commit SHA
 				Commit struct {
 					Status struct {
@@ -78,6 +86,33 @@ type GraphqlRepoData struct {
 			Body         string
 			ResourcePath githubv4.URI
 		}
+		DependencyGraphManifests struct {
+			TotalCount int
+			Nodes      []struct {
+				Filename     string
+				Dependencies struct {
+					TotalCount int
+					Nodes      []struct {
+						PackageName    string
+						Requirements   string
+						RepositoryName string
+					}
+				} `graphql:"dependencies(first: 100)"`
+			} `graphql:"nodes"`
+		} `graphql:"dependencyGraphManifests(first: 100)"`
+		Releases struct {
+			Nodes []struct {
+				TagName string
+				Name    string
+				Draft   bool
+				Assets  struct {
+					Nodes []struct {
+						Name        string
+						ContentType string
+					}
+				} `graphql:"releaseAssets(first: 100)"`
+			}
+		} `graphql:"releases(first: 1, orderBy: {field: CREATED_AT, direction: DESC})"`
 	} `graphql:"repository(owner: $owner, name: $name)"`
 }
 
@@ -149,8 +184,8 @@ func identifyBinaries(binariesFound []string, filetype string, filename string) 
 // but I didn't manage to get that query working as expected.
 func isBinaryFile(filename string) bool {
 	binaryExtensions := map[string]bool{
-		"": true, ".exe": true, ".dll": true, ".so": true, ".png": true, ".jpg": true,
-		".pdf": true, ".zip": true, ".tar": true, ".mp4": true, ".mp3": true,
+		"": true, ".exe": true, ".dll": true, ".so": true, ".pdf": true,
+		".zip": true, ".tar": true, ".mp4": true, ".mp3": true,
 	}
 	knownFilenames := map[string]bool{
 		// Extend this with more known filenames as needed
