@@ -314,3 +314,19 @@ func verifyDependencyManifests(payloadData interface{}) (layer4.Result, string) 
 
 	return layer4.Passed, "Dependency management files present and properly configured"
 }
+
+func documentsTestExecution(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	_, message = reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+	return layer4.NeedsReview, "Review project documentation to ensure it explains when and how tests are run"
+}
+
+func documentsTestMaintenancePolicy(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	_, message = reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+	return layer4.NeedsReview, "Review project documentation to ensure it contains a clear policy for maintaining tests"
+}
