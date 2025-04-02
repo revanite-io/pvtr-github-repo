@@ -59,7 +59,7 @@ func hasContributionGuide(payloadData interface{}, _ map[string]*layer4.Change) 
 	}
 
 	if data.Repository.ContributingGuidelines.Body != "" {
-		return layer4.NeedsReview, "Contributing guide was found via GitHub API (Reccomendation: Add code of conduct location to Security Insights data)"
+		return layer4.NeedsReview, "Contributing guide was found via GitHub API (Recommendation: Add code of conduct location to Security Insights data)"
 	}
 
 	return layer4.Failed, "Contribution guide not found in Security Insights data or via GitHub API"
