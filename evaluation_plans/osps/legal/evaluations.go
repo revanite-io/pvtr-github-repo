@@ -22,7 +22,7 @@ func OSPS_LE_01() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.GithubBuiltIn,
+			reusable_steps.GithubTermsOfService,
 		},
 	)
 

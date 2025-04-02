@@ -29,6 +29,10 @@ func GithubBuiltIn(payloadData interface{}, _ map[string]*layer4.Change) (result
 	return layer4.Passed, "This control is enforced by GitHub for all projects"
 }
 
+func GithubTermsOfService(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	return layer4.Passed, "This control is satisfied by the GitHub Terms of Service"
+}
+
 func HasSecurityInsightsFile(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
