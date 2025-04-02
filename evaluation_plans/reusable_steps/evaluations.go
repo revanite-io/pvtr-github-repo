@@ -40,7 +40,7 @@ func HasSecurityInsightsFile(payloadData interface{}, _ map[string]*layer4.Chang
 	}
 
 	if payload.Insights.Header.URL == "" {
-		return layer4.Failed, "Security insights required for this assessment, but file not found"
+		return layer4.NeedsReview, "Security insights required for this assessment, but file not found"
 	}
 
 	return layer4.Passed, "Security insights file found"
