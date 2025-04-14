@@ -16,8 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5.4.0
         with:
           go-version: 1.23
-      - name: golangci-lint
+      - name: build
         run: make build
+      - name: test
+        run: make test-cov
