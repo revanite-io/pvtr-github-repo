@@ -8,3 +8,8 @@ config.yml
 
 .vscode
 output
+
+# Go test coverage
+coverage.out
+# Added by goreleaser init:
+dist/
