@@ -8,3 +8,6 @@ config.yml
 
 .vscode
 output
+
+# go test coverage output
+coverage.out

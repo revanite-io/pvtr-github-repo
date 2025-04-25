@@ -59,6 +59,21 @@ func foundLicense(payloadData interface{}, _ map[string]*layer4.Change) (result 
 	return layer4.Passed, "License was found in a well known location via the GitHub API"
 }
 
+func releasesLicensed(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if len(data.Releases) == 0 {
+		return layer4.NotApplicable, "No releases found"
+	}
+	if data.Repository.LicenseInfo.Url == "" {
+		return layer4.Failed, "License was not found in a well known location via the GitHub API"
+	}
+	return layer4.Passed, "GitHub releases include the license(s) in the released source code."
+}
+
 func goodLicense(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
