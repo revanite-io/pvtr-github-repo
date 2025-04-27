@@ -93,7 +93,6 @@ func OSPS_BR_03() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			ensureGitHubWebsiteLinkUsesHTTPS,
 			reusable_steps.HasSecurityInsightsFile,
 			ensureInsightsLinksUseHTTPS,
 		},

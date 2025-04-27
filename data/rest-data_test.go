@@ -3,6 +3,7 @@ package data
 import (
 	"testing"
 
+	"github.com/google/go-github/v71/github"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -11,82 +12,93 @@ func TestCheckFile(t *testing.T) {
 	tests := []struct {
 		name     string
 		filename string
-		toplevel []DirContents
-		forgedir []DirContents
+		toplevel []*github.RepositoryContent
+		forgedir []*github.RepositoryContent
 		expected string
 	}{
 		{
 			name:     "finds support.md in root",
 			filename: "support.md",
-			toplevel: []DirContents{
+			toplevel: []*github.RepositoryContent{
 				{
-					Name: "support.md",
-					Path: "support.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("support.md"),
+					Path: github.Ptr("support.md"),
 				},
 				{
-					Name: "readme.md",
-					Path: "readme.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("readme.md"),
+					Path: github.Ptr("readme.md"),
 				},
 				{
-					Name: "other.md",
-					Path: "other.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("other.md"),
+					Path: github.Ptr("other.md"),
 				},
 			},
-			forgedir: []DirContents{},
+			forgedir: []*github.RepositoryContent{},
 			expected: "support.md",
 		},
 		{
 			name:     "finds readme.md in root",
 			filename: "readme.md",
-			toplevel: []DirContents{
+			toplevel: []*github.RepositoryContent{
 				{
-					Name: "support.md",
-					Path: "support.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("support.md"),
+					Path: github.Ptr("support.md"),
 				},
 				{
-					Name: "readme.md",
-					Path: "readme.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("readme.md"),
+					Path: github.Ptr("readme.md"),
 				},
 				{
-					Name: "other.md",
-					Path: "other.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("other.md"),
+					Path: github.Ptr("other.md"),
 				},
 			},
-			forgedir: []DirContents{},
+			forgedir: []*github.RepositoryContent{},
 			expected: "readme.md",
 		},
 		{
 			name:     "case insensitive match",
 			filename: "readme.md",
-			toplevel: []DirContents{
+			toplevel: []*github.RepositoryContent{
 				{
-					Name: "support.md",
-					Path: "support.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("support.md"),
+					Path: github.Ptr("support.md"),
 				},
 				{
-					Name: "README.md",
-					Path: "README.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("README.md"),
+					Path: github.Ptr("README.md"),
 				},
 				{
-					Name: "other.md",
-					Path: "other.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("other.md"),
+					Path: github.Ptr("other.md"),
 				},
 			},
-			forgedir: []DirContents{},
+			forgedir: []*github.RepositoryContent{},
 			expected: "README.md",
 		},
 		{
 			name:     "finds support.md in forge dir",
 			filename: "support.md",
-			toplevel: []DirContents{},
-			forgedir: []DirContents{
+			toplevel: []*github.RepositoryContent{},
+			forgedir: []*github.RepositoryContent{
 				{
-					Name: "support.md",
-					Path: ".github/support.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("support.md"),
+					Path: github.Ptr(".github/support.md"),
 				},
 				{
-					Name: "readme.md",
-					Path: ".github/readme.md",
+					Type: github.Ptr("file"),
+					Name: github.Ptr("readme.md"),
+					Path: github.Ptr(".github/readme.md"),
 				},
 			},
 			expected: ".github/support.md",
@@ -94,8 +106,8 @@ func TestCheckFile(t *testing.T) {
 		{
 			name:     "file not found",
 			filename: "nonexistent.md",
-			toplevel: []DirContents{},
-			forgedir: []DirContents{},
+			toplevel: []*github.RepositoryContent{},
+			forgedir: []*github.RepositoryContent{},
 			expected: "",
 		},
 	}

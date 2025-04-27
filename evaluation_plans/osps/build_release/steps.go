@@ -13,10 +13,9 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-//https://securitylab.github.com/resources/github-actions-untrusted-input/
+// https://securitylab.github.com/resources/github-actions-untrusted-input/
 // List of untrusted inputs
-var regex = 
-	`.*(github\.event\.issue\.title|` +
+var regex = `.*(github\.event\.issue\.title|` +
 	`github\.event\.issue\.body|` +
 	`github\.event\.pull_request\.title|` +
 	`github\.event\.pull_request\.body|` +
@@ -34,10 +33,7 @@ var regex =
 	`github\.event\.pull_request\.head\.repo\.default_branch|` +
 	`github\.head_ref).*`
 
-
-
 func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
-
 
 	// parse the payload and see if we pass our checks
 	data, message := reusable_steps.VerifyPayload(payloadData)
@@ -47,17 +43,16 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 
 	// For each file in the payload
 	for _, file := range data.Contents.WorkFlows {
-		
 
 		if file.Encoding != "base64" {
-			return layer4.Failed, fmt.Sprintf( "File %v is not base64 encoded", file.Name )
+			return layer4.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name)
 		}
-	
+
 		decoded, err := base64.StdEncoding.DecodeString(file.Content)
 		if err != nil {
 			return layer4.Failed, fmt.Sprintf("Error decoding workflow file: %v", err)
 		}
-		
+
 		workflow, actionError := actionlint.Parse(decoded)
 		if actionError != nil {
 			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", actionError)
@@ -78,7 +73,7 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 
 func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
 
-	expression,_ := regexp.Compile(regex)
+	expression, _ := regexp.Compile(regex)
 	var message strings.Builder
 
 	for _, job := range workflow.Jobs {
@@ -104,7 +99,7 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 
 			for _, name := range varList {
 				if expression.Match([]byte(name)) {
-					message.WriteString( fmt.Sprintf( "Untrusted input found: %v\n", name) )
+					message.WriteString(fmt.Sprintf("Untrusted input found: %v\n", name))
 				}
 			}
 		}
@@ -117,8 +112,7 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 
 }
 
-
-func pullVariablesFromScript(script string) [] string {
+func pullVariablesFromScript(script string) []string {
 
 	varlist := []string{}
 
@@ -128,7 +122,7 @@ func pullVariablesFromScript(script string) [] string {
 		//if the string is not found it returns -1 indicating the end of the scan
 		//if the string is found it returns the index of the first character of the string
 		start := strings.Index(script, "${{")
-		if(start == -1) {
+		if start == -1 {
 			break
 		}
 
@@ -140,7 +134,7 @@ func pullVariablesFromScript(script string) [] string {
 		}
 
 		//Create a new slice starting at the first character after the opening bracket of len
-		varlist = append( varlist, strings.TrimSpace(script[start+3:start+len]) )
+		varlist = append(varlist, strings.TrimSpace(script[start+3:start+len]))
 
 		script = script[start+len:]
 
@@ -183,7 +177,6 @@ func releaseHasUniqueIdentifier(payloadData interface{}, _ map[string]*layer4.Ch
 func getLinks(data data.Payload) []string {
 	si := data.Insights
 	links := []string{
-		data.Organization.Blog,
 		si.Header.URL,
 		si.Header.ProjectSISource,
 		si.Project.Homepage,
@@ -199,6 +192,9 @@ func getLinks(data data.Payload) []string {
 		si.Repository.URL,
 		si.Repository.License.URL,
 		si.Repository.Security.Assessments.Self.Evidence,
+	}
+	if data.RepositoryMetadata.OrganizationBlogURL() != nil {
+		links = append(links, *data.RepositoryMetadata.OrganizationBlogURL())
 	}
 	for _, repo := range si.Project.Repositories {
 		links = append(links, repo.URL)
@@ -243,18 +239,6 @@ func ensureInsightsLinksUseHTTPS(payloadData interface{}, _ map[string]*layer4.C
 		return layer4.Failed, fmt.Sprintf("The following links do not use HTTPS: %v", strings.Join(badURIs, ", "))
 	}
 	return layer4.Passed, "All links use HTTPS"
-}
-
-func ensureGitHubWebsiteLinkUsesHTTPS(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
-	data, message := reusable_steps.VerifyPayload(payloadData)
-	if message != "" {
-		return layer4.Unknown, message
-	}
-
-	if insecureURI(data.WebsiteURL) {
-		return layer4.Passed, fmt.Sprintf("The website URI linked from GitHub uses an insecure protocol: %v", data.WebsiteURL)
-	}
-	return layer4.Passed, fmt.Sprintf("The website URI linked from GitHub uses a secure protocol: %v", data.WebsiteURL)
 }
 
 func ensureLatestReleaseHasChangelog(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-github/v71/github"
 	"github.com/privateerproj/privateer-sdk/config"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
@@ -12,8 +13,9 @@ import (
 type Payload struct {
 	*GraphqlRepoData
 	*RestData
-	Config            *config.Config
-	SuspectedBinaries []string
+	Config             *config.Config
+	SuspectedBinaries  []string
+	RepositoryMetadata RepositoryMetadata
 }
 
 func Loader(config *config.Config) (payload interface{}, err error) {
@@ -21,21 +23,28 @@ func Loader(config *config.Config) (payload interface{}, err error) {
 	if err != nil {
 		return nil, err
 	}
-
+	ghClient := github.NewClient(oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: config.GetString("token")},
+	)))
+	repositoryMetadata, err := loadRepositoryMetadata(ghClient, config.GetString("owner"), config.GetString("repo"))
+	if err != nil {
+		return nil, err
+	}
 	suspectedBinaries, err := getSuspectedBinaries(client, config, graphql.Repository.DefaultBranchRef.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	rest, err := getRestData(config)
+	rest, err := getRestData(ghClient, config)
 	if err != nil {
 		return nil, err
 	}
 	return interface{}(Payload{
-		GraphqlRepoData:   graphql,
-		RestData:          rest,
-		Config:            config,
-		SuspectedBinaries: suspectedBinaries,
+		GraphqlRepoData:    graphql,
+		RestData:           rest,
+		Config:             config,
+		SuspectedBinaries:  suspectedBinaries,
+		RepositoryMetadata: repositoryMetadata,
 	}), nil
 }
 
@@ -58,9 +67,10 @@ func getGraphqlRepoData(config *config.Config) (data *GraphqlRepoData, client *g
 	return data, client, err
 }
 
-func getRestData(config *config.Config) (data *RestData, err error) {
+func getRestData(ghClient *github.Client, config *config.Config) (data *RestData, err error) {
 	r := &RestData{
-		Config: config,
+		ghClient: ghClient,
+		Config:   config,
 	}
 	return r, r.Setup()
 }

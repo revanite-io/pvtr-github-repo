@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,29 +10,27 @@ import (
 
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/ast"
+	"github.com/google/go-github/v71/github"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/privateerproj/privateer-sdk/config"
 )
 
 type RestData struct {
-	owner        string
-	repo         string
-	token        string
-	Config       *config.Config
-	Organization OrgData
-	Workflow     Workflow
-	Insights     si.SecurityInsights
-	Name         string `json:"name"`
-	Private      bool   `json:"private"`
-	WebsiteURL   string `json:"websiteUrl"`
-	Releases     []ReleaseData
-	Contents     Contents
-	Rulesets     []Ruleset
+	owner    string
+	repo     string
+	token    string
+	Config   *config.Config
+	Workflow Workflow
+	Insights si.SecurityInsights
+	Releases []ReleaseData
+	Contents Contents
+	Rulesets []Ruleset
+	ghClient *github.Client
 }
 
 type Contents struct {
-	TopLevel  []DirContents
-	ForgeDir  []DirContents
+	TopLevel  []*github.RepositoryContent
+	ForgeDir  []*github.RepositoryContent
 	WorkFlows []DirFile
 }
 
@@ -42,13 +41,6 @@ type Ruleset struct {
 			Context string `json:"context"`
 		} `json:"required_status_checks"`
 	} `json:"parameters"`
-}
-
-type OrgData struct {
-	Name               string        `json:"name"`
-	Blog               string        `json:"blog"`
-	WebSignoffRequired bool          `json:"web_commit_signoff_required"`
-	TwoFactorRequired  *nullableBool `json:"two_factor_requirement_enabled"`
 }
 
 type ReleaseData struct {
@@ -82,47 +74,23 @@ type DirFile struct {
 	Encoding string `json:"encoding"`
 }
 
-type FileAPIResponse struct {
-	ByteContent []byte `json:"content"`
-	SHA         string `json:"sha"`
-}
-
 type Workflow struct {
 	DefaultPermissions    string `json:"default_workflow_permissions"`
 	CanApprovePullRequest bool   `json:"can_approve_pull_request_reviews"`
 }
 
-// Golang bools are binary, but JSON bools can also be null.
-// If null is found, the value of a golang bool is set to false, but
-// the GitHub API sometimes uses the third value when the call is unauthenticated.
-type nullableBool bool
-
 var APIBase = "https://api.github.com"
-
-func (n *nullableBool) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
-		return nil
-	}
-	var b bool
-	if err := json.Unmarshal(data, &b); err != nil {
-		return err
-	}
-	*n = nullableBool(b)
-	return nil
-}
 
 func (r *RestData) Setup() error {
 	r.owner = r.Config.GetString("owner")
 	r.repo = r.Config.GetString("repo")
 	r.token = r.Config.GetString("token")
 
-	_ = r.getMetadata()
 	r.getTopDirContents()
 	r.getForgeDirContents()
 	r.loadSecurityInsights()
 	_ = r.getWorkflow()
 	_ = r.getReleases()
-	r.loadOrgData()
 	_ = r.getWorkflowFiles()
 	return nil
 }
@@ -149,14 +117,12 @@ func (r *RestData) MakeApiCall(endpoint string, isGithub bool) (body []byte, err
 	return io.ReadAll(response.Body)
 }
 
-func (r *RestData) getSourceFile(owner, repo, path string) (response FileAPIResponse, err error) {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents/%s", APIBase, owner, repo, path)
-	responseData, err := r.MakeApiCall(endpoint, true)
+func (r *RestData) getSourceFile(owner, repo, path string) (content *github.RepositoryContent, err error) {
+	content, _, _, err = r.ghClient.Repositories.GetContents(context.Background(), owner, repo, path, nil)
 	if err != nil {
 		return
 	}
-	err = json.Unmarshal(responseData, &response)
-	return
+	return content, nil
 }
 
 // checkFile accepts a filename like security-insights.yml or security.md and returns the path to that file
@@ -164,8 +130,8 @@ func (r *RestData) getSourceFile(owner, repo, path string) (response FileAPIResp
 func (r *RestData) checkFile(filename string) (filepath string) {
 	filepath = ""
 	for _, dirContents := range r.Contents.TopLevel {
-		if strings.EqualFold(dirContents.Name, filename) {
-			filepath = dirContents.Path
+		if strings.EqualFold(*dirContents.Name, filename) {
+			filepath = *dirContents.Path
 			break
 		}
 	}
@@ -174,8 +140,8 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 		return filepath
 	}
 	for _, dirContents := range r.Contents.ForgeDir {
-		if strings.EqualFold(dirContents.Name, filename) {
-			filepath = dirContents.Path
+		if strings.EqualFold(*dirContents.Name, filename) {
+			filepath = *dirContents.Path
 			break
 		}
 	}
@@ -236,8 +202,12 @@ func (r *RestData) HasSupportMarkdown() bool {
 			r.Config.Logger.Error(fmt.Sprintf("error getting readme contents: %s", err.Error()))
 			return false
 		}
-
-		headings := parseMarkdownHeadings(contents.ByteContent)
+		content, err := contents.GetContent()
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("error getting readme contents: %s", err.Error()))
+			return false
+		}
+		headings := parseMarkdownHeadings([]byte(content))
 		for _, heading := range headings {
 			if heading == "Support" {
 				return true
@@ -282,14 +252,12 @@ func (r *RestData) loadSecurityInsights() {
 }
 
 func (r *RestData) getTopDirContents() {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
+	_, contents, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
 	if err != nil {
 		r.Config.Logger.Error(fmt.Sprintf("error getting top level contents: %s", err.Error()))
 		return
 	}
-	_ = json.Unmarshal(responseData, &r.Contents.TopLevel)
-
+	r.Contents.TopLevel = contents
 	if len(r.Contents.TopLevel) == 0 {
 		r.Config.Logger.Error("no contents retrieved from the top level of the repository")
 		return
@@ -297,22 +265,12 @@ func (r *RestData) getTopDirContents() {
 }
 
 func (r *RestData) getForgeDirContents() {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents/.github", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
+	_, contents, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, ".github", nil)
 	if err != nil {
 		r.Config.Logger.Error(fmt.Sprintf("error getting forge contents: %s", err.Error()))
 		return
 	}
-	_ = json.Unmarshal(responseData, &r.Contents.ForgeDir)
-}
-
-func (r *RestData) getMetadata() error {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(responseData, &r)
+	r.Contents.ForgeDir = contents
 }
 
 func (r *RestData) getReleases() error {
@@ -337,16 +295,6 @@ func (r *RestData) getWorkflow() error {
 	return err
 }
 
-func (r *RestData) loadOrgData() {
-	endpoint := fmt.Sprintf("%s/orgs/%s", APIBase, r.owner)
-	responseData, err := r.MakeApiCall(endpoint, true)
-	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error getting org data: %s (%s)", err.Error(), endpoint))
-		return
-	}
-	_ = json.Unmarshal(responseData, &r.Organization)
-}
-
 func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/rules/branches/%s", APIBase, r.owner, r.repo, branchName)
 	responseData, err := r.MakeApiCall(endpoint, true)
@@ -355,6 +303,5 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	}
 
 	_ = json.Unmarshal(responseData, &r.Rulesets)
-	_ = json.Unmarshal(responseData, &r.Organization)
 	return r.Rulesets
 }
