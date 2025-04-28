@@ -70,8 +70,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/privateerproj/privateer-sdk v1.2.0 h1:EHqoWJXr8AZg8FjQA2oEYza1F3EbQci1M8/RUgomXKg=
 github.com/privateerproj/privateer-sdk v1.2.0/go.mod h1:8VU07ecBwDpEPq3XNiCGSMFuNKVZR1FhdqDqQX++Xfc=
-github.com/revanite-io/sci v0.3.3 h1:lgx8PMS+XcTNa92kjKowxL6YEky28lD2zz4Hcbi0n0M=
-github.com/revanite-io/sci v0.3.3/go.mod h1:oF86d/9fyPH1ogfnYg9SvnpSYBzH1SVKhoxDGYOq5uk=
+github.com/revanite-io/sci v0.3.4 h1:KroB4CEQyTVgXpXOLm1ix0x/1u9mfG9+B4To5rGp2s0=
+github.com/revanite-io/sci v0.3.4/go.mod h1:/mp7b54ukPN6/JcjdamjCgYTCMUhFv87ZYK6SiPgYh0=
 github.com/rhysd/actionlint v1.7.7 h1:0KgkoNTrYY7vmOCs9BW2AHxLvvpoY9nEUzgBHiPUr0k=
 github.com/rhysd/actionlint v1.7.7/go.mod h1:AE6I6vJEkNaIfWqC2GNE5spIJNhxf8NCtLEKU4NnUXg=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
