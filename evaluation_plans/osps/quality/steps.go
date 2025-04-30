@@ -2,7 +2,6 @@ package quality
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
@@ -201,116 +200,21 @@ func verifyDependencyManagement(payloadData interface{}, _ map[string]*layer4.Ch
 	}
 
 	// Check dependency manifests
-	result, message = verifyDependencyManifests(data)
-	if result != layer4.Passed {
-		return result, message
-	}
-
-	return layer4.Passed, "Dependency management files and SBOM requirements met"
+	// TODO: Do a quality check on the dependency manifests
+	return countDependencyManifests(data)
 }
 
-type DependencyManifest struct {
-	Filename string
-	Language string
-}
-
-// Known dependency management files for various languages
-var knownManifests = []DependencyManifest{
-	{"go.mod", "Go"},
-	{"package.json", "JavaScript/Node.js"},
-	{"pom.xml", "Java (Maven)"},
-	{"build.gradle", "Java (Gradle)"},
-	{"requirements.txt", "Python"},
-	{"Pipfile", "Python (Pipenv)"},
-	{"pyproject.toml", "Python (Poetry)"},
-	{"Gemfile", "Ruby"},
-	{"composer.json", "PHP"},
-	{"Cargo.toml", "Rust"},
-	{"*.csproj", ".NET"},
-	{"mix.exs", "Elixir"},
-}
-
-// ManifestResult stores the validation result for a manifest
-type ManifestResult struct {
-	Found    bool
-	Language string
-	HasDeps  bool
-	Manifest string
-}
-
-func isManifestFile(filename string, pattern string) bool {
-	if strings.Contains(pattern, "*") {
-		matched, _ := filepath.Match(pattern, filename)
-		return matched
-	}
-	return filename == pattern
-}
-
-func verifyDependencyManifests(payloadData interface{}) (layer4.Result, string) {
+func countDependencyManifests(payloadData interface{}) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
 	}
 
-	if data.Repository.Object.Tree.Entries == nil {
-		return layer4.Unknown, "Repository tree entries not available"
+	manifestsCount := data.DependencyManifestsCount
+	if manifestsCount > 0 {
+		return layer4.Passed, fmt.Sprintf("Found %d dependency manifests from GitHub API", manifestsCount)
 	}
-
-	entries := data.Repository.Object.Tree.Entries
-	manifests := data.Repository.DependencyGraphManifests.Nodes
-
-	foundManifests := make(map[string]ManifestResult)
-	manifestErrors := []string{}
-
-	// Check repository contents for dependency files
-	for _, entry := range entries {
-		for _, manifest := range knownManifests {
-			if isManifestFile(entry.Name, manifest.Filename) {
-				result := ManifestResult{
-					Found:    true,
-					Language: manifest.Language,
-					Manifest: entry.Name,
-				}
-				foundManifests[manifest.Language] = result
-			}
-		}
-	}
-
-	if len(manifestErrors) > 0 {
-		return layer4.Failed, fmt.Sprintf("Dependency management issues found:\n%s",
-			strings.Join(manifestErrors, "\n"))
-	}
-
-	if len(foundManifests) == 0 {
-		return layer4.Failed, "No dependency management files found"
-	}
-
-	for _, manifest := range manifests {
-		if manifest.Dependencies.TotalCount > 0 {
-			for lang, result := range foundManifests {
-				if manifest.Filename == result.Manifest {
-					result.HasDeps = true
-					foundManifests[lang] = result
-					break
-				}
-			}
-		}
-	}
-
-	missingDeps := []string{}
-	for lang, result := range foundManifests {
-		if !result.HasDeps {
-			missingDeps = append(missingDeps,
-				fmt.Sprintf("%s (%s)", result.Manifest, lang))
-		}
-	}
-
-	if len(missingDeps) > 0 {
-		return layer4.Failed, fmt.Sprintf("No dependencies declared in: %s",
-			strings.Join(missingDeps, ", "))
-	}
-
-	return layer4.Passed, "Dependency management files present and properly configured"
+	return layer4.Failed, "No dependency manifests found in the repository by the GitHub API"
 }
 
 func documentsTestExecution(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {

@@ -13,9 +13,10 @@ import (
 type Payload struct {
 	*GraphqlRepoData
 	*RestData
-	Config             *config.Config
-	SuspectedBinaries  []string
-	RepositoryMetadata RepositoryMetadata
+	Config                   *config.Config
+	SuspectedBinaries        []string
+	RepositoryMetadata       RepositoryMetadata
+	DependencyManifestsCount int
 }
 
 func Loader(config *config.Config) (payload interface{}, err error) {
@@ -34,17 +35,22 @@ func Loader(config *config.Config) (payload interface{}, err error) {
 	if err != nil {
 		return nil, err
 	}
+	dependencyManifestsCount, err := countDependencyManifests(client, config)
+	if err != nil {
+		return nil, err
+	}
 
 	rest, err := getRestData(ghClient, config)
 	if err != nil {
 		return nil, err
 	}
 	return interface{}(Payload{
-		GraphqlRepoData:    graphql,
-		RestData:           rest,
-		Config:             config,
-		SuspectedBinaries:  suspectedBinaries,
-		RepositoryMetadata: repositoryMetadata,
+		GraphqlRepoData:          graphql,
+		RestData:                 rest,
+		Config:                   config,
+		SuspectedBinaries:        suspectedBinaries,
+		RepositoryMetadata:       repositoryMetadata,
+		DependencyManifestsCount: dependencyManifestsCount,
 	}), nil
 }
 
