@@ -21,9 +21,9 @@ type GraphqlRepoData struct {
 		Object struct {
 			Tree struct {
 				Entries []struct {
-					Name   string
-					Type   string // "blob" for files, "tree" for directories
-					Path   string
+					Name string
+					Type string // "blob" for files, "tree" for directories
+					Path string
 				}
 			} `graphql:"... on Tree"`
 		} `graphql:"object(expression: \"HEAD:\")"`
@@ -87,7 +87,7 @@ type GraphqlRepoData struct {
 		}
 		ContributingGuidelines struct {
 			Body         string
-			ResourcePath githubv4.URI
+			ResourcePath string
 		}
 		DependencyGraphManifests struct {
 			TotalCount int
@@ -96,8 +96,8 @@ type GraphqlRepoData struct {
 				Dependencies struct {
 					TotalCount int
 					Nodes      []struct {
-						PackageName    string
-						Requirements   string
+						PackageName  string
+						Requirements string
 					}
 				} `graphql:"dependencies(first: 100)"`
 			} `graphql:"nodes"`
