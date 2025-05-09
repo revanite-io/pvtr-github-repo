@@ -25,8 +25,8 @@ func hasUserGuides(payloadData interface{}, _ map[string]*layer4.Change) (result
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
-	if data.Insights.Project.Documentation.DetailedGuide == "" {
+	doc := data.Insights.Project.Documentation
+	if doc == nil || doc.DetailedGuide == nil || len(doc.DetailedGuide.String()) == 0 {
 		return layer4.Failed, "User guide was NOT specified in Security Insights data"
 	}
 
@@ -39,7 +39,7 @@ func acceptsVulnReports(payloadData interface{}, _ map[string]*layer4.Change) (r
 		return layer4.Unknown, message
 	}
 
-	if data.Insights.Project.Vulnerability.ReportsAccepted {
+	if data.Insights.Project.VulnerabilityReporting.ReportsAccepted {
 		return layer4.Passed, "Repository accepts vulnerability reports"
 	}
 
@@ -51,23 +51,10 @@ func hasSignatureVerificationGuide(payloadData interface{}, _ map[string]*layer4
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
-	if data.Insights.Project.Documentation.SignatureVerification == "" {
+	doc := data.Insights.Project.Documentation
+	if doc == nil || doc.SignatureVerification == nil || len(doc.SignatureVerification.String()) == 0 {
 		return layer4.Failed, "Signature verification guide was NOT specified in Security Insights data"
 	}
 
 	return layer4.Passed, "Signature verification guide was specified in Security Insights data"
-}
-
-func hasDependencyManagementPolicy(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
-	data, message := reusable_steps.VerifyPayload(payloadData)
-	if message != "" {
-		return layer4.Unknown, message
-	}
-
-	if data.Insights.Repository.Documentation.DependencyManagement == "" {
-		return layer4.Failed, "Dependency management policy was NOT specified in Security Insights data"
-	}
-
-	return layer4.Passed, "Dependency management policy was specified in Security Insights data"
 }

@@ -10,89 +10,57 @@ import (
 )
 
 type testingData struct {
-	expectedResult layer4.Result
-	expectedMessage string
-	payloadData interface{}
-	assertionMessage string
+	expectedResult    layer4.Result
+	expectedMessage   string
+	repoDocumentation *si.RepositoryDocumentation
+	name              string
+	assertionMessage  string
 }
 
 func TestHasDependencyManagementPolicySomethin(t *testing.T) {
+	depManagement := si.NewURL("https://example.com/dependency-management")
+	emptyDepManagement := si.NewURL("")
+	nilRepoDocumentation := (*si.RepositoryDocumentation)(nil)
 
-	//Ick, remind me to never use anonymous structs in my code
+	payload := data.Payload{
+		RestData: &data.RestData{
+			Insights: si.SecurityInsights{
+				Repository: &si.Repository{},
+			},
+		},
+	}
+
 	testData := []testingData{
 		{
-			expectedResult: layer4.Passed,
+			expectedResult:  layer4.Passed,
 			expectedMessage: "Found dependency management policy in documentation",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
-					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Documentation: struct {
-								Contributing         string `yaml:"contributing-guide"`
-								DependencyManagement string `yaml:"dependency-management-policy"`
-								Governance           string `yaml:"governance"`
-								ReviewPolicy         string `yaml:"review-policy"`
-								SecurityPolicy       string `yaml:"security-policy"`
-							}{
-								DependencyManagement: "https://example.com/dependency-management",
-							},
-						},
-					},
-				},
+			repoDocumentation: &si.RepositoryDocumentation{
+				DependencyManagementPolicy: &depManagement,
 			},
-			assertionMessage: "Happy Path failed",
+			name: "Dependency management policy found when present",
 		},
 		{
-			expectedResult: layer4.Failed,
+			expectedResult:  layer4.Failed,
 			expectedMessage: "No dependency management file found",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
-					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Documentation: struct {
-								Contributing         string `yaml:"contributing-guide"`
-								DependencyManagement string `yaml:"dependency-management-policy"`
-								Governance           string `yaml:"governance"`
-								ReviewPolicy         string `yaml:"review-policy"`
-								SecurityPolicy       string `yaml:"security-policy"`
-							}{
-								DependencyManagement: "",
-							},
-						},
-					},
-				},
+			repoDocumentation: &si.RepositoryDocumentation{
+				DependencyManagementPolicy: &emptyDepManagement,
 			},
+			name:             "fail when policy is empty",
 			assertionMessage: "Empty string check failed",
 		},
 		{
-			expectedResult: layer4.Failed,
-			expectedMessage: "No dependency management file found",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
-					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Documentation: struct {
-								Contributing         string `yaml:"contributing-guide"`
-								DependencyManagement string `yaml:"dependency-management-policy"`
-								Governance           string `yaml:"governance"`
-								ReviewPolicy         string `yaml:"review-policy"`
-								SecurityPolicy       string `yaml:"security-policy"`
-							}{
-								DependencyManagement: *new(string), // empty string pointer effectively nil value
-							},
-						},
-					},
-				},
-			},
-			assertionMessage: "Null String check failed",
+			expectedResult:    layer4.Failed,
+			expectedMessage:   "No dependency management file found",
+			repoDocumentation: nilRepoDocumentation,
+			assertionMessage:  "Null String check failed",
 		},
 	}
-
 	for _, test := range testData {
-		result, message := HasDependencyManagementPolicy(test.payloadData, nil)
-		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
-		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
+		t.Run(test.name, func(t *testing.T) {
+			payload.Insights.Repository.Documentation = test.repoDocumentation
+			result, message := HasDependencyManagementPolicy(payload, nil)
+			assert.Equal(t, test.expectedResult, result, test.assertionMessage)
+			assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
+		})
 	}
-
-
 }

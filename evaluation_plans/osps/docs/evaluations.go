@@ -147,7 +147,7 @@ func OSPS_DO_06() (evaluation *layer4.ControlEvaluation) {
 		[]layer4.AssessmentStep{
 			reusable_steps.HasMadeReleases,
 			reusable_steps.HasSecurityInsightsFile,
-			hasDependencyManagementPolicy,
+			reusable_steps.HasDependencyManagementPolicy,
 		},
 	)
 

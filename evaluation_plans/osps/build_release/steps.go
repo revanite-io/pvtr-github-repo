@@ -174,49 +174,95 @@ func releaseHasUniqueIdentifier(payloadData interface{}, _ map[string]*layer4.Ch
 	return layer4.Passed, "All releases found have a unique name"
 }
 
-func getLinks(data data.Payload) []string {
-	si := data.Insights
-	links := []string{
-		si.Header.URL,
-		si.Header.ProjectSISource,
-		si.Project.Homepage,
-		si.Project.Roadmap,
-		si.Project.Funding,
-		si.Project.Documentation.DetailedGuide,
-		si.Project.Documentation.CodeOfConduct,
-		si.Project.Documentation.QuickstartGuide,
-		si.Project.Documentation.ReleaseProcess,
-		si.Project.Documentation.SignatureVerification,
-		si.Project.Vulnerability.BugBountyProgram,
-		si.Project.Vulnerability.SecurityPolicy,
-		si.Repository.URL,
-		si.Repository.License.URL,
-		si.Repository.Security.Assessments.Self.Evidence,
+func getLinksFromProjectDocumentation(data data.Payload) (urls []string) {
+	doc := data.Insights.Project.Documentation
+	if doc == nil {
+		return urls
 	}
-	if data.RepositoryMetadata.OrganizationBlogURL() != nil {
+	if doc.DetailedGuide != nil {
+		urls = append(urls, doc.DetailedGuide.String())
+	}
+	if doc.CodeOfConduct != nil {
+		urls = append(urls, doc.CodeOfConduct.String())
+	}
+	if doc.QuickstartGuide != nil {
+		urls = append(urls, doc.QuickstartGuide.String())
+	}
+	if doc.ReleaseProcess != nil {
+		urls = append(urls, doc.ReleaseProcess.String())
+	}
+	if doc.SignatureVerification != nil {
+		urls = append(urls, doc.SignatureVerification.String())
+	}
+	return urls
+}
+
+func getLinks(data data.Payload) (links []string) {
+	si := data.Insights
+
+	if len(si.Header.URL.String()) > 0 {
+		links = append(links, si.Header.URL.String())
+	}
+
+	if si.Header.ProjectSISource != nil && len(si.Header.ProjectSISource.String()) > 0 {
+		links = append(links, si.Header.ProjectSISource.String())
+	}
+
+	if si.Project != nil {
+		for _, repo := range si.Project.Repositories {
+			links = append(links, repo.Url.String())
+		}
+		links = append(links, getLinksFromProjectDocumentation(data)...)
+		if si.Project.HomePage != nil {
+			links = append(links, si.Project.HomePage.String())
+		}
+		if si.Project.Roadmap != nil {
+			links = append(links, si.Project.Roadmap.String())
+		}
+		if si.Project.Funding != nil {
+			links = append(links, si.Project.Funding.String())
+		}
+
+		if si.Project.VulnerabilityReporting.BugBountyProgram != nil {
+			links = append(links, si.Project.VulnerabilityReporting.BugBountyProgram.String())
+		}
+		if si.Project.VulnerabilityReporting.SecurityPolicy != nil {
+			links = append(links, si.Project.VulnerabilityReporting.SecurityPolicy.String())
+		}
+	}
+	if si.Repository != nil {
+		if len(si.Repository.Url.String()) > 0 {
+			links = append(links, si.Repository.Url.String())
+		}
+		if len(si.Repository.License.Url.String()) > 0 {
+			links = append(links, si.Repository.License.Url.String())
+		}
+
+		for _, tool := range si.Repository.SecurityPosture.Tools {
+			links = append(links, tool.Results.Adhoc.Location.String())
+			links = append(links, tool.Results.CI.Location.String())
+			links = append(links, tool.Results.Release.Location.String())
+		}
+		for _, repo := range si.Repository.SecurityPosture.Assessments.ThirdPartyAssessment {
+			links = append(links, repo.Evidence.String())
+		}
+		if si.Repository.SecurityPosture.Assessments.Self.Evidence != nil {
+			links = append(links, si.Repository.SecurityPosture.Assessments.Self.Evidence.String())
+		}
+	}
+
+	if data.RepositoryMetadata != nil && data.RepositoryMetadata.OrganizationBlogURL() != nil {
 		links = append(links, *data.RepositoryMetadata.OrganizationBlogURL())
 	}
-	for _, repo := range si.Project.Repositories {
-		links = append(links, repo.URL)
-	}
 
-	for _, repo := range si.Repository.Security.Assessments.ThirdParty {
-		links = append(links, repo.Evidence)
-	}
-
-	for _, tool := range si.Repository.Security.Tools {
-		links = append(links, tool.Results.Adhoc.Location)
-		links = append(links, tool.Results.CI.Location)
-		links = append(links, tool.Results.Release.Location)
-	}
 	return links
 }
 
 func insecureURI(uri string) bool {
-	if !strings.HasPrefix(uri, "https://") ||
-		!strings.HasPrefix(uri, "ssh:") ||
-		!strings.HasPrefix(uri, "git:") ||
-		!strings.HasPrefix(uri, "git@") {
+	if strings.HasPrefix(uri, "https://") ||
+		strings.HasPrefix(uri, "ssh:") ||
+		strings.HasPrefix(uri, "git:") ||
+		strings.HasPrefix(uri, "git@") {
 		return false
 	}
 	return true
@@ -260,7 +306,7 @@ func insightsHasSlsaAttestation(payloadData interface{}, _ map[string]*layer4.Ch
 		return layer4.Unknown, message
 	}
 
-	attestations := data.Insights.Repository.Release.Attestations
+	attestations := data.Insights.Repository.ReleaseDetails.Attestations
 
 	for _, attestation := range attestations {
 		if attestation.PredicateURI == "https://slsa.dev/provenance/v1" {
@@ -275,17 +321,15 @@ func distributionPointsUseHTTPS(payloadData interface{}, _ map[string]*layer4.Ch
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
-	distributionPoints := data.Insights.Repository.Release.DistributionPoints
-
-	if len(distributionPoints) == 0 {
+	if data.Insights.Repository.ReleaseDetails == nil || (data.Insights.Repository.ReleaseDetails != nil && len(data.Insights.Repository.ReleaseDetails.DistributionPoints) == 0) {
 		return layer4.NotApplicable, "No official distribution points found in Security Insights data"
 	}
+	distributionPoints := data.Insights.Repository.ReleaseDetails.DistributionPoints
 
 	var badURIs []string
 	for _, point := range distributionPoints {
-		if insecureURI(point.URI) {
-			badURIs = append(badURIs, point.URI)
+		if insecureURI(point.Uri) {
+			badURIs = append(badURIs, point.Uri)
 		}
 	}
 	if len(badURIs) > 0 {

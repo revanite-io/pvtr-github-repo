@@ -97,8 +97,10 @@ func HasDependencyManagementPolicy(payloadData interface{}, _ map[string]*layer4
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
-	if len(payload.Insights.Repository.Documentation.DependencyManagement) > 0 {
+	repoDoc := payload.Insights.Repository.Documentation
+	if repoDoc != nil &&
+		repoDoc.DependencyManagementPolicy != nil &&
+		len(repoDoc.DependencyManagementPolicy.String()) > 0 {
 		return layer4.Passed, "Found dependency management policy in documentation"
 	}
 

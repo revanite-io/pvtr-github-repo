@@ -37,11 +37,12 @@ func hasRolesAndResponsibilities(payloadData interface{}, _ map[string]*layer4.C
 		return layer4.Unknown, message
 	}
 
-	if data.Insights.Repository.Documentation.Governance == "" {
-		return layer4.Failed, "Roles and responsibilities were NOT specified in Security Insights data"
+	doc := data.Insights.Repository.Documentation
+	if doc != nil && doc.Governance != nil && len(doc.Governance.String()) > 0 {
+		return layer4.Passed, "Roles and responsibilities were specified in Security Insights data"
 	}
 
-	return layer4.Passed, "Roles and responsibilities were specified in Security Insights data"
+	return layer4.Failed, "Roles and responsibilities were NOT specified in Security Insights data"
 }
 
 func hasContributionGuide(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
@@ -49,12 +50,15 @@ func hasContributionGuide(payloadData interface{}, _ map[string]*layer4.Change) 
 	if message != "" {
 		return layer4.Unknown, message
 	}
+	projDoc := data.Insights.Project.Documentation
+	repoDoc := data.Insights.Repository.Documentation
 
-	if data.Insights.Project.Documentation.CodeOfConduct != "" && data.Insights.Repository.Documentation.Contributing != "" {
+	if projDoc != nil && projDoc.CodeOfConduct != nil && len(projDoc.CodeOfConduct.String()) > 0 &&
+		repoDoc != nil && repoDoc.ContributingGuide != nil && len(repoDoc.ContributingGuide.String()) > 0 {
 		return layer4.Passed, "Contributing guide specified in Security Insights data (Bonus: code of conduct location also specified)"
 	}
 
-	if data.Repository.ContributingGuidelines.Body != "" && data.Insights.Project.Documentation.CodeOfConduct != "" {
+	if data.Repository.ContributingGuidelines.Body != "" && projDoc != nil && projDoc.CodeOfConduct != nil && len(projDoc.CodeOfConduct.String()) > 0 {
 		return layer4.Passed, "Contributing guide was found via GitHub API (Bonus: code of conduct was specified in Security Insights data)"
 	}
 
@@ -70,8 +74,8 @@ func hasContributionReviewPolicy(payloadData interface{}, _ map[string]*layer4.C
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
-	if data.Insights.Repository.Documentation.ReviewPolicy != "" {
+	repoDoc := data.Insights.Repository.Documentation
+	if repoDoc != nil && repoDoc.ReviewPolicy != nil && len(repoDoc.ReviewPolicy.String()) > 0 {
 		return layer4.Passed, "Code review guide was specified in Security Insights data"
 	}
 

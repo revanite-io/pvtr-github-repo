@@ -6,13 +6,13 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ossf/si-tooling/v2/si"
+	"github.com/revanite-io/pvtr-github-repo/data"
 	"github.com/rhysd/actionlint"
 	"github.com/stretchr/testify/assert"
 )
 
-
-var goodWorkflowFile = 
-`name: OSPS Baseline Scan
+var goodWorkflowFile = `name: OSPS Baseline Scan
 
 on: [workflow_dispatch]
 
@@ -38,9 +38,7 @@ jobs:
             -v ${{ github.workspace }}/docker_output:/evaluation_results \
             eddieknight/pvtr-github-repo:latest`
 
-
-var badWorkflowFile =
-`name: OSPS Baseline Scan
+var badWorkflowFile = `name: OSPS Baseline Scan
 
 on: [workflow_dispatch]
 
@@ -66,25 +64,23 @@ jobs:
             -v ${{ github.workspace }}/docker_output:/evaluation_results \
             eddieknight/pvtr-github-repo:latest`
 
-
 type testingData struct {
-	expectedResult bool
-	workflowFile string
+	expectedResult   bool
+	workflowFile     string
 	assertionMessage string
 }
 
+func TestCicdSanitizedInputParameters(t *testing.T) {
 
-func TestCicdSanitizedInputParameters (t * testing.T) {
-
-	testData := []testingData {
+	testData := []testingData{
 		{
-			expectedResult: false,
-			workflowFile: badWorkflowFile,
+			expectedResult:   false,
+			workflowFile:     badWorkflowFile,
 			assertionMessage: "Untrusted input not detected",
 		},
 		{
-			expectedResult: true,
-			workflowFile: goodWorkflowFile,
+			expectedResult:   true,
+			workflowFile:     goodWorkflowFile,
 			assertionMessage: "Untrusted input detected where it should not have been",
 		},
 	}
@@ -100,11 +96,9 @@ func TestCicdSanitizedInputParameters (t * testing.T) {
 	}
 }
 
-
 func TestVariableExtraction(t *testing.T) {
 
-	var testScript = 
-		`echo ${{github.event.issue.title }}
+	var testScript = `echo ${{github.event.issue.title }}
 		if ${{ github.event.commits.arbitrary.data.message}} -ne 0
 		then
 			echo "Checkout report image" ${{ githubnodotevent.commits.arbitrary.data.message}}
@@ -115,9 +109,8 @@ func TestVariableExtraction(t *testing.T) {
 
 	assert.Equal(t, slices.Contains(varNames, "github.event.issue.title"), true, "Variable extraction failed")
 	assert.Equal(t, slices.Contains(varNames, "github.event.commits.arbitrary.data.message"), true, "Variable extraction failed")
-	
-}
 
+}
 
 func TestMultipleVariables(t *testing.T) {
 
@@ -129,8 +122,7 @@ func TestMultipleVariables(t *testing.T) {
 
 }
 
-
-func TestRegex ( t * testing.T ) {
+func TestRegex(t *testing.T) {
 
 	expression, err := regexp.Compile(regex)
 	if err != nil {
@@ -138,8 +130,37 @@ func TestRegex ( t * testing.T ) {
 		return
 	}
 
-	assert.Equal(t, expression.Match([]byte("github.event.issue.title")), true, "regex match failed" )
-	assert.Equal(t, expression.Match([]byte("github.event.commits.arbitrary.data.message")), true, "regex match failed" )
+	assert.Equal(t, expression.Match([]byte("github.event.issue.title")), true, "regex match failed")
+	assert.Equal(t, expression.Match([]byte("github.event.commits.arbitrary.data.message")), true, "regex match failed")
 }
 
+func TestGetLinks(t *testing.T) {
+	payload := data.Payload{
+		RestData: &data.RestData{
+			Insights: si.SecurityInsights{
+				Header:     si.Header{},
+				Repository: &si.Repository{},
+			},
+		},
+	}
+	links := getLinks(payload)
+	assert.Equal(t, len(links), 0, "getLinks should return an empty slice when no links are present")
+}
 
+func TestInsecureURI(t *testing.T) {
+	testData := []struct {
+		input    string
+		expected bool
+	}{
+		{"http://example.com", true},
+		{"https://example.com", false},
+		{"ftp://example.com", true},
+		{"mailto:", true},
+	}
+	for _, data := range testData {
+		t.Run(data.input, func(t *testing.T) {
+			result := insecureURI(data.input)
+			assert.Equal(t, result, data.expected, fmt.Sprintf("Expected %v for input %s", data.expected, data.input))
+		})
+	}
+}
