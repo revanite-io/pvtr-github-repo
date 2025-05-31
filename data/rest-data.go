@@ -145,7 +145,7 @@ func (r *RestData) GetDirectoryContent(path string) (dirContent []*github.Reposi
 
 		content, err := r.getSourceFile(r.owner, r.repo, file.GetPath())
 		if err != nil {
-			return nil, fmt.Errorf("Error fetching workflow file %s: %s", file.GetPath(), err.Error())
+			return nil, fmt.Errorf("failed to fetch workflow file %s: %s", file.GetPath(), err.Error())
 		}
 		dirContent = append(dirContent, content)
 	}
@@ -156,8 +156,7 @@ func (r *RestData) GetDirectoryContent(path string) (dirContent []*github.Reposi
 func (r *RestData) GetFileContent(path string) (content *github.RepositoryContent, err error) {
 	content, err = r.getSourceFile(r.owner, r.repo, path)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error getting file content for %s: %s", path, err.Error()))
-		return nil, fmt.Errorf("error getting file content for %s: %w", path, err)
+		return nil, fmt.Errorf("failed to retrieve file content for %s: %w", path, err)
 	}
 	if content == nil {
 		return nil, fmt.Errorf("file not found at %s", path)
@@ -174,12 +173,12 @@ func (r *RestData) HasSupportMarkdown() bool {
 	if readmePath != "" {
 		contents, err := r.getSourceFile(r.owner, r.repo, readmePath)
 		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("error getting readme contents: %s", err.Error()))
+			r.Config.Logger.Error(fmt.Sprintf("failed to retrieve readme file data: %s", err.Error()))
 			return false
 		}
 		content, err := contents.GetContent()
 		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("error getting readme contents: %s", err.Error()))
+			r.Config.Logger.Error(fmt.Sprintf("failed to unpack readme contents: %s", err.Error()))
 			return false
 		}
 		headings := parseMarkdownHeadings([]byte(content))
@@ -220,7 +219,7 @@ func (r *RestData) loadSecurityInsights() {
 		insights, err := si.Read(r.owner, r.repo, filepath)
 		r.Insights = insights
 		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("error reading security insights file: %s", err.Error()))
+			r.Config.Logger.Error(fmt.Sprintf("failed to read security insights file: %s", err.Error()))
 		}
 		return
 	}
@@ -229,20 +228,20 @@ func (r *RestData) loadSecurityInsights() {
 func (r *RestData) getRepoContents() {
 	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error getting top level contents: %s", err.Error()))
+		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve contents top level contents: %s", err.Error()))
 		return
 	}
 	r.contents.Content = content
 	if len(r.contents.Content) == 0 {
-		r.Config.Logger.Error("no contents retrieved from the top level of the repository")
+		r.Config.Logger.Error("no contents found at the top level of the repository")
 		return
 	}
 	r.contents.SubContent = make(map[string]RepoContent)
 	if err := r.contents.getSubDirContents(r.ghClient, r.owner, r.repo); err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error getting subdirectory contents: %s", err.Error()))
+		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve subdirectory contents: %s", err.Error()))
 		return
 	}
-	r.Config.Logger.Trace(fmt.Sprintf("Retrieved %d top-level contents and %d subdirectories", len(r.contents.Content), len(r.contents.SubContent)))
+	r.Config.Logger.Trace(fmt.Sprintf("retrieved %d top-level contents and %d subdirectories", len(r.contents.Content), len(r.contents.SubContent)))
 }
 
 func (c *RepoContent) getSubDirContents(client *github.Client, owner string, repo string) error {
