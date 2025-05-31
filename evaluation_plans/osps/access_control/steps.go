@@ -67,7 +67,7 @@ func workflowDefaultReadPermissions(payloadData interface{}, _ map[string]*layer
 		return layer4.Unknown, message
 	}
 
-	workflowPermissions := payload.Workflow.DefaultPermissions
+	workflowPermissions := payload.WorkflowPermissions.DefaultPermissions
 
 	message = "Workflow permissions default to " + workflowPermissions
 

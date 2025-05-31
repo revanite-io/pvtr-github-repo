@@ -8,120 +8,94 @@ import (
 )
 
 func TestCheckFile(t *testing.T) {
-	// Setup test cases
 	tests := []struct {
-		name     string
-		filename string
-		toplevel []*github.RepositoryContent
-		forgedir []*github.RepositoryContent
-		expected string
+		name      string
+		filename  string
+		toplevel  []*github.RepositoryContent
+		githubDir []*github.RepositoryContent
+		expected  string
 	}{
 		{
 			name:     "finds support.md in root",
 			filename: "support.md",
 			toplevel: []*github.RepositoryContent{
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("support.md"),
-					Path: github.Ptr("support.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("readme.md"),
-					Path: github.Ptr("readme.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("other.md"),
-					Path: github.Ptr("other.md"),
-				},
+				{Type: github.Ptr("file"), Name: github.Ptr("support.md"), Path: github.Ptr("support.md")},
+				{Type: github.Ptr("file"), Name: github.Ptr("readme.md"), Path: github.Ptr("readme.md")},
 			},
-			forgedir: []*github.RepositoryContent{},
-			expected: "support.md",
+			githubDir: []*github.RepositoryContent{},
+			expected:  "support.md",
 		},
 		{
 			name:     "finds readme.md in root",
 			filename: "readme.md",
 			toplevel: []*github.RepositoryContent{
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("support.md"),
-					Path: github.Ptr("support.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("readme.md"),
-					Path: github.Ptr("readme.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("other.md"),
-					Path: github.Ptr("other.md"),
-				},
+				{Type: github.Ptr("file"), Name: github.Ptr("readme.md"), Path: github.Ptr("readme.md")},
 			},
-			forgedir: []*github.RepositoryContent{},
-			expected: "readme.md",
+			githubDir: []*github.RepositoryContent{},
+			expected:  "readme.md",
 		},
 		{
 			name:     "case insensitive match",
 			filename: "readme.md",
 			toplevel: []*github.RepositoryContent{
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("support.md"),
-					Path: github.Ptr("support.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("README.md"),
-					Path: github.Ptr("README.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("other.md"),
-					Path: github.Ptr("other.md"),
-				},
+				{Type: github.Ptr("file"), Name: github.Ptr("README.md"), Path: github.Ptr("README.md")},
 			},
-			forgedir: []*github.RepositoryContent{},
-			expected: "README.md",
+			githubDir: []*github.RepositoryContent{},
+			expected:  "README.md",
 		},
 		{
-			name:     "finds support.md in forge dir",
+			name:     "finds support.md in .github",
 			filename: "support.md",
 			toplevel: []*github.RepositoryContent{},
-			forgedir: []*github.RepositoryContent{
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("support.md"),
-					Path: github.Ptr(".github/support.md"),
-				},
-				{
-					Type: github.Ptr("file"),
-					Name: github.Ptr("readme.md"),
-					Path: github.Ptr(".github/readme.md"),
-				},
+			githubDir: []*github.RepositoryContent{
+				{Type: github.Ptr("file"), Name: github.Ptr("support.md"), Path: github.Ptr(".github/support.md")},
 			},
 			expected: ".github/support.md",
 		},
 		{
-			name:     "file not found",
-			filename: "nonexistent.md",
-			toplevel: []*github.RepositoryContent{},
-			forgedir: []*github.RepositoryContent{},
-			expected: "",
+			name:      "file not found",
+			filename:  "nonexistent.md",
+			toplevel:  []*github.RepositoryContent{},
+			githubDir: []*github.RepositoryContent{},
+			expected:  "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &RestData{
-				Contents: Contents{
-					TopLevel: tt.toplevel,
-					ForgeDir: tt.forgedir,
+			rest := &RestData{
+				contents: RepoContent{
+					Content: tt.toplevel,
+					SubContent: map[string]RepoContent{
+						".github": {Content: tt.githubDir},
+					},
 				},
 			}
-			result := r.checkFile(tt.filename)
+			result := rest.checkFile(tt.filename)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestGetSubdirContentByPath(t *testing.T) {
+	subContent := RepoContent{
+		Content: []*github.RepositoryContent{
+			{Name: github.Ptr("workflow.yaml"), Type: github.Ptr("file"), Path: github.Ptr(".github/workflows/workflow.yaml")},
+		},
+	}
+
+	root := RepoContent{
+		SubContent: map[string]RepoContent{
+			".github": {
+				SubContent: map[string]RepoContent{
+					"workflows": subContent,
+				},
+			},
+		},
+	}
+
+	result, ok := root.GetSubdirContentByPath(".github/workflows")
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(result.Content))
+	assert.Equal(t, "workflow.yaml", *result.Content[0].Name)
 }

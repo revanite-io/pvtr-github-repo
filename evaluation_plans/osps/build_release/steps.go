@@ -41,14 +41,21 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 		return layer4.Unknown, message
 	}
 
-	// For each file in the payload
-	for _, file := range data.Contents.WorkFlows {
+	workflows, err := data.GetDirectoryContent(".github/workflows")
+	if err != nil {
+		return layer4.Failed, fmt.Sprintf("Error getting workflows: %v", err)
+	}
+	if len(workflows) == 0 {
+		return layer4.NotApplicable, "No workflows found in .github/workflows directory"
+	}
 
-		if file.Encoding != "base64" {
+	for _, file := range workflows {
+
+		if *file.Encoding != "base64" {
 			return layer4.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name)
 		}
 
-		decoded, err := base64.StdEncoding.DecodeString(file.Content)
+		decoded, err := base64.StdEncoding.DecodeString(*file.Content)
 		if err != nil {
 			return layer4.Failed, fmt.Sprintf("Error decoding workflow file: %v", err)
 		}
@@ -64,10 +71,9 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 		if !ok {
 			return layer4.Failed, message
 		}
-
 	}
 
-	return layer4.Passed, "CI/CD tools input sanitized"
+	return layer4.Passed, "GitHub Workflows inputs are sanitized"
 
 }
 

@@ -16,22 +16,21 @@ import (
 )
 
 type RestData struct {
-	owner    string
-	repo     string
-	token    string
-	Config   *config.Config
-	Workflow Workflow
-	Insights si.SecurityInsights
-	Releases []ReleaseData
-	Contents Contents
-	Rulesets []Ruleset
-	ghClient *github.Client
+	owner               string
+	repo                string
+	token               string
+	Config              *config.Config
+	WorkflowPermissions WorkflowPermissions
+	Insights            si.SecurityInsights
+	Releases            []ReleaseData
+	Rulesets            []Ruleset
+	contents            RepoContent
+	ghClient            *github.Client
 }
 
-type Contents struct {
-	TopLevel  []*github.RepositoryContent
-	ForgeDir  []*github.RepositoryContent
-	WorkFlows []DirFile
+type RepoContent struct {
+	Content    []*github.RepositoryContent
+	SubContent map[string]RepoContent
 }
 
 type Ruleset struct {
@@ -56,25 +55,7 @@ type ReleaseAsset struct {
 	DownloadURL string `json:"browser_download_url"`
 }
 
-type DirContents struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	SHA         string `json:"sha"`
-	Size        int    `json:"size"`
-	URL         string `json:"url"`
-	HTMLURL     string `json:"html_url"`
-	GitURL      string `json:"git_url"`
-	DownloadURL string `json:"download_url"`
-	Type        string `json:"type"`
-}
-
-type DirFile struct {
-	DirContents
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"`
-}
-
-type Workflow struct {
+type WorkflowPermissions struct {
 	DefaultPermissions    string `json:"default_workflow_permissions"`
 	CanApprovePullRequest bool   `json:"can_approve_pull_request_reviews"`
 }
@@ -86,12 +67,10 @@ func (r *RestData) Setup() error {
 	r.repo = r.Config.GetString("repo")
 	r.token = r.Config.GetString("token")
 
-	r.getTopDirContents()
-	r.getForgeDirContents()
+	r.getRepoContents()
 	r.loadSecurityInsights()
-	_ = r.getWorkflow()
+	_ = r.getWorkflowPermissions()
 	_ = r.getReleases()
-	_ = r.getWorkflowFiles()
 	return nil
 }
 
@@ -129,7 +108,8 @@ func (r *RestData) getSourceFile(owner, repo, path string) (content *github.Repo
 // if it exists in the root directory or forge directory of the repository or returns "" when the file is not found
 func (r *RestData) checkFile(filename string) (filepath string) {
 	filepath = ""
-	for _, dirContents := range r.Contents.TopLevel {
+	for _, dirContents := range r.contents.Content {
+		// top level directory contents
 		if strings.EqualFold(*dirContents.Name, filename) {
 			filepath = *dirContents.Path
 			break
@@ -139,7 +119,11 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 	if filepath != "" {
 		return filepath
 	}
-	for _, dirContents := range r.Contents.ForgeDir {
+	for _, dirContents := range r.contents.SubContent[".github"].Content {
+		// forge directory contents
+		if dirContents.GetType() != "file" {
+			continue
+		}
 		if strings.EqualFold(*dirContents.Name, filename) {
 			filepath = *dirContents.Path
 			break
@@ -148,46 +132,37 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 	return filepath
 }
 
-func (r *RestData) getWorkflowFiles() error {
-
-	//Only subdirectories are not allowed in the .github/workflows directory, so no need to recurse
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/contents/.github/workflows", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
-	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("Error calling github to retrive workflow files list: %s", err.Error()))
-		return err
+func (r *RestData) GetDirectoryContent(path string) (dirContent []*github.RepositoryContent, err error) {
+	workflowsDir, exists := r.contents.GetSubdirContentByPath(path)
+	if !exists {
+		return nil, fmt.Errorf("content not found at %s", path)
 	}
 
-	var workflowFileList []DirContents
-	err = json.Unmarshal(responseData, &workflowFileList)
-	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("Error unmarshalling json response for workflow files list: %s", err.Error()))
-		return err
-	}
-
-	//For each file, listed we need to get it and put it in a format the action parser can use
-	var dirFiles = make([]DirFile, len(workflowFileList))
-	for i, workflowFile := range workflowFileList {
-
-		response, err := r.MakeApiCall(workflowFile.URL, true)
-		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("Could not get workflow file data from github, error: %s", err.Error()))
-			return err
+	for _, file := range workflowsDir.Content {
+		if file.GetType() != "file" {
+			continue
 		}
 
-		var dirFile DirFile
-		err = json.Unmarshal(response, &dirFile)
+		content, err := r.getSourceFile(r.owner, r.repo, file.GetPath())
 		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("Could not Unmarshal json response for file data, error: %s", err.Error()))
-			return err
+			return nil, fmt.Errorf("Error fetching workflow file %s: %s", file.GetPath(), err.Error())
 		}
-
-		dirFiles[i] = dirFile
+		dirContent = append(dirContent, content)
 	}
 
-	r.Contents.WorkFlows = dirFiles
+	return dirContent, nil
+}
 
-	return err
+func (r *RestData) GetFileContent(path string) (content *github.RepositoryContent, err error) {
+	content, err = r.getSourceFile(r.owner, r.repo, path)
+	if err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("error getting file content for %s: %s", path, err.Error()))
+		return nil, fmt.Errorf("error getting file content for %s: %w", path, err)
+	}
+	if content == nil {
+		return nil, fmt.Errorf("file not found at %s", path)
+	}
+	return content, nil
 }
 
 // returns true when a file with case insensitive name matching support.md is found in the root or forge directories or when the readme.md contains a heading named "Support"
@@ -251,26 +226,44 @@ func (r *RestData) loadSecurityInsights() {
 	}
 }
 
-func (r *RestData) getTopDirContents() {
-	_, contents, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
+func (r *RestData) getRepoContents() {
+	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
 	if err != nil {
 		r.Config.Logger.Error(fmt.Sprintf("error getting top level contents: %s", err.Error()))
 		return
 	}
-	r.Contents.TopLevel = contents
-	if len(r.Contents.TopLevel) == 0 {
+	r.contents.Content = content
+	if len(r.contents.Content) == 0 {
 		r.Config.Logger.Error("no contents retrieved from the top level of the repository")
 		return
 	}
-}
-
-func (r *RestData) getForgeDirContents() {
-	_, contents, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, ".github", nil)
-	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("error getting forge contents: %s", err.Error()))
+	r.contents.SubContent = make(map[string]RepoContent)
+	if err := r.contents.getSubDirContents(r.ghClient, r.owner, r.repo); err != nil {
+		r.Config.Logger.Error(fmt.Sprintf("error getting subdirectory contents: %s", err.Error()))
 		return
 	}
-	r.Contents.ForgeDir = contents
+	r.Config.Logger.Trace(fmt.Sprintf("Retrieved %d top-level contents and %d subdirectories", len(r.contents.Content), len(r.contents.SubContent)))
+}
+
+func (c *RepoContent) getSubDirContents(client *github.Client, owner string, repo string) error {
+	for _, item := range c.Content {
+		if item.GetType() == "dir" {
+			_, content, _, err := client.Repositories.GetContents(context.Background(), owner, repo, item.GetPath(), nil)
+			if err != nil {
+				return fmt.Errorf("error getting subdirectory contents for %s: %s", item.GetPath(), err.Error())
+			}
+			c.SubContent[item.GetName()] = RepoContent{
+				Content:    content,
+				SubContent: make(map[string]RepoContent),
+			}
+		}
+	}
+	for path, subContent := range c.SubContent {
+		if err := subContent.getSubDirContents(client, owner, repo); err != nil {
+			return fmt.Errorf("error getting subdirectory contents for %s: %s", path, err.Error())
+		}
+	}
+	return nil
 }
 
 func (r *RestData) getReleases() error {
@@ -282,14 +275,13 @@ func (r *RestData) getReleases() error {
 	return json.Unmarshal(responseData, &r.Releases)
 }
 
-func (r *RestData) getWorkflow() error {
+func (r *RestData) getWorkflowPermissions() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/permissions/workflow", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
 		return err
 	}
-	//This is where we set the data in the restdata struct r.Workflow
-	if err := json.Unmarshal(responseData, &r.Workflow); err != nil {
+	if err := json.Unmarshal(responseData, &r.WorkflowPermissions); err != nil {
 		return fmt.Errorf("failed to parse permissions: %v", err)
 	}
 	return err
@@ -304,4 +296,23 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 
 	_ = json.Unmarshal(responseData, &r.Rulesets)
 	return r.Rulesets
+}
+
+func (c *RepoContent) GetSubdirContentByPath(path string) (RepoContent, bool) {
+	if c.SubContent == nil {
+		return RepoContent{}, false
+	}
+
+	parts := strings.Split(path, "/")
+	current := *c
+
+	for _, part := range parts {
+		subdir, exists := current.SubContent[part]
+		if !exists {
+			return RepoContent{}, false
+		}
+		current = subdir
+	}
+
+	return current, true
 }
