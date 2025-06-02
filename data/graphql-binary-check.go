@@ -9,6 +9,75 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+var (
+	binaryExtensions = map[string]bool{
+		"":       true,
+		"tar":    true,
+		"gz":     true,
+		"tgz":    true,
+		"zip":    true,
+		"rar":    true,
+		"7z":     true,
+		"bz2":    true,
+		"xz":     true,
+		"lzma":   true,
+		"lz4":    true,
+		"zst":    true,
+		"apk":    true,
+		"crx":    true,
+		"deb":    true,
+		"dex":    true,
+		"dey":    true,
+		"elf":    true,
+		"o":      true,
+		"a":      true,
+		"so":     true,
+		"macho":  true,
+		"iso":    true,
+		"class":  true,
+		"jar":    true,
+		"bundle": true,
+		"dylib":  true,
+		"lib":    true,
+		"msi":    true,
+		"dll":    true,
+		"drv":    true,
+		"efi":    true,
+		"exe":    true,
+		"ocx":    true,
+		"pyc":    true,
+		"pyo":    true,
+		"par":    true,
+		"rpm":    true,
+		"wasm":   true,
+		"whl":    true,
+	}
+
+	// Extend this with more known filenames as needed
+	knownFilenames = map[string]bool{
+		"README":          true,
+		"LICENSE":         true,
+		"CHANGELOG":       true,
+		"CONTRIBUTING":    true,
+		"CODE_OF_CONDUCT": true,
+		"TODO":            true,
+		"SECURITY":        true,
+		"NOTICE":          true,
+		"CODEOWNERS":      true,
+		".gitignore":      true,
+		".gitattributes":  true,
+		"Makefile":        true,
+		"Dockerfile":      true,
+		"Vagrantfile":     true,
+		"Gemfile":         true,
+		"Procfile":        true,
+		"Brewfile":        true,
+		"MANIFEST":        true,
+		"DCO":             true,
+		"MAINTAINERS":     true,
+	}
+)
+
 // GraphqlRepoTree is used in a query to get top 3 levels of the repository contents
 type GraphqlRepoTree struct {
 	Repository struct {
@@ -76,17 +145,6 @@ func identifyBinaries(binariesFound []string, filetype string, filename string) 
 // GitHub's GraphQL API has an 'isBinary' field that could be used for a more accurate check,
 // but I didn't manage to get that query working as expected.
 func isBinaryFile(filename string) bool {
-	binaryExtensions := map[string]bool{
-		"": true, ".exe": true, ".dll": true, ".so": true, ".pdf": true,
-		".zip": true, ".tar": true, ".mp4": true, ".mp3": true,
-	}
-	knownFilenames := map[string]bool{
-		// Extend this with more known filenames as needed
-		"README": true, "LICENSE": true, "CHANGELOG": true, "CONTRIBUTING": true,
-		"CODE_OF_CONDUCT": true, "TODO": true, "SECURITY": true, "NOTICE": true, "CODEOWNERS": true,
-		".gitignore": true, ".gitattributes": true, "Makefile": true, "Dockerfile": true,
-		"Vagrantfile": true, "Gemfile": true, "Procfile": true, "Brewfile": true, "MANIFEST": true,
-	}
 	if knownFilenames[filename] {
 		return false
 	}
@@ -108,13 +166,4 @@ func fetchGraphqlRepoTree(config *config.Config, client *githubv4.Client, branch
 	err = client.Query(context.Background(), &tree, variables)
 
 	return tree, err
-}
-
-func getSuspectedBinaries(client *githubv4.Client, config *config.Config, branchName string) (suspectedBinaries []string, err error) {
-	tree, err := fetchGraphqlRepoTree(config, client, branchName)
-	if err != nil {
-		return nil, err
-	}
-	binaryFileNames := checkTreeForBinaries(tree, []string{})
-	return binaryFileNames, nil
 }

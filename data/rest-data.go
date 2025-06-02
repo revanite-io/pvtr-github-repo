@@ -237,10 +237,6 @@ func (r *RestData) getRepoContents() {
 		return
 	}
 	r.contents.SubContent = make(map[string]RepoContent)
-	if err := r.contents.getSubDirContents(r.ghClient, r.owner, r.repo); err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve subdirectory contents: %s", err.Error()))
-		return
-	}
 	r.Config.Logger.Trace(fmt.Sprintf("retrieved %d top-level contents and %d subdirectories", len(r.contents.Content), len(r.contents.SubContent)))
 }
 

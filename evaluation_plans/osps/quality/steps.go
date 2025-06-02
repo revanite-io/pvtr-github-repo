@@ -124,18 +124,24 @@ func statusChecksAreRequiredByBranchProtection(payloadData interface{}, _ map[st
 	return layer4.Passed, "No status checks were run that are not required by branch protection"
 }
 
-// TODO: after 3 layers of depth, make additional API calls if a tree is found.
-// TODO: Examine more than just the file name.
 func noBinariesInRepo(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
 	}
 
-	if len(data.SuspectedBinaries) == 0 {
-		return layer4.Passed, "No binaries were found in the repository (Note: this check only examines file names at this time)"
+	// TODO: This only checks the top 3 levels of the repository tree
+	// for common binary file extensions and it fails on very large repositories.
+	suspectedBinaries, err := data.GetSuspectedBinaries()
+	if err != nil {
+		data.Config.Logger.Trace(fmt.Sprintf("unexpected response while checking for binaries: %s", err.Error()))
+		return layer4.Unknown, fmt.Sprintf("Error while scanning repository for binaries, potentially due to repo size. See logs for details.")
 	}
-	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(data.SuspectedBinaries, ", "))
+
+	if len(suspectedBinaries) == 0 {
+		return layer4.Passed, "No common binary file extensions were found in the repository"
+	}
+	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(suspectedBinaries, ", "))
 }
 
 func requiresNonAuthorApproval(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
@@ -145,18 +151,15 @@ func requiresNonAuthorApproval(payloadData interface{}, _ map[string]*layer4.Cha
 	}
 	protection := data.Repository.DefaultBranchRef.BranchProtectionRule
 
-	// Check if reviews are required
 	if !protection.RequiresApprovingReviews {
 		return layer4.Failed, "Branch protection rule does not require reviews"
 	}
 
-	// Check if at least one review is required
 	reviewCount := data.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
 	if reviewCount < 1 {
 		return layer4.Failed, "Branch protection rule requires 0 approving reviews"
 	}
 
-	// Check if new commits dismiss previous approvals
 	if !protection.RequireLastPushApproval {
 		return layer4.Failed, "Branch protection does not require re-approval after new commits"
 	}

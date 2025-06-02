@@ -17,6 +17,8 @@ type Payload struct {
 	SuspectedBinaries        []string
 	RepositoryMetadata       RepositoryMetadata
 	DependencyManifestsCount int
+
+	client *githubv4.Client
 }
 
 func Loader(config *config.Config) (payload interface{}, err error) {
@@ -31,7 +33,6 @@ func Loader(config *config.Config) (payload interface{}, err error) {
 	if err != nil {
 		return nil, err
 	}
-	suspectedBinaries, err := getSuspectedBinaries(client, config, graphql.Repository.DefaultBranchRef.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +49,9 @@ func Loader(config *config.Config) (payload interface{}, err error) {
 		GraphqlRepoData:          graphql,
 		RestData:                 rest,
 		Config:                   config,
-		SuspectedBinaries:        suspectedBinaries,
 		RepositoryMetadata:       repositoryMetadata,
 		DependencyManifestsCount: dependencyManifestsCount,
+		client:                   client,
 	}), nil
 }
 
@@ -79,4 +80,13 @@ func getRestData(ghClient *github.Client, config *config.Config) (data *RestData
 		Config:   config,
 	}
 	return r, r.Setup()
+}
+
+func (p *Payload) GetSuspectedBinaries() (suspectedBinaries []string, err error) {
+	tree, err := fetchGraphqlRepoTree(p.Config, p.client, p.GraphqlRepoData.Repository.DefaultBranchRef.Name)
+	if err != nil {
+		return nil, err
+	}
+	binaryFileNames := checkTreeForBinaries(tree, []string{})
+	return binaryFileNames, nil
 }
