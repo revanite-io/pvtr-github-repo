@@ -240,27 +240,6 @@ func (r *RestData) getRepoContents() {
 	r.Config.Logger.Trace(fmt.Sprintf("retrieved %d top-level contents and %d subdirectories", len(r.contents.Content), len(r.contents.SubContent)))
 }
 
-func (c *RepoContent) getSubDirContents(client *github.Client, owner string, repo string) error {
-	for _, item := range c.Content {
-		if item.GetType() == "dir" {
-			_, content, _, err := client.Repositories.GetContents(context.Background(), owner, repo, item.GetPath(), nil)
-			if err != nil {
-				return fmt.Errorf("error getting subdirectory contents for %s: %s", item.GetPath(), err.Error())
-			}
-			c.SubContent[item.GetName()] = RepoContent{
-				Content:    content,
-				SubContent: make(map[string]RepoContent),
-			}
-		}
-	}
-	for path, subContent := range c.SubContent {
-		if err := subContent.getSubDirContents(client, owner, repo); err != nil {
-			return fmt.Errorf("error getting subdirectory contents for %s: %s", path, err.Error())
-		}
-	}
-	return nil
-}
-
 func (r *RestData) getReleases() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/releases", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)

@@ -83,7 +83,7 @@ func getRestData(ghClient *github.Client, config *config.Config) (data *RestData
 }
 
 func (p *Payload) GetSuspectedBinaries() (suspectedBinaries []string, err error) {
-	tree, err := fetchGraphqlRepoTree(p.Config, p.client, p.GraphqlRepoData.Repository.DefaultBranchRef.Name)
+	tree, err := fetchGraphqlRepoTree(p.Config, p.client, p.Repository.DefaultBranchRef.Name)
 	if err != nil {
 		return nil, err
 	}

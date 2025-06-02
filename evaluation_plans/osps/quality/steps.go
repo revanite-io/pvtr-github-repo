@@ -135,7 +135,7 @@ func noBinariesInRepo(payloadData interface{}, _ map[string]*layer4.Change) (res
 	suspectedBinaries, err := data.GetSuspectedBinaries()
 	if err != nil {
 		data.Config.Logger.Trace(fmt.Sprintf("unexpected response while checking for binaries: %s", err.Error()))
-		return layer4.Unknown, fmt.Sprintf("Error while scanning repository for binaries, potentially due to repo size. See logs for details.")
+		return layer4.Unknown, "Error while scanning repository for binaries, potentially due to repo size. See logs for details."
 	}
 
 	if len(suspectedBinaries) == 0 {
