@@ -111,7 +111,7 @@ type GraphqlRepoTree struct {
 	} `graphql:"repository(owner: $owner, name: $name)"`
 }
 
-func checkTreeForBinaries(tree *GraphqlRepoTree, binariesFound []string) []string {
+func checkTreeForBinaries(tree *GraphqlRepoTree) (binariesFound []string) {
 	for _, entry := range tree.Repository.Object.Tree.Entries {
 		binariesFound = identifyBinaries(binariesFound, entry.Type, entry.Name)
 		if entry.Type == "tree" {

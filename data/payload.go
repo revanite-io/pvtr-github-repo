@@ -87,6 +87,6 @@ func (p *Payload) GetSuspectedBinaries() (suspectedBinaries []string, err error)
 	if err != nil {
 		return nil, err
 	}
-	binaryFileNames := checkTreeForBinaries(tree, []string{})
+	binaryFileNames := checkTreeForBinaries(tree)
 	return binaryFileNames, nil
 }
