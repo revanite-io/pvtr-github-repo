@@ -94,22 +94,27 @@ func TestGetSubdirContentByPath(t *testing.T) {
 		},
 	}
 
+	restData := &RestData{
+		owner: "test-owner",
+		repo:  "test-repo",
+	}
+
 	t.Run("successful path", func(t *testing.T) {
-		result, err := root.GetSubdirContentByPath(".github/workflows")
+		result, err := root.GetSubdirContentByPath(restData, ".github/workflows")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(result.Content))
 		assert.Equal(t, "workflow.yaml", *result.Content[0].Name)
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		_, err := root.GetSubdirContentByPath(".github/nonexistent")
+		_, err := root.GetSubdirContentByPath(restData, ".github/nonexistent")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "directory 'nonexistent' not found")
 	})
 
 	t.Run("no subdirectories", func(t *testing.T) {
 		emptyRoot := RepoContent{}
-		_, err := emptyRoot.GetSubdirContentByPath(".github")
+		_, err := emptyRoot.GetSubdirContentByPath(restData, ".github")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no subdirectories found")
 	})

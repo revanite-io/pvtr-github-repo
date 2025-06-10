@@ -10,21 +10,21 @@ import (
 )
 
 type testingData struct {
-	expectedResult layer4.Result
-	expectedMessage string
-	payloadData interface{}
+	expectedResult   layer4.Result
+	expectedMessage  string
+	payloadData      interface{}
 	assertionMessage string
 }
 
-func TestHasDependencyManagementPolicySomethin(t *testing.T) {
+func TestHasDependencyManagementPolicy(t *testing.T) {
 
 	//Ick, remind me to never use anonymous structs in my code
 	testData := []testingData{
 		{
-			expectedResult: layer4.Passed,
+			expectedResult:  layer4.Passed,
 			expectedMessage: "Found dependency management policy in documentation",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
 							Documentation: struct {
@@ -43,10 +43,10 @@ func TestHasDependencyManagementPolicySomethin(t *testing.T) {
 			assertionMessage: "Happy Path failed",
 		},
 		{
-			expectedResult: layer4.Failed,
+			expectedResult:  layer4.Failed,
 			expectedMessage: "No dependency management file found",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
 							Documentation: struct {
@@ -65,10 +65,10 @@ func TestHasDependencyManagementPolicySomethin(t *testing.T) {
 			assertionMessage: "Empty string check failed",
 		},
 		{
-			expectedResult: layer4.Failed,
+			expectedResult:  layer4.Failed,
 			expectedMessage: "No dependency management file found",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
 							Documentation: struct {
@@ -93,6 +93,5 @@ func TestHasDependencyManagementPolicySomethin(t *testing.T) {
 		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
 		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
 	}
-
 
 }
