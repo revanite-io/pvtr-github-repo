@@ -13,26 +13,6 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-// https://securitylab.github.com/resources/github-actions-untrusted-input/
-// List of untrusted inputs
-var regex = `.*(github\.event\.issue\.title|` +
-	`github\.event\.issue\.body|` +
-	`github\.event\.pull_request\.title|` +
-	`github\.event\.pull_request\.body|` +
-	`github\.event\.comment\.body|` +
-	`github\.event\.review\.body|` +
-	`github\.event\.pages.*\.page_name|` +
-	`github\.event\.commits.*\.message|` +
-	`github\.event\.head_commit\.message|` +
-	`github\.event\.head_commit\.author\.email|` +
-	`github\.event\.head_commit\.author\.name|` +
-	`github\.event\.commits.*\.author\.email|` +
-	`github\.event\.commits.*\.author\.name|` +
-	`github\.event\.pull_request\.head\.ref|` +
-	`github\.event\.pull_request\.head\.label|` +
-	`github\.event\.pull_request\.head\.repo\.default_branch|` +
-	`github\.head_ref).*`
-
 func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 
 	// parse the payload and see if we pass our checks
@@ -50,6 +30,9 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	}
 
 	for _, file := range workflows {
+		if !strings.HasSuffix(*file.Name, ".yml") && !strings.HasSuffix(*file.Name, ".yaml") {
+			continue
+		}
 
 		if *file.Encoding != "base64" {
 			return layer4.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name)
@@ -62,7 +45,7 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 
 		workflow, actionError := actionlint.Parse(decoded)
 		if actionError != nil {
-			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v", actionError)
+			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v (%s)", actionError, *file.Path)
 		}
 
 		// Check the workflow for untrusted inputs
@@ -73,13 +56,33 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 		}
 	}
 
-	return layer4.Passed, "GitHub Workflows inputs are sanitized"
+	return layer4.Passed, "GitHub Workflows variables do not contain untrusted inputs"
 
 }
 
 func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
 
-	expression, _ := regexp.Compile(regex)
+	// https://securitylab.github.com/resources/github-actions-untrusted-input/
+	// List of untrusted inputs
+	var untrustedVarsRegex = `.*(github\.event\.issue\.title|` +
+		`github\.event\.issue\.body|` +
+		`github\.event\.pull_request\.title|` +
+		`github\.event\.pull_request\.body|` +
+		`github\.event\.comment\.body|` +
+		`github\.event\.review\.body|` +
+		`github\.event\.pages.*\.page_name|` +
+		`github\.event\.commits.*\.message|` +
+		`github\.event\.head_commit\.message|` +
+		`github\.event\.head_commit\.author\.email|` +
+		`github\.event\.head_commit\.author\.name|` +
+		`github\.event\.commits.*\.author\.email|` +
+		`github\.event\.commits.*\.author\.name|` +
+		`github\.event\.pull_request\.head\.ref|` +
+		`github\.event\.pull_request\.head\.label|` +
+		`github\.event\.pull_request\.head\.repo\.default_branch|` +
+		`github\.head_ref).*`
+
+	untrustedVars, _ := regexp.Compile(untrustedVarsRegex)
 	var message strings.Builder
 
 	for _, job := range workflow.Jobs {
@@ -104,7 +107,7 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 			varList := pullVariablesFromScript(run.Run.Value)
 
 			for _, name := range varList {
-				if expression.Match([]byte(name)) {
+				if untrustedVars.Match([]byte(name)) {
 					message.WriteString(fmt.Sprintf("Untrusted input found: %v\n", name))
 				}
 			}

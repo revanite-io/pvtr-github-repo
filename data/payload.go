@@ -33,9 +33,7 @@ func Loader(config *config.Config) (payload interface{}, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
+
 	dependencyManifestsCount, err := countDependencyManifests(client, config)
 	if err != nil {
 		return nil, err
