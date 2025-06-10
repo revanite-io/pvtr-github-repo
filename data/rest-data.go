@@ -133,9 +133,9 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 }
 
 func (r *RestData) GetDirectoryContent(path string) (dirContent []*github.RepositoryContent, err error) {
-	workflowsDir, exists := r.contents.GetSubdirContentByPath(path)
-	if !exists {
-		return nil, fmt.Errorf("content not found at %s", path)
+	workflowsDir, err := r.contents.GetSubdirContentByPath(path)
+	if err != nil {
+		return nil, fmt.Errorf("content not found at %s: %w", path, err)
 	}
 
 	for _, file := range workflowsDir.Content {
@@ -272,9 +272,9 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	return r.Rulesets
 }
 
-func (c *RepoContent) GetSubdirContentByPath(path string) (RepoContent, bool) {
+func (c *RepoContent) GetSubdirContentByPath(path string) (RepoContent, error) {
 	if c.SubContent == nil {
-		return RepoContent{}, false
+		return RepoContent{}, fmt.Errorf("no subdirectories found")
 	}
 
 	parts := strings.Split(path, "/")
@@ -283,10 +283,10 @@ func (c *RepoContent) GetSubdirContentByPath(path string) (RepoContent, bool) {
 	for _, part := range parts {
 		subdir, exists := current.SubContent[part]
 		if !exists {
-			return RepoContent{}, false
+			return RepoContent{}, fmt.Errorf("directory '%s' not found in path '%s'", part, path)
 		}
 		current = subdir
 	}
 
-	return current, true
+	return current, nil
 }
