@@ -10,26 +10,23 @@ import (
 
 type FakeRepositoryMetadata struct {
 	data.RepositoryMetadata
-	twoFactorEnabled               bool
-	unableToEvaluateMFARequirement bool
+	twoFactorEnabled *bool
 }
 
-func (f *FakeRepositoryMetadata) IsMFARequiredForAdministrativeActions() bool {
+func (f *FakeRepositoryMetadata) IsMFARequiredForAdministrativeActions() *bool {
 	return f.twoFactorEnabled
 }
 
-func (f *FakeRepositoryMetadata) UnableToEvaluateMFARequirement() bool {
-	return f.unableToEvaluateMFARequirement
-}
-
-func stubRepoMetadata(twoFactorEnabled bool, unableToEvaluateMFARequirement bool) *FakeRepositoryMetadata {
+func stubRepoMetadata(twoFactorEnabled *bool) *FakeRepositoryMetadata {
 	return &FakeRepositoryMetadata{
-		twoFactorEnabled:               twoFactorEnabled,
-		unableToEvaluateMFARequirement: unableToEvaluateMFARequirement,
+		twoFactorEnabled: twoFactorEnabled,
 	}
 }
 
 func Test_orgRequiresMFA(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
 	tests := []struct {
 		name        string
 		payload     data.Payload
@@ -39,7 +36,7 @@ func Test_orgRequiresMFA(t *testing.T) {
 		{
 			name: "org requires MFA",
 			payload: data.Payload{
-				RepositoryMetadata: stubRepoMetadata(true, false),
+				RepositoryMetadata: stubRepoMetadata(&trueVal),
 			},
 			wantResult:  layer4.Passed,
 			wantMessage: "Two-factor authentication is configured as required by the parent organization",
@@ -47,7 +44,7 @@ func Test_orgRequiresMFA(t *testing.T) {
 		{
 			name: "org does not require MFA",
 			payload: data.Payload{
-				RepositoryMetadata: stubRepoMetadata(false, false),
+				RepositoryMetadata: stubRepoMetadata(&falseVal),
 			},
 			wantResult:  layer4.Failed,
 			wantMessage: "Two-factor authentication is NOT configured as required by the parent organization",
@@ -55,7 +52,7 @@ func Test_orgRequiresMFA(t *testing.T) {
 		{
 			name: "unable to evaluate MFA requirement",
 			payload: data.Payload{
-				RepositoryMetadata: stubRepoMetadata(false, true),
+				RepositoryMetadata: stubRepoMetadata(nil),
 			},
 			wantResult:  layer4.NeedsReview,
 			wantMessage: "Not evaluated. Two-factor authentication evaluation requires a token with org:admin permissions, or manual review",

@@ -14,11 +14,10 @@ type RepositoryMetadata interface {
 }
 
 type GitHubRepositoryMetadata struct {
-	Releases                       []ReleaseData
-	Rulesets                       []Ruleset
-	ghRepo                         *github.Repository
-	ghOrg                          *github.Organization
-	unableToEvaluateMFARequirement bool
+	Releases []ReleaseData
+	Rulesets []Ruleset
+	ghRepo   *github.Repository
+	ghOrg    *github.Organization
 }
 
 func (r *GitHubRepositoryMetadata) IsActive() bool {

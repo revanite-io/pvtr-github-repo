@@ -86,14 +86,15 @@ func TestLoadRepositoryMetadata(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				if testCase.expectedOrgError {
-					assert.True(t, repoMetadata.UnableToEvaluateMFARequirement())
-					assert.False(t, repoMetadata.IsMFARequiredForAdministrativeActions())
+					// When org data can't be retrieved, IsMFARequiredForAdministrativeActions returns nil
+					assert.Nil(t, repoMetadata.IsMFARequiredForAdministrativeActions())
 				} else {
 					assert.NoError(t, err)
 					assert.NotNil(t, repoMetadata)
 					assert.True(t, repoMetadata.IsActive())
 					assert.True(t, repoMetadata.IsPublic())
-					assert.True(t, repoMetadata.IsMFARequiredForAdministrativeActions())
+					assert.NotNil(t, repoMetadata.IsMFARequiredForAdministrativeActions())
+					assert.True(t, *repoMetadata.IsMFARequiredForAdministrativeActions())
 					assert.Nil(t, repoMetadata.OrganizationBlogURL())
 				}
 			}
