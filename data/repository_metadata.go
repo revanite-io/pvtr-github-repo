@@ -9,9 +9,8 @@ import (
 type RepositoryMetadata interface {
 	IsActive() bool
 	IsPublic() bool
-	IsMFARequiredForAdministrativeActions() bool
-	UnableToEvaluateMFARequirement() bool
 	OrganizationBlogURL() *string
+	IsMFARequiredForAdministrativeActions() *bool
 }
 
 type GitHubRepositoryMetadata struct {
@@ -30,19 +29,18 @@ func (r *GitHubRepositoryMetadata) IsPublic() bool {
 	return !r.ghRepo.GetPrivate()
 }
 
-func (r *GitHubRepositoryMetadata) IsMFARequiredForAdministrativeActions() bool {
-	return r.ghOrg.GetTwoFactorRequirementEnabled()
-}
-
-func (r *GitHubRepositoryMetadata) UnableToEvaluateMFARequirement() bool {
-	return r.unableToEvaluateMFARequirement
-}
-
 func (r *GitHubRepositoryMetadata) OrganizationBlogURL() *string {
 	if r.ghOrg != nil {
 		return r.ghOrg.Blog
 	}
 	return nil
+}
+
+func (r *GitHubRepositoryMetadata) IsMFARequiredForAdministrativeActions() *bool {
+	if r.ghOrg == nil {
+		return nil
+	}
+	return r.ghOrg.TwoFactorRequirementEnabled
 }
 
 func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (data RepositoryMetadata, err error) {
@@ -53,8 +51,7 @@ func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (data R
 	organization, _, err := ghClient.Organizations.Get(context.Background(), owner)
 	if err != nil {
 		return &GitHubRepositoryMetadata{
-			ghRepo:                         repository,
-			unableToEvaluateMFARequirement: true,
+			ghRepo: repository,
 		}, nil
 	}
 	return &GitHubRepositoryMetadata{
