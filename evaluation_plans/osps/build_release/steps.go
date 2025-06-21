@@ -42,11 +42,13 @@ func cicdSanitizedInputParameters(payloadData interface{}, _ map[string]*layer4.
 	}
 
 	workflows, err := data.GetDirectoryContent(".github/workflows")
-	if err != nil {
-		return layer4.Failed, fmt.Sprintf("Error getting workflows: %v", err)
-	}
 	if len(workflows) == 0 {
-		return layer4.NotApplicable, "No workflows found in .github/workflows directory"
+		if err != nil {
+			message = err.Error()
+		} else {
+			message = "No workflows found in .github/workflows directory"
+		}
+		return layer4.NotApplicable, message
 	}
 
 	for _, file := range workflows {
