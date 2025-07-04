@@ -5,9 +5,9 @@ go 1.24.4
 require (
 	github.com/google/go-github/v71 v71.0.0
 	github.com/migueleliasweb/go-github-mock v1.4.0
+	github.com/ossf/gemara v0.3.10
 	github.com/ossf/si-tooling/v2 v2.0.5-0.20250328034800-657dc9aa9920
-	github.com/privateerproj/privateer-sdk v1.3.0
-	github.com/revanite-io/sci v0.3.4
+	github.com/privateerproj/privateer-sdk v1.3.1-0.20250817221509-92cfdb66744f
 	github.com/rhysd/actionlint v1.7.7
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	golang.org/x/oauth2 v0.30.0
@@ -16,7 +16,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/goccy/go-yaml v1.17.1 // indirect
+	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/google/go-github/v73 v73.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
@@ -64,6 +64,4 @@ require (
 )
 
 // Uncomment if you're working on a dependency locally
-// replace github.com/privateerproj/privateer-sdk => ../../privateerproj/privateer-sdk
-
-// replace github.com/revanite-io/sci => ../sci
+// replace github.com/privateerproj/privateer-sdk => ../privateer-sdk

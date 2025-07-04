@@ -1,8 +1,8 @@
 package governance
 
 import (
+	"github.com/ossf/gemara/layer4"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
-	"github.com/revanite-io/sci/pkg/layer4"
 )
 
 func coreTeamIsListed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {

@@ -1,8 +1,8 @@
 package legal
 
 import (
+	"github.com/ossf/gemara/layer4"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
-	"github.com/revanite-io/sci/pkg/layer4"
 )
 
 //
@@ -10,8 +10,8 @@ import (
 
 func OSPS_LE_01() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		Control_Id:        "OSPS-LE-01",
-		Remediation_Guide: "",
+		ControlID:        "OSPS-LE-01",
+		RemediationGuide: "",
 	}
 
 	evaluation.AddAssessment(
@@ -31,8 +31,8 @@ func OSPS_LE_01() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_LE_02() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		Control_Id:        "OSPS-LE-02",
-		Remediation_Guide: "",
+		ControlID:        "OSPS-LE-02",
+		RemediationGuide: "",
 	}
 
 	evaluation.AddAssessment(
@@ -71,8 +71,8 @@ func OSPS_LE_02() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_LE_03() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		Control_Id:        "OSPS-LE-03",
-		Remediation_Guide: "",
+		ControlID:        "OSPS-LE-03",
+		RemediationGuide: "",
 	}
 
 	evaluation.AddAssessment(

@@ -3,7 +3,7 @@ package reusable_steps
 import (
 	"fmt"
 
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/ossf/gemara/layer4"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
 )

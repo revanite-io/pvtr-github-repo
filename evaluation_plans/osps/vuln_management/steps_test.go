@@ -3,16 +3,16 @@ package vuln_management
 import (
 	"testing"
 
+	"github.com/ossf/gemara/layer4"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/sci/pkg/layer4"
 	"github.com/stretchr/testify/assert"
 )
 
 type testingData struct {
 	expectedResult   layer4.Result
 	expectedMessage  string
-	payloadData      any
+	payloadData      interface{}
 	assertionMessage string
 }
 

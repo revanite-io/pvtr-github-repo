@@ -3,7 +3,7 @@ package vuln_management
 import (
 	"slices"
 
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/ossf/gemara/layer4"
 
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
@@ -13,7 +13,6 @@ func hasSecContact(payloadData any, _ map[string]*layer4.Change) (result layer4.
 	if message != "" {
 		return layer4.Unknown, message
 	}
-	
 
 	// TODO: Check for a contact email in SECURITY.md
 
@@ -29,7 +28,7 @@ func hasSecContact(payloadData any, _ map[string]*layer4.Change) (result layer4.
 	return layer4.Failed, "Security contacts were not specified in Security Insights data"
 }
 
-func sastToolDefined(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func sastToolDefined(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
