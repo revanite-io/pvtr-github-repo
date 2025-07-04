@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/ossf/gemara/layer4"
 	"github.com/rhysd/actionlint"
 
 	"github.com/revanite-io/pvtr-github-repo/data"

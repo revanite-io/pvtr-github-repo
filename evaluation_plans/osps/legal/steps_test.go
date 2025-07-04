@@ -3,8 +3,8 @@ package legal
 import (
 	"testing"
 
+	"github.com/ossf/gemara/layer4"
 	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/sci/pkg/layer4"
 	"github.com/stretchr/testify/assert"
 )
 
