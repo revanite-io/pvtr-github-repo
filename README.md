@@ -2,7 +2,7 @@
 
 This plugin is designed to test a GitHub repository using automated assessments compatible with the [Simplified Compliance Infrastructure](https://github.com/revanite-io/sci) Layer 4 data types.
 
-Many of the assessments require a [Security Insights](https://github.com/ossf/security-insights-spec) file to be present at the root of the repository, or `./github/security-insights.yml`.
+Many of the assessments require a [Security Insights](https://github.com/ossf/security-insights) file to be present at the root of the repository, or `./github/security-insights.yml`.
 
 ## Work in Progress
 
