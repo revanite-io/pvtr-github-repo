@@ -342,22 +342,14 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 }
 
 func (r *RestData) IsCodeRepo() (bool, error) {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/languages", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
-	if err != nil {
-		return true, err
-	}
-	languagesUsed := make(map[string]int)
+    languages, _, err := r.ghClient.Repositories.ListLanguages(context.Background(), r.owner, r.repo)
+    if err != nil {
+        return true, err
+    }
 
-	err = json.Unmarshal(responseData, &languagesUsed)
-	if err != nil {
-		return true, err
-	}
+    if len(languages) == 0 {
+        return false, nil
+    }
 
-	r.Config.Logger.Trace(fmt.Sprintf("%v Languages found in repo: %v", len(languagesUsed), languagesUsed))
-	if len(languagesUsed) == 0 {
-		return false, nil
-	}
-
-	return true, nil
+    return true, nil
 }

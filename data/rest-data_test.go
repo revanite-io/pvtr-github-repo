@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v71/github"
+	"github.com/migueleliasweb/go-github-mock/src/mock"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -118,4 +119,61 @@ func TestGetSubdirContentByPath(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no subdirectories found")
 	})
+}
+func TestIsCodeRepo(t *testing.T) {
+	tests := []struct {
+		name           string
+		responses      []mock.MockBackendOption
+		expectedResult bool
+		expectedError  bool
+	}{
+		{
+			name: "repository with code languages",
+			responses: []mock.MockBackendOption{
+				mock.WithRequestMatch(
+					mock.GetReposLanguagesByOwnerByRepo,
+					map[string]int{"Go": 1000, "JavaScript": 500},
+				),
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name: "repository with no languages",
+			responses: []mock.MockBackendOption{
+				mock.WithRequestMatch(
+					mock.GetReposLanguagesByOwnerByRepo,
+					map[string]int{},
+				),
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name:           "api error",
+			responses:      []mock.MockBackendOption{},
+			expectedResult: true,
+			expectedError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := mock.NewMockedHTTPClient(tt.responses...)
+			ghClient := github.NewClient(mockClient)
+			rest := &RestData{
+				ghClient: ghClient,
+				owner:    "test-owner",
+				repo:     "test-repo",
+			}
+			result, err := rest.IsCodeRepo()
+
+			assert.Equal(t, tt.expectedResult, result)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
