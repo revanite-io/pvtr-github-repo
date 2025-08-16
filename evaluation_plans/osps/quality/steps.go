@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/revanite-io/sci/layer4"
 )
 
 func repoIsPublic(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {

@@ -3,7 +3,7 @@ package vuln_management
 import (
 	"slices"
 
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/revanite-io/sci/layer4"
 
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )

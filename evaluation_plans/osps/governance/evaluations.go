@@ -2,7 +2,7 @@ package governance
 
 import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/revanite-io/sci/layer4"
 )
 
 //

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/sci/pkg/layer4"
+	"github.com/revanite-io/sci/layer4"
 	"github.com/stretchr/testify/assert"
 )
 
