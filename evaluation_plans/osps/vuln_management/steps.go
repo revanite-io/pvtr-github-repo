@@ -8,11 +8,12 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func hasSecContact(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasSecContact(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
 	}
+	
 
 	// TODO: Check for a contact email in SECURITY.md
 
@@ -28,18 +29,17 @@ func hasSecContact(payloadData interface{}, _ map[string]*layer4.Change) (result
 	return layer4.Failed, "Security contacts were not specified in Security Insights data"
 }
 
-
-func sastToolDefined(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func sastToolDefined(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
 	}
 
-	for _,tool := range data.Insights.Repository.Security.Tools {
+	for _, tool := range data.Insights.Repository.Security.Tools {
 		if tool.Type == "SAST" {
-			
-			enabled  := []bool { tool.Integration.Adhoc, tool.Integration.CI, tool.Integration.Release }
-			
+
+			enabled := []bool{tool.Integration.Adhoc, tool.Integration.CI, tool.Integration.Release}
+
 			if slices.Contains(enabled, true) {
 				return layer4.Passed, "Static Application Security Testing documented in Security Insights"
 			}

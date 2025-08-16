@@ -340,3 +340,24 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	_ = json.Unmarshal(responseData, &r.Rulesets)
 	return r.Rulesets
 }
+
+func (r *RestData) IsCodeRepo() (bool, error) {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/languages", APIBase, r.owner, r.repo)
+	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		return true, err
+	}
+	languagesUsed := make(map[string]int)
+
+	err = json.Unmarshal(responseData, &languagesUsed)
+	if err != nil {
+		return true, err
+	}
+
+	r.Config.Logger.Trace(fmt.Sprintf("%v Languages found in repo: %v", len(languagesUsed), languagesUsed))
+	if len(languagesUsed) == 0 {
+		return false, nil
+	}
+
+	return true, nil
+}

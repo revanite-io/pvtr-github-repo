@@ -11,7 +11,7 @@ import (
 func TestReleasesLicensed(t *testing.T) {
 	tests := []struct {
 		name            string
-		payloadData     interface{}
+		payloadData     any
 		expectedResult  layer4.Result
 		expectedMessage string
 	}{

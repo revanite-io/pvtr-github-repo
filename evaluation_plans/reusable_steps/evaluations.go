@@ -8,7 +8,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/data"
 )
 
-func VerifyPayload(payloadData interface{}) (payload data.Payload, message string) {
+func VerifyPayload(payloadData any) (payload data.Payload, message string) {
 	payload, ok := payloadData.(data.Payload)
 	if !ok {
 		message = fmt.Sprintf("Malformed assessment: expected payload type %T, got %T (%v)", data.Payload{}, payloadData, payloadData)
@@ -16,11 +16,11 @@ func VerifyPayload(payloadData interface{}) (payload data.Payload, message strin
 	return
 }
 
-func NotImplemented(payloadData interface{}, changes map[string]*layer4.Change) (result layer4.Result, message string) {
+func NotImplemented(payloadData any, changes map[string]*layer4.Change) (result layer4.Result, message string) {
 	return layer4.NeedsReview, "Not implemented"
 }
 
-func GithubBuiltIn(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func GithubBuiltIn(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	_, message = VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -29,11 +29,11 @@ func GithubBuiltIn(payloadData interface{}, _ map[string]*layer4.Change) (result
 	return layer4.Passed, "This control is enforced by GitHub for all projects"
 }
 
-func GithubTermsOfService(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func GithubTermsOfService(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	return layer4.Passed, "This control is satisfied by the GitHub Terms of Service"
 }
 
-func HasSecurityInsightsFile(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasSecurityInsightsFile(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -46,7 +46,7 @@ func HasSecurityInsightsFile(payloadData interface{}, _ map[string]*layer4.Chang
 	return layer4.Passed, "Security insights file found"
 }
 
-func HasMadeReleases(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasMadeReleases(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -59,7 +59,7 @@ func HasMadeReleases(payloadData interface{}, _ map[string]*layer4.Change) (resu
 	return layer4.Passed, fmt.Sprintf("Found %v releases", len(payload.Releases))
 }
 
-func IsActive(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func IsActive(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -74,7 +74,7 @@ func IsActive(payloadData interface{}, _ map[string]*layer4.Change) (result laye
 	return result, fmt.Sprintf("Repo Status is %s", payload.Insights.Repository.Status)
 }
 
-func HasIssuesOrDiscussionsEnabled(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasIssuesOrDiscussionsEnabled(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -92,7 +92,7 @@ func HasIssuesOrDiscussionsEnabled(payloadData interface{}, _ map[string]*layer4
 	return layer4.Failed, "Both issues and discussions are disabled for the repository"
 }
 
-func HasDependencyManagementPolicy(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasDependencyManagementPolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -103,4 +103,17 @@ func HasDependencyManagementPolicy(payloadData interface{}, _ map[string]*layer4
 	}
 
 	return layer4.Failed, "No dependency management file found"
+}
+
+func IsCodeRepo(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	payload, message := VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if !payload.IsCodeRepo {
+		return layer4.NotApplicable, "Repository does not contain code"
+	}
+
+	return layer4.Passed, "Repository contains code"
 }

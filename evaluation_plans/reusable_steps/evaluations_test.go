@@ -12,7 +12,7 @@ import (
 type testingData struct {
 	expectedResult   layer4.Result
 	expectedMessage  string
-	payloadData      interface{}
+	payloadData      any
 	assertionMessage string
 }
 

@@ -36,7 +36,7 @@ func main() {
 	}
 
 	// NewVessel may take a payload for all suites to reference
-	pvtrVessel := pluginkit.NewVessel(PluginName, data.Loader, RequiredVars)
+	pvtrVessel := pluginkit.NewEvaluationOrchestrator(PluginName, data.Loader, RequiredVars)
 
 	// Evaluation Suite may optionally take a payload to selectively override the data specified in NewVessel
 	pvtrVessel.AddEvaluationSuite("OSPS_B", data.Loader, evaluation_plans.OSPS_B)

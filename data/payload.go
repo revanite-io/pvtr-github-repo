@@ -17,18 +17,21 @@ type Payload struct {
 	SuspectedBinaries        []string
 	RepositoryMetadata       RepositoryMetadata
 	DependencyManifestsCount int
+	IsCodeRepo               bool
 
 	client *githubv4.Client
 }
 
-func Loader(config *config.Config) (payload interface{}, err error) {
+func Loader(config *config.Config) (payload any, err error) {
 	graphql, client, err := getGraphqlRepoData(config)
 	if err != nil {
 		return nil, err
 	}
+
 	ghClient := github.NewClient(oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: config.GetString("token")},
 	)))
+
 	repositoryMetadata, err := loadRepositoryMetadata(ghClient, config.GetString("owner"), config.GetString("repo"))
 	if err != nil {
 		return nil, err
@@ -43,12 +46,19 @@ func Loader(config *config.Config) (payload interface{}, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return interface{}(Payload{
+
+	isCodeRepo, err := rest.IsCodeRepo()
+	if err != nil {
+		return nil, err
+	}
+
+	return any(Payload{
 		GraphqlRepoData:          graphql,
 		RestData:                 rest,
 		Config:                   config,
 		RepositoryMetadata:       repositoryMetadata,
 		DependencyManifestsCount: dependencyManifestsCount,
+		IsCodeRepo:               isCodeRepo,
 		client:                   client,
 	}), nil
 }
@@ -60,7 +70,7 @@ func getGraphqlRepoData(config *config.Config) (data *GraphqlRepoData, client *g
 	httpClient := oauth2.NewClient(context.Background(), src)
 	client = githubv4.NewClient(httpClient)
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner": githubv4.String(config.GetString("owner")),
 		"name":  githubv4.String(config.GetString("repo")),
 	}

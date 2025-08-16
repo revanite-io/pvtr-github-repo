@@ -93,6 +93,7 @@ func OSPS_GV_03() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
+			reusable_steps.IsCodeRepo,
 			reusable_steps.HasSecurityInsightsFile,
 			reusable_steps.IsActive,
 			hasContributionReviewPolicy,

@@ -10,22 +10,21 @@ import (
 )
 
 type testingData struct {
-	expectedResult layer4.Result
-	expectedMessage string
-	payloadData interface{}
+	expectedResult   layer4.Result
+	expectedMessage  string
+	payloadData      any
 	assertionMessage string
 }
 
-
 func TestSastToolDefined(t *testing.T) {
-	
+
 	testData := []testingData{
 		{
-			expectedResult: layer4.Passed,
-			expectedMessage: "Static Application Security Testing documented in Security Insights",
+			expectedResult:   layer4.Passed,
+			expectedMessage:  "Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for SAST integration enabled",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
 							Security: si.SecurityInfo{
@@ -42,14 +41,13 @@ func TestSastToolDefined(t *testing.T) {
 					},
 				},
 			},
-			
 		},
 		{
-			expectedResult: layer4.Failed,
-			expectedMessage: "No Static Application Security Testing documented in Security Insights",
+			expectedResult:   layer4.Failed,
+			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for SAST integration present but not explicitly enabled",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
 							Security: si.SecurityInfo{
@@ -63,14 +61,13 @@ func TestSastToolDefined(t *testing.T) {
 					},
 				},
 			},
-			
 		},
 		{
-			expectedResult: layer4.Failed,
-			expectedMessage: "No Static Application Security Testing documented in Security Insights",
+			expectedResult:   layer4.Failed,
+			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for Non SAST tool defined",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
 							Security: si.SecurityInfo{
@@ -84,31 +81,28 @@ func TestSastToolDefined(t *testing.T) {
 					},
 				},
 			},
-			
 		},
 		{
-			expectedResult: layer4.Failed,
-			expectedMessage: "No Static Application Security Testing documented in Security Insights",
+			expectedResult:   layer4.Failed,
+			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for no tools defined",
-			payloadData:    data.Payload{
-				RestData: &data.RestData {
+			payloadData: data.Payload{
+				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
 						Repository: si.Repository{
-							Security: si.SecurityInfo{
-							},
+							Security: si.SecurityInfo{},
 						},
 					},
 				},
 			},
-			
 		},
 	}
-	
+
 	for _, test := range testData {
 		result, message := sastToolDefined(test.payloadData, nil)
 
 		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
 		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
 	}
-	
+
 }

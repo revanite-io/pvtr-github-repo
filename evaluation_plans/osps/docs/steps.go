@@ -6,7 +6,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func hasSupportDocs(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasSupportDocs(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -20,7 +20,7 @@ func hasSupportDocs(payloadData interface{}, _ map[string]*layer4.Change) (resul
 	return layer4.Failed, "A support.md file or support statements in the readme.md was NOT found"
 }
 
-func hasUserGuides(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasUserGuides(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -33,7 +33,7 @@ func hasUserGuides(payloadData interface{}, _ map[string]*layer4.Change) (result
 	return layer4.Passed, "User guide was specified in Security Insights data"
 }
 
-func acceptsVulnReports(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func acceptsVulnReports(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -46,7 +46,7 @@ func acceptsVulnReports(payloadData interface{}, _ map[string]*layer4.Change) (r
 	return layer4.Failed, "Repository does not accept vulnerability reports"
 }
 
-func hasSignatureVerificationGuide(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasSignatureVerificationGuide(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -59,7 +59,7 @@ func hasSignatureVerificationGuide(payloadData interface{}, _ map[string]*layer4
 	return layer4.Passed, "Signature verification guide was specified in Security Insights data"
 }
 
-func hasDependencyManagementPolicy(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasDependencyManagementPolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

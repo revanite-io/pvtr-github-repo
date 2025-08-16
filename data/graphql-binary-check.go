@@ -157,7 +157,7 @@ func fetchGraphqlRepoTree(config *config.Config, client *githubv4.Client, branch
 
 	fullPath := fmt.Sprintf("%s:%s", branch, path) // Ensure correct format
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner":  githubv4.String(config.GetString("owner")),
 		"name":   githubv4.String(config.GetString("repo")),
 		"branch": githubv4.String(fullPath),

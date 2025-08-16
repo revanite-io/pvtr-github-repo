@@ -27,7 +27,7 @@ type Dependency struct {
 
 func countDependencyManifests(client *githubv4.Client, cfg *config.Config) (int, error) {
 	var query DependencyManifestsPage
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner": githubv4.String(cfg.GetString("owner")),
 		"name":  githubv4.String(cfg.GetString("repo")),
 	}

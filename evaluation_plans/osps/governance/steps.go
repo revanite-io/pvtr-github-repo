@@ -5,7 +5,7 @@ import (
 	"github.com/revanite-io/sci/layer4"
 )
 
-func coreTeamIsListed(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func coreTeamIsListed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -18,7 +18,7 @@ func coreTeamIsListed(payloadData interface{}, _ map[string]*layer4.Change) (res
 	return layer4.Passed, "Core team was specified in Security Insights data"
 }
 
-func projectAdminsListed(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func projectAdminsListed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -31,7 +31,7 @@ func projectAdminsListed(payloadData interface{}, _ map[string]*layer4.Change) (
 	return layer4.Passed, "Project admins were specified in Security Insights data"
 }
 
-func hasRolesAndResponsibilities(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasRolesAndResponsibilities(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -44,7 +44,7 @@ func hasRolesAndResponsibilities(payloadData interface{}, _ map[string]*layer4.C
 	return layer4.Passed, "Roles and responsibilities were specified in Security Insights data"
 }
 
-func hasContributionGuide(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasContributionGuide(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -65,12 +65,14 @@ func hasContributionGuide(payloadData interface{}, _ map[string]*layer4.Change) 
 	return layer4.Failed, "Contribution guide not found in Security Insights data or via GitHub API"
 }
 
-func hasContributionReviewPolicy(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func hasContributionReviewPolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
+	if !data.IsCodeRepo {
+		return layer4.NotApplicable, "Repository contains no code - skipping code contribution policy check"
+	}
 	if data.Insights.Repository.Documentation.ReviewPolicy != "" {
 		return layer4.Passed, "Code review guide was specified in Security Insights data"
 	}
