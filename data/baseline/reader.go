@@ -21,50 +21,67 @@ const dataDir string = "catalog"
 //go:embed catalog
 var files embed.FS
 
+func GetAssessmentRequirements() (map[string]*layer2.AssessmentRequirement, error) {
+	requirements := make(map[string]*layer2.AssessmentRequirement)
+	catalog, err := loadCatalog()
+	if err != nil {
+		return nil, err
+	}
+	for _, family := range catalog.ControlFamilies {
+		for _, control := range family.Controls {
+			for _, requirement := range control.AssessmentRequirements {
+				requirements[requirement.Id] = &requirement
+			}
+		}
+	}
+
+	if len(requirements) == 0 {
+		return nil, fmt.Errorf("GetAssessmentRequirements: 0 requirements found")
+	}
+
+	return requirements, nil
+}
+
 // ReadAllYAMLFiles reads all YAML files in the data directory and returns the complete catalog data
-func ReadAllYAMLFiles() (*CatalogData, error) {
+func loadCatalog() (catalog layer2.Catalog, err error) {
 	dir, err := files.ReadDir(dataDir)
 	// Check if files are in the right place
 	if err != nil {
-		return nil, fmt.Errorf("data directory does not exist: %s", dataDir)
+		return catalog, fmt.Errorf("data directory does not exist: %s", dataDir)
 	}
 
-	catalogData := &CatalogData{
-		ControlFamilyFiles: make(map[string]string),
-		Catalog: layer2.Catalog{
-			ControlFamilies: []layer2.ControlFamily{},
-		},
+	catalog = layer2.Catalog{
+		ControlFamilies: []layer2.ControlFamily{},
 	}
 
 	// Process each YAML file
 	for _, file := range dir {
 		filePath := path.Join(dataDir, file.Name())
-		controlFamily, familyID, err := readYAMLFile(filePath)
+		controlFamily, err := readYAMLFile(filePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
+			return catalog, fmt.Errorf("failed to read file %s: %w", filePath, err)
 		}
 
-		catalogData.ControlFamilyFiles[familyID] = filePath
-		catalogData.Catalog.ControlFamilies = append(catalogData.Catalog.ControlFamilies, *controlFamily)
+		catalog.ControlFamilies = append(catalog.ControlFamilies, *controlFamily)
 	}
 
-	return catalogData, nil
+	return catalog, nil
 }
 
 // ReadYAMLFile reads a single YAML file and returns the control family data
-func readYAMLFile(filePath string) (*layer2.ControlFamily, string, error) {
+func readYAMLFile(filePath string) (*layer2.ControlFamily, error) {
 	data, err := files.ReadFile(filePath)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read file: %w", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	var yamlData layer2.Catalog
 	if err := yaml.Unmarshal(data, &yamlData); err != nil {
-		return nil, "", fmt.Errorf("failed to unmarshal YAML: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
 	}
 
 	if len(yamlData.ControlFamilies) == 0 {
-		return nil, "", fmt.Errorf("no control families found in file: %s", filePath)
+		return nil, fmt.Errorf("no control families found in file: %s", filePath)
 	}
 
 	// Assuming one control family per file as per the current structure
@@ -77,10 +94,7 @@ func readYAMLFile(filePath string) (*layer2.ControlFamily, string, error) {
 		Controls:    familyData.Controls,
 	}
 
-	// Use the ID from the YAML data instead of extracting from filename
-	familyID := familyData.Id
-
-	return controlFamily, familyID, nil
+	return controlFamily, nil
 }
 
 // extractFamilyID extracts the family ID from a filename

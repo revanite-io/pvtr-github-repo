@@ -39,16 +39,14 @@ func main() {
 	// NewVessel may take a payload for all suites to reference
 	pvtrVessel := pluginkit.NewEvaluationOrchestrator(PluginName, data.Loader, RequiredVars)
 
-	br, err := baseline.NewCatalogData()
+	requirements, err := baseline.GetAssessmentRequirements()
 	if err != nil {
 		fmt.Printf("Error loading catalog data: %v\n", err)
 		os.Exit(1)
 	}
 
-	requirementMap, err := br.GetAssessmentRequirements()
-
 	// Evaluation Suite may optionally take a payload to selectively override the data specified in NewVessel
-	pvtrVessel.AddEvaluationSuite("OSPS_B", data.Loader, evaluation_plans.OSPS_B, requirementMap)
+	pvtrVessel.AddEvaluationSuite("OSPS_B", data.Loader, evaluation_plans.OSPS_B, requirements)
 
 	runCmd := command.NewPluginCommands(
 		PluginName,
