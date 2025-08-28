@@ -75,6 +75,7 @@ var (
 		"MANIFEST":        true,
 		"DCO":             true,
 		"MAINTAINERS":     true,
+		"CNAME":           true,
 	}
 )
 
