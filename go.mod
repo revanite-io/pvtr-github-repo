@@ -6,7 +6,7 @@ require (
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-github/v71 v71.0.0
 	github.com/migueleliasweb/go-github-mock v1.4.0
-	github.com/ossf/gemara v0.4.2
+	github.com/ossf/gemara v0.5.0
 	github.com/ossf/si-tooling/v2 v2.0.5-0.20250328034800-657dc9aa9920
 	github.com/privateerproj/privateer-sdk v1.4.0
 	github.com/rhysd/actionlint v1.7.7
@@ -53,7 +53,7 @@ require (
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
