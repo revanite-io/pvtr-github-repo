@@ -4,18 +4,13 @@ import (
 	"embed"
 	"fmt"
 	"path"
-	"path/filepath"
-	"strings"
 
 	"github.com/goccy/go-yaml"
 	"github.com/ossf/gemara/layer2"
 )
 
-//This reader was put in place as a stopgap solution to get recommendation text on the output
-//yml files.  Improvement is needed, and eventually these baseline files will most likey be
-//Stored on github somehwere and retreived by tag, but for now we will embed them into the
-//SDK and retrieve them that way.
-
+// We have tight control over the catalog right now while it is local, but
+// if/when we have dynamic retrieval, we should retain the local files for testing
 const dataDir string = "catalog"
 
 //go:embed catalog
@@ -95,20 +90,4 @@ func readYAMLFile(filePath string) (*layer2.ControlFamily, error) {
 	}
 
 	return controlFamily, nil
-}
-
-// extractFamilyID extracts the family ID from a filename
-// e.g., "OSPS-AC.yaml" -> "AC"
-// Note: This function is no longer used since we now use the ID field from the YAML data
-func extractFamilyID(filename string) string {
-	// Remove extension
-	name := strings.TrimSuffix(filename, filepath.Ext(filename))
-
-	// Handle OSPS-XX pattern
-	if strings.HasPrefix(name, "OSPS-") && len(name) > 5 {
-		return name[5:] // Return everything after "OSPS-"
-	}
-
-	// Fallback to the full name without extension
-	return name
 }
