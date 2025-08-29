@@ -45,10 +45,10 @@ version-resolver:
 autolabeler:
   - label: "automation"
     title:
-      - "/^(build|ci|perf|refactor|test).*/i"
+      - "/^(build|ci|test).*/i"
   - label: "enhancement"
     title:
-      - "/^(style).*/i"
+      - "/^(style|perf|refactor).*/i"
   - label: "documentation"
     title:
       - "/^(docs).*/i"
@@ -60,7 +60,7 @@ autolabeler:
       - "/^(fix).*/i"
   - label: "infrastructure"
     title:
-      - "/^(infrastructure).*/i"
+      - "/^(infra).*/i"
   - label: "maintenance"
     title:
       - "/^(chore|maintenance).*/i"
