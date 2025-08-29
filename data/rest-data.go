@@ -341,23 +341,15 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 	return r.Rulesets
 }
 
+// IsCodeRepo returns true if the repository contains any programming languages.
+//
+// TODO: Consider using GitHub Linguist metadata (https://github.com/github-linguist/linguist/blob/main/lib/linguist/languages.yml)
+// to distinguish between programming, markup, data, and prose content types for more nuanced
+// repository classification.
 func (r *RestData) IsCodeRepo() (bool, error) {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/languages", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
-	if err != nil {
-		return true, err
-	}
-	languagesUsed := make(map[string]int)
-
-	err = json.Unmarshal(responseData, &languagesUsed)
-	if err != nil {
-		return true, err
-	}
-
-	r.Config.Logger.Trace(fmt.Sprintf("%v Languages found in repo: %v", len(languagesUsed), languagesUsed))
-	if len(languagesUsed) == 0 {
-		return false, nil
-	}
-
-	return true, nil
+    languages, _, err := r.ghClient.Repositories.ListLanguages(context.Background(), r.owner, r.repo)
+    if err != nil {
+        return false, err
+    }
+    return len(languages) > 0, nil
 }
