@@ -60,7 +60,7 @@ autolabeler:
       - "/^(fix).*/i"
   - label: "infrastructure"
     title:
-      - "/^(infra).*/i"
+      - "/^(infrastructure|infra).*/i"
   - label: "maintenance"
     title:
       - "/^(chore|maintenance).*/i"
