@@ -41,6 +41,10 @@ func main() {
 
 	br := baseline.NewReader()
 	requirementMap, err := br.GetAssessmentRequirements()
+	if err != nil {
+		fmt.Printf("Error loading assessment requirements: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Evaluation Suite may optionally take a payload to selectively override the data specified in NewVessel
 	pvtrVessel.AddEvaluationSuite("OSPS_B", data.Loader, evaluation_plans.OSPS_B, requirementMap)
