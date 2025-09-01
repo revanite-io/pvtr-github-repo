@@ -41,7 +41,7 @@ func main() {
 
 	requirements, err := baseline.GetAssessmentRequirements()
 	if err != nil {
-		fmt.Printf("Error loading catalog data: %v\n", err)
+		fmt.Printf("Error loading assessment requirements: %v\n", err)
 		os.Exit(1)
 	}
 
