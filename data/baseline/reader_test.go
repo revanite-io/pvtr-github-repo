@@ -66,7 +66,13 @@ func TestReader_GetAssessmentById(t *testing.T) {
 
 	reader := NewReader()
 
-	reader.GetAssessmentRequirementById("OSPS-AC-02.01")
+	req, err := reader.GetAssessmentRequirementById("OSPS-AC-02.01")
+	if err != nil {
+		t.Errorf("Failed to get assessment requirement: %v", err)
+	}
+	if req == nil {
+		t.Error("Assessment requirement is nil")
+	}
 
 }
 
