@@ -3,7 +3,7 @@ package data
 import (
 	"context"
 
-	"github.com/google/go-github/v71/github"
+	"github.com/google/go-github/v74/github"
 )
 
 type RepositoryMetadata interface {
@@ -42,18 +42,18 @@ func (r *GitHubRepositoryMetadata) IsMFARequiredForAdministrativeActions() *bool
 	return r.ghOrg.TwoFactorRequirementEnabled
 }
 
-func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (data RepositoryMetadata, err error) {
+func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (ghRepo *github.Repository, data RepositoryMetadata, err error) {
 	repository, _, err := ghClient.Repositories.Get(context.Background(), owner, repo)
 	if err != nil {
-		return &GitHubRepositoryMetadata{}, err
+		return repository, &GitHubRepositoryMetadata{}, err
 	}
 	organization, _, err := ghClient.Organizations.Get(context.Background(), owner)
 	if err != nil {
-		return &GitHubRepositoryMetadata{
+		return repository, &GitHubRepositoryMetadata{
 			ghRepo: repository,
 		}, nil
 	}
-	return &GitHubRepositoryMetadata{
+	return repository, &GitHubRepositoryMetadata{
 		ghRepo: repository,
 		ghOrg:  organization,
 	}, nil

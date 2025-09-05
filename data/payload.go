@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/go-github/v71/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/privateerproj/privateer-sdk/config"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
@@ -18,8 +18,8 @@ type Payload struct {
 	RepositoryMetadata       RepositoryMetadata
 	DependencyManifestsCount int
 	IsCodeRepo               bool
-
-	client *githubv4.Client
+	SecurityPosture          SecurityPosture
+	client                   *githubv4.Client
 }
 
 func Loader(config *config.Config) (payload any, err error) {
@@ -32,7 +32,7 @@ func Loader(config *config.Config) (payload any, err error) {
 		&oauth2.Token{AccessToken: config.GetString("token")},
 	)))
 
-	repositoryMetadata, err := loadRepositoryMetadata(ghClient, config.GetString("owner"), config.GetString("repo"))
+	repo, repositoryMetadata, err := loadRepositoryMetadata(ghClient, config.GetString("owner"), config.GetString("repo"))
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +52,11 @@ func Loader(config *config.Config) (payload any, err error) {
 		return nil, err
 	}
 
+	securityPosture, err := buildSecurityPosture(repo, *rest)
+	if err != nil {
+		return nil, err
+	}
+
 	return any(Payload{
 		GraphqlRepoData:          graphql,
 		RestData:                 rest,
@@ -60,6 +65,7 @@ func Loader(config *config.Config) (payload any, err error) {
 		DependencyManifestsCount: dependencyManifestsCount,
 		IsCodeRepo:               isCodeRepo,
 		client:                   client,
+		SecurityPosture:          securityPosture,
 	}), nil
 }
 

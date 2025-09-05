@@ -10,7 +10,7 @@ import (
 
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/ast"
-	"github.com/google/go-github/v71/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/privateerproj/privateer-sdk/config"
 )
@@ -347,9 +347,9 @@ func (r *RestData) GetRulesets(branchName string) []Ruleset {
 // to distinguish between programming, markup, data, and prose content types for more nuanced
 // repository classification.
 func (r *RestData) IsCodeRepo() (bool, error) {
-    languages, _, err := r.ghClient.Repositories.ListLanguages(context.Background(), r.owner, r.repo)
-    if err != nil {
-        return false, err
-    }
-    return len(languages) > 0, nil
+	languages, _, err := r.ghClient.Repositories.ListLanguages(context.Background(), r.owner, r.repo)
+	if err != nil {
+		return false, err
+	}
+	return len(languages) > 0, nil
 }

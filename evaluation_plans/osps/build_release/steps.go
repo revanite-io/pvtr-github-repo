@@ -307,3 +307,18 @@ func distributionPointsUseHTTPS(payloadData any, _ map[string]*layer4.Change) (r
 	}
 	return layer4.Passed, "All distribution points use HTTPS"
 }
+
+func secretScanningInUse(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if data.SecurityPosture.PreventsPushingSecrets() && data.SecurityPosture.ScansForSecrets() {
+		return layer4.Passed, "Secret scanning is enabled and prevents pushing secrets"
+	} else if data.SecurityPosture.PreventsPushingSecrets() || data.SecurityPosture.ScansForSecrets() {
+		return layer4.Failed, "Secret scanning is only partially enabled"
+	} else {
+		return layer4.Failed, "Secret scanning is not enabled"
+	}
+}

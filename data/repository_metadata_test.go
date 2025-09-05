@@ -3,7 +3,7 @@ package data
 import (
 	"testing"
 
-	"github.com/google/go-github/v71/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/migueleliasweb/go-github-mock/src/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -81,7 +81,7 @@ func TestLoadRepositoryMetadata(t *testing.T) {
 				testCase.responses...,
 			)
 			ghClient := github.NewClient(mockClient)
-			repoMetadata, err := loadRepositoryMetadata(ghClient, testCase.owner, testCase.repo)
+			_, repoMetadata, err := loadRepositoryMetadata(ghClient, testCase.owner, testCase.repo)
 			if testCase.expectedRepoError {
 				assert.Error(t, err)
 			} else {
