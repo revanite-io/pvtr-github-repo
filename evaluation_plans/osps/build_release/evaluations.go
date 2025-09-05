@@ -174,3 +174,33 @@ func OSPS_BR_06() (evaluation *layer4.ControlEvaluation) {
 
 	return
 }
+
+func OSPS_BR_07() (evaluation *layer4.ControlEvaluation) {
+	evaluation = &layer4.ControlEvaluation{
+		ControlID: "OSPS-BR-07",
+	}
+
+	evaluation.AddAssessment(
+		"OSPS-BR-07.01",
+		"A bunch of control requirement text that should not be duplicated here but is needed to make the control valid.",
+		[]string{
+			"Maturity Level 1",
+		},
+		[]layer4.AssessmentStep{
+			secretScanningInUse,
+		},
+	)
+
+	evaluation.AddAssessment(
+		"OSPS-BR-07.02",
+		"A bunch of control requirement text that should not be duplicated here but is needed to make the control valid.",
+		[]string{
+			"Maturity Level 3",
+		},
+		[]layer4.AssessmentStep{
+			reusable_steps.NotImplemented,
+		},
+	)
+
+	return
+}
