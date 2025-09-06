@@ -26,10 +26,12 @@ func buildSecurityPosture(repository *github.Repository, rd RestData) (SecurityP
 			restData: rd,
 		}, nil
 	}
+  secretsScanningStatus := securityConfig.GetSecretScanning().GetStatus()
+  insightsClaimsSecretsTooling := insightsClaimsSecretsTooling(rd.Insights)
 	return &RepoSecurityPosture{
 		restData:              rd,
-		preventsSecretPushing: securityConfig.GetSecretScanning().GetStatus() == "enabled" || insightsClaimsSecretsTooling(rd.Insights),
-		scansForSecrets:       securityConfig.GetSecretScanning().GetStatus() == "enabled" || insightsClaimsSecretsTooling(rd.Insights),
+		preventsSecretPushing: secretsScanningStatus == "enabled" || insightsClaimsSecretsTooling,
+		scansForSecrets:       secretsScanningStatus == "enabled" || insightsClaimsSecretsTooling,
 		// TODO: consider if SecurityInsights should have a policy doc field in ProjectDocumentation to handle this
 		// definesPolicyForHandlingSecrets: rd.SecurityInsights != nil && ....
 	}, nil

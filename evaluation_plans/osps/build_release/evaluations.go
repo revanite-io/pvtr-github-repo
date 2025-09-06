@@ -182,7 +182,7 @@ func OSPS_BR_07() (evaluation *layer4.ControlEvaluation) {
 
 	evaluation.AddAssessment(
 		"OSPS-BR-07.01",
-		"Placeholder text to make the control valid.",
+		"The project MUST prevent the unintentional storage of unencrypted sensitive data, such as secrets and credentials, in the version control system.",
 		[]string{
 			"Maturity Level 1",
 		},
@@ -193,7 +193,7 @@ func OSPS_BR_07() (evaluation *layer4.ControlEvaluation) {
 
 	evaluation.AddAssessment(
 		"OSPS-BR-07.02",
-		"A bunch of control requirement text that should not be duplicated here but is needed to make the control valid.",
+		"The project MUST define a policy for managing secrets and credentials used by the project. The policy should include guidelines for storing, accessing, and rotating secrets and credentials.",
 		[]string{
 			"Maturity Level 3",
 		},
