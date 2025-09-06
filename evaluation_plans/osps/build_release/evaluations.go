@@ -182,7 +182,7 @@ func OSPS_BR_07() (evaluation *layer4.ControlEvaluation) {
 
 	evaluation.AddAssessment(
 		"OSPS-BR-07.01",
-		"A bunch of control requirement text that should not be duplicated here but is needed to make the control valid.",
+		"Placeholder text to make the control valid.",
 		[]string{
 			"Maturity Level 1",
 		},
