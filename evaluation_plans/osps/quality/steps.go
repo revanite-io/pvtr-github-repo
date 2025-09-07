@@ -24,12 +24,12 @@ func insightsListsRepositories(payloadData any, _ map[string]*layer4.Change) (re
 	if message != "" {
 		return layer4.Unknown, message
 	}
-	
+
 	if len(data.Insights.Project.Repositories) > 0 {
 		return layer4.Passed, "Insights contains a list of repositories"
 	}
 
-	return layer4.Failed, "Insights does NOT contains a list of repositories"
+	return layer4.Failed, "Insights does not contain a list of repositories"
 }
 
 func statusChecksAreRequiredByRulesets(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
@@ -195,7 +195,7 @@ func verifyDependencyManagement(payloadData any, _ map[string]*layer4.Change) (r
 	if message != "" {
 		return layer4.Unknown, message
 	}
-	
+
 	// Validate required fields
 	if data.Repository.Name == "" || data.Repository.DefaultBranchRef.Name == "" ||
 		data.Repository.DefaultBranchRef.Target.OID == "" {
