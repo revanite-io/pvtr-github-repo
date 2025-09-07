@@ -7,7 +7,7 @@ require (
 	github.com/google/go-github/v71 v71.0.0
 	github.com/migueleliasweb/go-github-mock v1.4.0
 	github.com/ossf/gemara v0.5.0
-	github.com/ossf/si-tooling/v2 v2.0.5-0.20250328034800-657dc9aa9920
+	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
 	github.com/privateerproj/privateer-sdk v1.4.0
 	github.com/rhysd/actionlint v1.7.7
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
@@ -68,3 +68,4 @@ require (
 
 // Uncomment if you're working on a dependency locally
 // replace github.com/privateerproj/privateer-sdk => ../privateer-sdk
+// replace github.com/ossf/si-tooling/v2 => ../si-tooling/v2

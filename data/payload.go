@@ -87,7 +87,8 @@ func getRestData(ghClient *github.Client, config *config.Config) (data *RestData
 		ghClient: ghClient,
 		Config:   config,
 	}
-	return r, r.Setup()
+	err = r.Setup()
+	return r, err
 }
 
 func (p *Payload) GetSuspectedBinaries() (suspectedBinaries []string, err error) {
