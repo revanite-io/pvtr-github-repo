@@ -174,3 +174,33 @@ func OSPS_BR_06() (evaluation *layer4.ControlEvaluation) {
 
 	return
 }
+
+func OSPS_BR_07() (evaluation *layer4.ControlEvaluation) {
+	evaluation = &layer4.ControlEvaluation{
+		ControlID: "OSPS-BR-07",
+	}
+
+	evaluation.AddAssessment(
+		"OSPS-BR-07.01",
+		"The project MUST prevent the unintentional storage of unencrypted sensitive data, such as secrets and credentials, in the version control system.",
+		[]string{
+			"Maturity Level 1",
+		},
+		[]layer4.AssessmentStep{
+			secretScanningInUse,
+		},
+	)
+
+	evaluation.AddAssessment(
+		"OSPS-BR-07.02",
+		"The project MUST define a policy for managing secrets and credentials used by the project. The policy should include guidelines for storing, accessing, and rotating secrets and credentials.",
+		[]string{
+			"Maturity Level 3",
+		},
+		[]layer4.AssessmentStep{
+			reusable_steps.NotImplemented,
+		},
+	)
+
+	return
+}
