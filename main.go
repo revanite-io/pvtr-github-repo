@@ -36,8 +36,7 @@ func main() {
 		Version = fmt.Sprintf("%s-%s", Version, VersionPostfix)
 	}
 
-	// NewVessel may take a payload for all suites to reference
-	pvtrVessel := pluginkit.NewEvaluationOrchestrator(PluginName, data.Loader, RequiredVars)
+	pvtrVessel := pluginkit.NewEvaluationOrchestrator(PluginName, nil, RequiredVars)
 
 	requirements, err := baseline.GetAssessmentRequirements()
 	if err != nil {
@@ -45,7 +44,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Evaluation Suite may optionally take a payload to selectively override the data specified in NewVessel
 	pvtrVessel.AddEvaluationSuite("OSPS_B", data.Loader, evaluation_plans.OSPS_B, requirements)
 
 	runCmd := command.NewPluginCommands(
@@ -62,4 +60,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
