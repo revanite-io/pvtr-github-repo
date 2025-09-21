@@ -22,7 +22,6 @@ func OSPS_BR_01() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.IsCodeRepo,
 			cicdSanitizedInputParameters,
 		},
 	)

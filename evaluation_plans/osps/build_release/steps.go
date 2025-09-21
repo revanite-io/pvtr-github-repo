@@ -40,10 +40,6 @@ func cicdSanitizedInputParameters(payloadData any, _ map[string]*layer4.Change) 
 	if message != "" {
 		return layer4.Unknown, message
 	}
-	if !data.IsCodeRepo {
-		return layer4.NotApplicable, "Repository contains no code - skipping CI/CD checks"
-	}
-
 	workflows, err := data.GetDirectoryContent(".github/workflows")
 	if len(workflows) == 0 {
 		if err != nil {
