@@ -22,7 +22,7 @@ func orgRequiresMFA(payloadData any, _ map[string]*layer4.Change) (result layer4
 	return layer4.Failed, "Two-factor authentication is NOT configured as required by the parent organization"
 }
 
-func branchProtectionRestrictsPushes(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func defaultBranchRestrictsPushes(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -36,28 +36,42 @@ func branchProtectionRestrictsPushes(payloadData any, _ map[string]*layer4.Chang
 		result = layer4.Passed
 		message = "Branch protection rule requires approving reviews"
 	} else {
-		result = layer4.NeedsReview
-		message = "Branch protection rule does not restrict pushes or require approving reviews; Rulesets not yet evaluated."
+		if payload.RepositoryMetadata.IsDefaultBranchProtected() != nil && *payload.RepositoryMetadata.IsDefaultBranchProtected() {
+			result = layer4.Passed
+			message = "Branch rule restricts pushes"
+		} else if payload.RepositoryMetadata.DefaultBranchRequiresPRReviews() != nil && *payload.RepositoryMetadata.DefaultBranchRequiresPRReviews() {
+			result = layer4.Passed
+			message = "Branch rule requires approving reviews"
+		} else {
+			result = layer4.Failed
+			message = "Default branch is not protected"
+		}
 	}
-	return
+	return result, message
 }
 
-func branchProtectionPreventsDeletion(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func defaultBranchPreventsDeletion(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
 	}
 
-	allowsDeletion := payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions
+	branchProtectionAllowsDeletion := payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions
+	deletionRule := payload.RepositoryMetadata.IsDefaultBranchProtectedFromDeletion()
+	branchRulesAllowDeletion := deletionRule == nil || !*deletionRule
 
-	if allowsDeletion {
+	if branchProtectionAllowsDeletion && branchRulesAllowDeletion {
 		result = layer4.Failed
-		message = "Branch protection rule allows deletions"
+		message = "Default branch is not protected from deletions"
 	} else {
 		result = layer4.Passed
-		message = "Branch protection rule prevents deletions"
+		if *deletionRule {
+			message = "Default branch is protected from deletions by rulesets"
+		} else {
+			message = "Default branch is protected from deletions by branch protection rules"
+		}
 	}
-	return
+	return result, message
 }
 
 func workflowDefaultReadPermissions(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {

@@ -64,7 +64,7 @@ func OSPS_AC_03() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			branchProtectionRestrictsPushes, // This checks branch protection, but not rulesets yet
+			defaultBranchRestrictsPushes,
 		},
 	)
 
@@ -77,7 +77,7 @@ func OSPS_AC_03() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			branchProtectionPreventsDeletion, // This checks branch protection, but not rulesets yet
+			defaultBranchPreventsDeletion,
 		},
 	)
 
