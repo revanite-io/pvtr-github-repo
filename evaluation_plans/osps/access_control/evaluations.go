@@ -64,7 +64,6 @@ func OSPS_AC_03() (evaluation *layer4.ControlEvaluation) {
 			"Maturity Level 3",
 		},
 		[]layer4.AssessmentStep{
-			reusable_steps.IsCodeRepo,
 			branchProtectionRestrictsPushes, // This checks branch protection, but not rulesets yet
 		},
 	)

@@ -27,9 +27,6 @@ func branchProtectionRestrictsPushes(payloadData any, _ map[string]*layer4.Chang
 	if message != "" {
 		return layer4.Unknown, message
 	}
-	if !payload.IsCodeRepo {
-		return layer4.NotApplicable, "Repository contains no code - skipping branch protection checks"
-	}
 	protectionData := payload.Repository.DefaultBranchRef.BranchProtectionRule
 
 	if protectionData.RestrictsPushes {
