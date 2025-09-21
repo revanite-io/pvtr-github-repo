@@ -11,3 +11,5 @@ output
 
 # go test coverage output
 coverage.out
+
+.terraform/
