@@ -37,7 +37,3 @@ When submitting pull requests, make sure to do the following:
 ## Continuous Integration
 
 Privateer uses Github Actions for all CI tasks. You may review the existing workflows in `.github/workflows`. Results of checks will automatically be pushed to PRs and may block merging if checks fail.
-
-## Logging
-
-Privateer is extremely dependent on clean and clear logs for its success. Please follow the [Log Filter Guidelines](internal/config/README.md) to add useful logs to your code.
