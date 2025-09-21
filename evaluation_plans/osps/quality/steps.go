@@ -217,7 +217,7 @@ func countDependencyManifests(payloadData any) (result layer4.Result, message st
 	if manifestsCount > 0 {
 		return layer4.Passed, fmt.Sprintf("Found %d dependency manifests from GitHub API", manifestsCount)
 	}
-	return layer4.Failed, "No dependency manifests found in the repository by the GitHub API"
+	return layer4.NeedsReview, "No dependency manifests found in the GitHub dependency graph API. Review project to ensure dependencies are managed."
 }
 
 func documentsTestExecution(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
