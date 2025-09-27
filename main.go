@@ -37,6 +37,8 @@ func main() {
 	}
 
 	pvtrVessel := pluginkit.NewEvaluationOrchestrator(PluginName, nil, RequiredVars)
+	pvtrVessel.PluginVersion = Version
+	pvtrVessel.PluginUri = "github.com/revanite-io/pvtr-github-repo"
 
 	requirements, err := baseline.GetAssessmentRequirements()
 	if err != nil {

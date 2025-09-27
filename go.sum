@@ -75,8 +75,8 @@ github.com/migueleliasweb/go-github-mock v1.4.0 h1:pQ6K8r348m2q79A8Khb0PbEeNQV7t
 github.com/migueleliasweb/go-github-mock v1.4.0/go.mod h1:/DUmhXkxrgVlDOVBqGoUXkV4w0ms5n1jDQHotYm135o=
 github.com/oklog/run v1.1.0 h1:GEenZ1cK0+q0+wsJew9qUg/DyD8k3JzYsZAi5gYi2mA=
 github.com/oklog/run v1.1.0/go.mod h1:sVPdnTZT1zYwAJeCMu2Th4T21pA3FPOQRfWjQlk7DVU=
-github.com/ossf/gemara v0.9.0 h1:3cno4WRKGgYR7LiCGyu86Uxljaon6uqvjZ2CE33nnL0=
-github.com/ossf/gemara v0.9.0/go.mod h1:+cvFp/ufYvvhWXp1MRHwsFYgUKM9uDEDFxyZNm30H7g=
+github.com/ossf/gemara v0.10.1 h1:rvM8s/dAqF0QkCtztwgx92o/hWukRdS4rzsTpRT9chY=
+github.com/ossf/gemara v0.10.1/go.mod h1:FRRem1gQ9m+c3QiBLN/PkL/RfzyNpF3aO7AWqZVzerg=
 github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9 h1:H8zbVnZ1dbVhoQVGZanbDOSOX91KiCSsge4+GLrcFms=
 github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9/go.mod h1:I7UDEAfNwoT2iwZrvORukgkGLKeD/cgVhHtcLPpaS6c=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
@@ -84,8 +84,8 @@ github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/privateerproj/privateer-sdk v1.5.0 h1:A39S/J1RaAEKCPrLVwivdmF2CK6iGpfkgXJX3D22q4U=
-github.com/privateerproj/privateer-sdk v1.5.0/go.mod h1:rk8NNfEpCLabEgHHyuZsuiFefHSvEyQHEI1xMpHjMPE=
+github.com/privateerproj/privateer-sdk v1.6.0 h1:lljDUiesQEhgSH/6ZX+LRu+DeJPj1wHBJUAj+A6PAbc=
+github.com/privateerproj/privateer-sdk v1.6.0/go.mod h1:jNQQqTxvEnQBvR/BuRrbxMt8wxe7fX6mOC7PBTYknVI=
 github.com/rhysd/actionlint v1.7.7 h1:0KgkoNTrYY7vmOCs9BW2AHxLvvpoY9nEUzgBHiPUr0k=
 github.com/rhysd/actionlint v1.7.7/go.mod h1:AE6I6vJEkNaIfWqC2GNE5spIJNhxf8NCtLEKU4NnUXg=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
