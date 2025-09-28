@@ -10,7 +10,7 @@ import (
 
 func OSPS_BR_01() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-01",
+		ControlId: "OSPS-BR-01",
 	}
 
 	evaluation.AddAssessment(
@@ -44,7 +44,7 @@ func OSPS_BR_01() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_BR_02() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-02",
+		ControlId: "OSPS-BR-02",
 	}
 
 	evaluation.AddAssessment(
@@ -78,7 +78,7 @@ func OSPS_BR_02() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_BR_03() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-03",
+		ControlId: "OSPS-BR-03",
 	}
 
 	evaluation.AddAssessment(
@@ -113,7 +113,7 @@ func OSPS_BR_03() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_BR_04() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-04",
+		ControlId: "OSPS-BR-04",
 	}
 
 	evaluation.AddAssessment(
@@ -134,7 +134,7 @@ func OSPS_BR_04() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_BR_05() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-05",
+		ControlId: "OSPS-BR-05",
 	}
 
 	evaluation.AddAssessment(
@@ -154,7 +154,7 @@ func OSPS_BR_05() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_BR_06() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-06",
+		ControlId: "OSPS-BR-06",
 	}
 
 	evaluation.AddAssessment(
@@ -176,7 +176,7 @@ func OSPS_BR_06() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_BR_07() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-BR-07",
+		ControlId: "OSPS-BR-07",
 	}
 
 	evaluation.AddAssessment(

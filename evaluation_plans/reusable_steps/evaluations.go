@@ -16,11 +16,11 @@ func VerifyPayload(payloadData any) (payload data.Payload, message string) {
 	return
 }
 
-func NotImplemented(payloadData any, changes map[string]*layer4.Change) (result layer4.Result, message string) {
+func NotImplemented(payloadData any) (result layer4.Result, message string) {
 	return layer4.NeedsReview, "Not implemented"
 }
 
-func GithubBuiltIn(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func GithubBuiltIn(payloadData any) (result layer4.Result, message string) {
 	_, message = VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -29,11 +29,11 @@ func GithubBuiltIn(payloadData any, _ map[string]*layer4.Change) (result layer4.
 	return layer4.Passed, "This control is enforced by GitHub for all projects"
 }
 
-func GithubTermsOfService(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func GithubTermsOfService(payloadData any) (result layer4.Result, message string) {
 	return layer4.Passed, "This control is satisfied by the GitHub Terms of Service"
 }
 
-func HasSecurityInsightsFile(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasSecurityInsightsFile(payloadData any) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -46,7 +46,7 @@ func HasSecurityInsightsFile(payloadData any, _ map[string]*layer4.Change) (resu
 	return layer4.Passed, "Security insights file found"
 }
 
-func HasMadeReleases(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasMadeReleases(payloadData any) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -59,7 +59,7 @@ func HasMadeReleases(payloadData any, _ map[string]*layer4.Change) (result layer
 	return layer4.Passed, fmt.Sprintf("Found %v releases", len(payload.Releases))
 }
 
-func IsActive(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func IsActive(payloadData any) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -74,7 +74,7 @@ func IsActive(payloadData any, _ map[string]*layer4.Change) (result layer4.Resul
 	return result, fmt.Sprintf("Repo Status is %s", payload.Insights.Repository.Status)
 }
 
-func HasIssuesOrDiscussionsEnabled(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasIssuesOrDiscussionsEnabled(payloadData any) (result layer4.Result, message string) {
 	data, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -92,7 +92,7 @@ func HasIssuesOrDiscussionsEnabled(payloadData any, _ map[string]*layer4.Change)
 	return layer4.Failed, "Both issues and discussions are disabled for the repository"
 }
 
-func HasDependencyManagementPolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasDependencyManagementPolicy(payloadData any) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -105,7 +105,7 @@ func HasDependencyManagementPolicy(payloadData any, _ map[string]*layer4.Change)
 	return layer4.Failed, "No dependency management file found"
 }
 
-func IsCodeRepo(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func IsCodeRepo(payloadData any) (result layer4.Result, message string) {
 	payload, message := VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

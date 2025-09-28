@@ -61,7 +61,7 @@ func Test_orgRequiresMFA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMessage := orgRequiresMFA(tt.payload, map[string]*layer4.Change{})
+			gotResult, gotMessage := orgRequiresMFA(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
 		})

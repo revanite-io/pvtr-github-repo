@@ -10,7 +10,7 @@ import (
 
 func OSPS_SA_01() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-SA-01",
+		ControlId: "OSPS-SA-01",
 	}
 
 	evaluation.AddAssessment(
@@ -30,7 +30,7 @@ func OSPS_SA_01() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_SA_02() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-SA-02",
+		ControlId: "OSPS-SA-02",
 	}
 
 	evaluation.AddAssessment(
@@ -50,7 +50,7 @@ func OSPS_SA_02() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_SA_03() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-SA-03",
+		ControlId: "OSPS-SA-03",
 	}
 
 	evaluation.AddAssessment(
