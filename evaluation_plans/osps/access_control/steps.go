@@ -66,14 +66,20 @@ func workflowDefaultReadPermissions(payloadData any, _ map[string]*layer4.Change
 		return layer4.Unknown, message
 	}
 
-	workflowPermissions := payload.WorkflowPermissions.DefaultPermissions
+	permissions := payload.WorkflowPermissions
 
-	message = "Workflow permissions default to " + workflowPermissions
-
-	if workflowPermissions == "read" {
+	if permissions.DefaultPermissions == "read" && !permissions.CanApprovePullRequest {
 		result = layer4.Passed
+		message = "Workflow permissions default to read only."
+	} else if permissions.DefaultPermissions == "read" && permissions.CanApprovePullRequest {
+		result = layer4.Failed
+		message = "Workflow permissions default to read only for contents and packages, but PR approval is permitted."
+	} else if permissions.DefaultPermissions == "write" && !permissions.CanApprovePullRequest {
+		result = layer4.Failed
+		message = "Workflow permissions default to read/write, but PR approval is forbidden."
 	} else {
 		result = layer4.Failed
+		message = "Workflow permissions default to read/write and PR approval is permitted."
 	}
 	return
 }
