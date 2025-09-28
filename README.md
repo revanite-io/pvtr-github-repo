@@ -1,18 +1,20 @@
 # Privateer Plugin for GitHub Repositories
 
-This plugin is designed to test a GitHub repository using automated assessments compatible with the [Gemara](https://github.com/ossf/gemara) Layer 4 data types.
+This application performs automated assessments against GitHub repositories using controls defined in the [Open Source Project Security Baseline v2025.02.25](https://baseline.openssf.org). The application consumes the OSPS Baseline controls using [Gemara](https://github.com/ossf/gemara) layer 2 and produces results of the automated assessments using layer 4.
 
-Many of the assessments require a [Security Insights](https://github.com/ossf/security-insights) file to be present at the root of the repository, or `./github/security-insights.yml`.
+Many of the assessments depend upon the presence of a [Security Insights](https://github.com/ossf/security-insights) file at the root of the repository, or `./github/security-insights.yml`.
 
 ## Work in Progress
 
-Assessment development is currently addressing the [Open Source Project Security Baseline v2025.02.25](https://baseline.openssf.org).
+Currently 39 control requirements across OSPS Baselines levels 1-3 are covered, with 13 not yet implemented. [Maturity Level 1](https://baseline.openssf.org/versions/2025-02-25.html#level-1) requirements are the most rigorously tested and are recommended for use. The results of these layer 1 assessments are integrated into [LFX Insights](https://insights.linuxfoundation.org/project/k8s/repository/kubernetes-kubernetes/security), powering the [Security & Best Practices results](https://insights.linuxfoundation.org/docs/metrics/security/).
 
-As possible, the goal is to work on the OSPS Baseline maturity levels from the lowest to highest.
+![alt text](kubernetes_insights_baseline.png)
+
+Level 2 and Level 3 requirements are undergoing current development and may be less rigorously tested.
 
 ## GitHub Actions Usage
 
-We've pushed an image to docker hub for use in GitHub Actions. Many tests are currently pending implementation, and only `Maturity Level 1` is currently recommended for use.
+We've pushed an image to docker hub for use in GitHub Actions.
 
 You will also need to set up a GitHub personal access token with the repository read permissions. This token should be added to your config file, or — if using the example pipeline below — as a secret in your repository.
 
@@ -22,18 +24,10 @@ You will also need to set up a GitHub personal access token with the repository 
 - [Workflow Definition](https://github.com/privateerproj/.github/blob/main/.github/workflows/osps-baseline.yml)
 - [Action Results](https://github.com/privateerproj/.github/actions/runs/13691384519/job/38285134201)
 
-## Local Development
+## Contributing
 
-While working on tests, the best way to run the plugin is via `go run . debug --service=<your-service>`. Ensure your local `config` file is set up correctly beforehand.
+Contributions are welcome! Please see our [Contributing Guidelines](.github/CONTRIBUTING.md) for more information.
 
-You may also pull the code locally and run the local Dockerfile:
+## License
 
-1. Pull the repo
-2. Modify `example-config.yml` to use your values, and rename it to `config.yml`
-3. Build the Docker Image: `make docker-build`
-4. Run the Docker Image: `make docker-run`
-5. Review the output in the directory you've specified in your config file
-
-## Required Token Scopes
-
-![Token Scopes](./token-scopes.png)
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
