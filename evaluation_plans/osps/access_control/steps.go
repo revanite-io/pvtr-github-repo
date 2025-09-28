@@ -67,6 +67,9 @@ func workflowDefaultReadPermissions(payloadData any, _ map[string]*layer4.Change
 	}
 
 	permissions := payload.WorkflowPermissions
+	if !payload.WorkflowsEnabled {
+		return layer4.NeedsReview, "GitHub Actions is disabled for this repository; manual review required."
+	}
 
 	if permissions.DefaultPermissions == "read" && !permissions.CanApprovePullRequest {
 		result = layer4.Passed

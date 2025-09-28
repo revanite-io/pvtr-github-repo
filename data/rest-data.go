@@ -16,7 +16,7 @@ import (
 )
 
 type HttpClient interface {
-    Do(req *http.Request) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 type RestData struct {
@@ -24,6 +24,7 @@ type RestData struct {
 	repo                string
 	token               string
 	Config              *config.Config
+	WorkflowsEnabled    bool
 	WorkflowPermissions WorkflowPermissions
 	Insights            si.SecurityInsights
 	Releases            []ReleaseData
@@ -328,8 +329,21 @@ func (r *RestData) getReleases() error {
 }
 
 func (r *RestData) getWorkflowPermissions() error {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/permissions/workflow", APIBase, r.owner, r.repo)
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		return err
+	}
+	var actionsData struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.Unmarshal(responseData, &actionsData); err != nil {
+		return fmt.Errorf("failed to parse actions data: %v", err)
+	}
+	r.WorkflowsEnabled = actionsData.Enabled
+
+	endpoint = fmt.Sprintf("%s/repos/%s/%s/actions/permissions/workflow", APIBase, r.owner, r.repo)
+	responseData, err = r.MakeApiCall(endpoint, true)
 	if err != nil {
 		return err
 	}
