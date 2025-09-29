@@ -12,6 +12,17 @@ Currently 39 control requirements across OSPS Baselines levels 1-3 are covered, 
 
 Level 2 and Level 3 requirements are undergoing current development and may be less rigorously tested.
 
+## Docker Usage
+
+```sh
+# build the image
+docker build . -t local
+docker run \
+  --mount type=bind,source=./config.yml,destination=/.privateer/config.yml \
+  --mount type=bind,source=./evaluation_results,destination=/.privateer/bin/evaluation_results \
+  local
+```
+
 ## GitHub Actions Usage
 
 We've pushed an image to docker hub for use in GitHub Actions.

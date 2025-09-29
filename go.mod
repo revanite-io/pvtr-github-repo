@@ -1,6 +1,6 @@
 module github.com/revanite-io/pvtr-github-repo // Replace this globally with your module name
 
-go 1.24.4
+go 1.25.1
 
 require (
 	github.com/goccy/go-yaml v1.18.0

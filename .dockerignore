@@ -1,1 +1,9 @@
 config.yml
+evaluation_results
+.github
+.goreleaser.yml
+.gitignore
+example-config.yml
+github-repo
+*.png
+*.md
