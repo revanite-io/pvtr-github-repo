@@ -26,6 +26,8 @@ var (
 		build_release.OSPS_BR_04(),
 		build_release.OSPS_BR_05(),
 		build_release.OSPS_BR_06(),
+		// TODO: enable OSPS_BR_07 when ossf/security-baseline releases a new version
+		// build_release.OSPS_BR_07(),
 		docs.OSPS_DO_01(),
 		docs.OSPS_DO_02(),
 		docs.OSPS_DO_03(),
