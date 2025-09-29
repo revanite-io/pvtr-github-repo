@@ -15,9 +15,12 @@ COPY . .
 RUN make binary
 
 FROM golang:1.25.1-alpine3.22
-RUN apk add --no-cache make git && \
-    mkdir -p /.privateer/bin
+RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
+
+RUN mkdir -p /.privateer/bin && chown -R appuser:appgroup /.privateer
 WORKDIR /.privateer/bin
+USER appuser
+
 COPY --from=core /app/privateer .
 COPY --from=plugin /plugin/github-repo .
 COPY --from=plugin /plugin/container-entrypoint.sh .
