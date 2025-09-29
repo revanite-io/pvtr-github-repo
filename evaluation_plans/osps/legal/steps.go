@@ -51,7 +51,7 @@ func splitSpdxExpression(expression string) (spdx_ids []string) {
 	return
 }
 
-func foundLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func foundLicense(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -62,7 +62,7 @@ func foundLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.R
 	return layer4.Passed, "License was found in a well known location via the GitHub API"
 }
 
-func releasesLicensed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func releasesLicensed(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -77,7 +77,7 @@ func releasesLicensed(payloadData any, _ map[string]*layer4.Change) (result laye
 	return layer4.Passed, "GitHub releases include the license(s) in the released source code."
 }
 
-func goodLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func goodLicense(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

@@ -68,5 +68,9 @@ require (
 )
 
 // Uncomment if you're working on a dependency locally
-// replace github.com/privateerproj/privateer-sdk => ../privateer-sdk
 // replace github.com/ossf/si-tooling/v2 => ../si-tooling/v2
+// replace github.com/ossf/gemara => ../gemara
+
+replace github.com/privateerproj/privateer-sdk => github.com/trumant/privateer-sdk v0.0.0-20250928130238-c0085334756c
+
+replace github.com/ossf/gemara => github.com/trumant/gemara v0.0.0-20250928035815-5965a511fc2e

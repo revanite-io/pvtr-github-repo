@@ -10,7 +10,7 @@ import (
 
 func OSPS_GV_01() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-GV-01",
+		ControlId: "OSPS-GV-01",
 	}
 
 	evaluation.AddAssessment(
@@ -45,7 +45,7 @@ func OSPS_GV_01() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_GV_02() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-GV-02",
+		ControlId: "OSPS-GV-02",
 	}
 
 	evaluation.AddAssessment(
@@ -66,7 +66,7 @@ func OSPS_GV_02() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_GV_03() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-GV-03",
+		ControlId: "OSPS-GV-03",
 	}
 
 	evaluation.AddAssessment(
@@ -102,7 +102,7 @@ func OSPS_GV_03() (evaluation *layer4.ControlEvaluation) {
 
 func OSPS_GV_04() (evaluation *layer4.ControlEvaluation) {
 	evaluation = &layer4.ControlEvaluation{
-		ControlID: "OSPS-GV-04",
+		ControlId: "OSPS-GV-04",
 	}
 
 	evaluation.AddAssessment(
