@@ -23,6 +23,8 @@ jobs:
       attestations: write
       contents: write
       id-token: write
+    outputs:
+      attestation_matrix: ${{ steps.generate_matrix.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -33,6 +35,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.23.4
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@f8bdd1d8ac5e901a77a92f111440fdb1b593736b
+        with:
+          syft-version: v1.33.0
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a
         with:
@@ -45,3 +51,32 @@ jobs:
         uses: actions/attest-build-provenance@v3
         with:
           subject-checksums: dist/checksums.txt
+      - name: Generate attestation matrix
+        id: generate_matrix
+        run: |
+          matrix=$(ls dist/*.spdx.json | jq -R '{"sbom": ., "archive": sub("\\.spdx\\.json$"; "")}' | jq -s -c '{"include": .}')
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dist
+          path: dist
+  attest-sboms:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      id-token: write
+    strategy:
+      matrix: ${{ fromJson(needs.goreleaser.outputs.attestation_matrix) }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: dist
+          path: dist
+      - name: Attest SBOM
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34
+        with:
+          subject-path: "${{ matrix.archive }}"
+          sbom-path: "${{ matrix.sbom }}"
