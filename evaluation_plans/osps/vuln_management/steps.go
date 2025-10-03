@@ -61,6 +61,19 @@ func hasVulnerabilityDisclosurePolicy(payloadData any, _ map[string]*layer4.Chan
 	return layer4.Passed, "Vulnerability disclosure policy was specified in Security Insights data"
 }
 
+func hasPublicVulnerabilityDisclosure(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return layer4.Unknown, message
+	}
+
+	if data.SecurityAdvisories != nil {
+		return layer4.Passed, "Security advisory publishing is enabled"
+	}
+
+	return layer4.Failed, "Security advisory publishing is not enabled"
+}
+
 func hasPrivateVulnerabilityReporting(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {

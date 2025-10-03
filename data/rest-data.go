@@ -28,6 +28,7 @@ type RestData struct {
 	WorkflowPermissions WorkflowPermissions
 	Insights            si.SecurityInsights
 	Releases            []ReleaseData
+	SecurityAdvisories  []SecurityAdvisory
 	Rulesets            []Ruleset
 	contents            RepoContent
 	ghClient            *github.Client
@@ -66,6 +67,15 @@ type WorkflowPermissions struct {
 	CanApprovePullRequest bool   `json:"can_approve_pull_request_reviews"`
 }
 
+type SecurityAdvisory struct {
+	GhsaId      string `json:"ghsa_id"`
+	CveId       string `json:"cve_id"`
+	Summary     string `json:"summary"`
+	Severity    string `json:"severity"`
+	State       string `json:"state"`
+	PublishedAt string `json:"published_at"`
+}
+
 var APIBase = "https://api.github.com"
 
 func (r *RestData) Setup() error {
@@ -77,6 +87,7 @@ func (r *RestData) Setup() error {
 	r.loadSecurityInsights()
 	_ = r.getWorkflowPermissions()
 	_ = r.getReleases()
+	_ = r.getSecurityAdvisories()
 	return nil
 }
 
@@ -351,6 +362,15 @@ func (r *RestData) getWorkflowPermissions() error {
 		return fmt.Errorf("failed to parse permissions: %v", err)
 	}
 	return err
+}
+
+func (r *RestData) getSecurityAdvisories() error {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/security-advisories?state=published", APIBase, r.owner, r.repo)
+	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(responseData, &r.SecurityAdvisories)
 }
 
 func (r *RestData) GetRulesets(branchName string) []Ruleset {

@@ -165,6 +165,84 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 	}
 }
 
+func TestHasPublicVulnerabilityDisclosure(t *testing.T) {
+	tests := []struct {
+		name            string
+		payloadData     any
+		apiResponse     []byte
+		apiError        error
+		expectedResult  layer4.Result
+		expectedMessage string
+	}{
+		{
+			name:            "Security advisory publishing is enabled with advisories",
+			expectedResult:  layer4.Passed,
+			expectedMessage: "Security advisory publishing is enabled",
+			payloadData: data.Payload{
+				RestData: &data.RestData{
+					SecurityAdvisories: []data.SecurityAdvisory{
+						{
+							GhsaId:   "GHSA-1234-5678-9012",
+							CveId:    "CVE-2024-12345",
+							Summary:  "Test advisory",
+							Severity: "high",
+							State:    "published",
+						},
+					},
+				},
+				GraphqlRepoData: &data.GraphqlRepoData{},
+			},
+			apiResponse: []byte(`[{"ghsa_id":"GHSA-1234-5678-9012","cve_id":"CVE-2024-12345","summary":"Test advisory","severity":"high","state":"published","published_at":"2024-01-01T00:00:00Z"}]`),
+			apiError:    nil,
+		},
+		{
+			name:            "Security advisory publishing is enabled with no advisories",
+			expectedResult:  layer4.Passed,
+			expectedMessage: "Security advisory publishing is enabled",
+			payloadData: data.Payload{
+				RestData: &data.RestData{
+					SecurityAdvisories: []data.SecurityAdvisory{},
+				},
+				GraphqlRepoData: &data.GraphqlRepoData{},
+			},
+			apiResponse: []byte(`[]`),
+			apiError:    nil,
+		},
+		{
+			name:            "Security advisory publishing is not enabled",
+			expectedResult:  layer4.Failed,
+			expectedMessage: "Security advisory publishing is not enabled",
+			payloadData: data.Payload{
+				RestData: &data.RestData{
+					SecurityAdvisories: nil,
+				},
+				GraphqlRepoData: &data.GraphqlRepoData{},
+			},
+			apiResponse: []byte(`[]`),
+			apiError:    nil,
+		},
+		{
+			name:            "Invalid payload",
+			expectedResult:  layer4.Unknown,
+			expectedMessage: "Malformed assessment: expected payload type data.Payload, got string (invalid_payload)",
+			payloadData:     "invalid_payload",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if payload, ok := test.payloadData.(data.Payload); ok {
+				payload = data.NewPayloadWithHTTPMock(payload, test.apiResponse, 200, test.apiError)
+				test.payloadData = payload
+			}
+
+			result, message := hasPublicVulnerabilityDisclosure(test.payloadData, nil)
+			assert.Equal(t, test.expectedResult, result)
+			assert.Equal(t, test.expectedMessage, message)
+		})
+	}
+}
+
 func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 	tests := []struct {
 		name            string
