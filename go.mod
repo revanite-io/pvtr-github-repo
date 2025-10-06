@@ -6,7 +6,7 @@ require (
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-github/v74 v74.0.0
 	github.com/migueleliasweb/go-github-mock v1.4.0
-	github.com/ossf/gemara v0.10.1
+	github.com/ossf/gemara v0.12.0
 	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
 	github.com/privateerproj/privateer-sdk v1.6.0
 	github.com/rhysd/actionlint v1.7.7
