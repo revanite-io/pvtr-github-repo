@@ -8,7 +8,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func repoIsPublic(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func RepoIsPublic(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -19,7 +19,7 @@ func repoIsPublic(payloadData any, _ map[string]*layer4.Change) (result layer4.R
 	return layer4.Failed, "Repository is private"
 }
 
-func insightsListsRepositories(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func InsightsListsRepositories(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -32,7 +32,7 @@ func insightsListsRepositories(payloadData any, _ map[string]*layer4.Change) (re
 	return layer4.Failed, "Insights does not contain a list of repositories"
 }
 
-func statusChecksAreRequiredByRulesets(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func StatusChecksAreRequiredByRulesets(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -84,7 +84,7 @@ func statusChecksAreRequiredByRulesets(payloadData any, _ map[string]*layer4.Cha
 	return layer4.Passed, "No status checks were run that are not required by the rules"
 }
 
-func statusChecksAreRequiredByBranchProtection(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func StatusChecksAreRequiredByBranchProtection(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -124,7 +124,7 @@ func statusChecksAreRequiredByBranchProtection(payloadData any, _ map[string]*la
 	return layer4.Passed, "No status checks were run that are not required by branch protection"
 }
 
-func noBinariesInRepo(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func NoBinariesInRepo(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -144,7 +144,7 @@ func noBinariesInRepo(payloadData any, _ map[string]*layer4.Change) (result laye
 	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(suspectedBinaries, ", "))
 }
 
-func requiresNonAuthorApproval(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func RequiresNonAuthorApproval(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -167,7 +167,7 @@ func requiresNonAuthorApproval(payloadData any, _ map[string]*layer4.Change) (re
 	return layer4.Passed, fmt.Sprintf("Branch protection requires %d approving reviews and re-approval after new commits", reviewCount)
 }
 
-func hasOneOrMoreStatusChecks(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasOneOrMoreStatusChecks(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -190,7 +190,7 @@ func hasOneOrMoreStatusChecks(payloadData any, _ map[string]*layer4.Change) (res
 	return layer4.Failed, "No status checks were run"
 }
 
-func verifyDependencyManagement(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func VerifyDependencyManagement(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -220,7 +220,7 @@ func countDependencyManifests(payloadData any) (result layer4.Result, message st
 	return layer4.NeedsReview, "No dependency manifests found in the GitHub dependency graph API. Review project to ensure dependencies are managed."
 }
 
-func documentsTestExecution(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func DocumentsTestExecution(payloadData any) (result layer4.Result, message string) {
 	_, message = reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -229,7 +229,7 @@ func documentsTestExecution(payloadData any, _ map[string]*layer4.Change) (resul
 	return layer4.NeedsReview, "Review project documentation to ensure it explains when and how tests are run"
 }
 
-func documentsTestMaintenancePolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func DocumentsTestMaintenancePolicy(payloadData any) (result layer4.Result, message string) {
 	_, message = reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

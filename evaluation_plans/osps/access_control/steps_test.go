@@ -23,7 +23,7 @@ func stubRepoMetadata(twoFactorEnabled *bool) *FakeRepositoryMetadata {
 	}
 }
 
-func Test_orgRequiresMFA(t *testing.T) {
+func Test_OrgRequiresMFA(t *testing.T) {
 	trueVal := true
 	falseVal := false
 
@@ -61,7 +61,7 @@ func Test_orgRequiresMFA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMessage := orgRequiresMFA(tt.payload, map[string]*layer4.Change{})
+			gotResult, gotMessage := OrgRequiresMFA(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
 		})
@@ -69,7 +69,7 @@ func Test_orgRequiresMFA(t *testing.T) {
 }
 
 // See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#setting-the-permissions-of-the-github_token-for-your-repository
-func Test_workflowDefaultReadPermissions(t *testing.T) {
+func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 	tests := []struct {
 		name        string
 		payload     data.Payload
@@ -150,7 +150,7 @@ func Test_workflowDefaultReadPermissions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMessage := workflowDefaultReadPermissions(tt.payload, map[string]*layer4.Change{})
+			gotResult, gotMessage := WorkflowDefaultReadPermissions(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
 		})

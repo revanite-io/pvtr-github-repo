@@ -10,13 +10,13 @@ import (
 
 const testDataDir = "test_data"
 
-func TestGetAssessmentRequirements(t *testing.T) {
-	reqs, err := GetAssessmentRequirements()
+func TestGetCatalog(t *testing.T) {
+	catalog, err := GetCatalog()
 	if err != nil {
 		t.Error(err)
 	}
-	if len(reqs) == 0 {
-		t.Errorf("expected  one or more requirements but got %v", len(reqs))
+	if len(catalog.ControlFamilies) == 0 {
+		t.Errorf("expected  one or more control families but got %v", len(catalog.ControlFamilies))
 	}
 }
 

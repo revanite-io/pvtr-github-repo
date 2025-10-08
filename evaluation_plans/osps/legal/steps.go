@@ -24,22 +24,22 @@ type License struct {
 const spdxURL = "https://raw.githubusercontent.com/spdx/license-list-data/main/json/licenses.json"
 
 func getLicenseList(data data.Payload, makeApiCall func(string, bool) ([]byte, error)) (LicenseList, string) {
-	goodLicenseList := LicenseList{}
+	GoodLicenseList := LicenseList{}
 	if makeApiCall == nil {
 		makeApiCall = data.MakeApiCall
 	}
 	response, err := makeApiCall(spdxURL, false)
 	if err != nil {
-		return goodLicenseList, fmt.Sprintf("Failed to fetch good license data: %s", err.Error())
+		return GoodLicenseList, fmt.Sprintf("Failed to fetch good license data: %s", err.Error())
 	}
-	err = json.Unmarshal(response, &goodLicenseList)
+	err = json.Unmarshal(response, &GoodLicenseList)
 	if err != nil {
-		return goodLicenseList, fmt.Sprintf("Failed to unmarshal good license data: %s", err.Error())
+		return GoodLicenseList, fmt.Sprintf("Failed to unmarshal good license data: %s", err.Error())
 	}
-	if len(goodLicenseList.Licenses) == 0 {
-		return goodLicenseList, "Good license data was unexpectedly empty"
+	if len(GoodLicenseList.Licenses) == 0 {
+		return GoodLicenseList, "Good license data was unexpectedly empty"
 	}
-	return goodLicenseList, ""
+	return GoodLicenseList, ""
 }
 
 func splitSpdxExpression(expression string) (spdx_ids []string) {
@@ -51,7 +51,7 @@ func splitSpdxExpression(expression string) (spdx_ids []string) {
 	return
 }
 
-func foundLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func FoundLicense(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -62,7 +62,7 @@ func foundLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.R
 	return layer4.Passed, "License was found in a well known location via the GitHub API"
 }
 
-func releasesLicensed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func ReleasesLicensed(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -77,7 +77,7 @@ func releasesLicensed(payloadData any, _ map[string]*layer4.Change) (result laye
 	return layer4.Passed, "GitHub releases include the license(s) in the released source code."
 }
 
-func goodLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func GoodLicense(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

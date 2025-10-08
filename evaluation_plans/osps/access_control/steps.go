@@ -6,7 +6,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func orgRequiresMFA(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func OrgRequiresMFA(payloadData any) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -22,7 +22,7 @@ func orgRequiresMFA(payloadData any, _ map[string]*layer4.Change) (result layer4
 	return layer4.Failed, "Two-factor authentication is NOT configured as required by the parent organization"
 }
 
-func branchProtectionRestrictsPushes(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func BranchProtectionRestrictsPushes(payloadData any) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -42,7 +42,7 @@ func branchProtectionRestrictsPushes(payloadData any, _ map[string]*layer4.Chang
 	return
 }
 
-func branchProtectionPreventsDeletion(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func BranchProtectionPreventsDeletion(payloadData any) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -60,7 +60,7 @@ func branchProtectionPreventsDeletion(payloadData any, _ map[string]*layer4.Chan
 	return
 }
 
-func workflowDefaultReadPermissions(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func WorkflowDefaultReadPermissions(payloadData any) (result layer4.Result, message string) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

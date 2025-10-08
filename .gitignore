@@ -11,3 +11,6 @@ output
 
 # go test coverage output
 coverage.out
+
+# A safe space for keeping local development notes
+TODO.md

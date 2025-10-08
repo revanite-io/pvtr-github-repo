@@ -16,25 +16,12 @@ const dataDir string = "catalog"
 //go:embed catalog
 var files embed.FS
 
-func GetAssessmentRequirements() (map[string]*layer2.AssessmentRequirement, error) {
-	requirements := make(map[string]*layer2.AssessmentRequirement)
+func GetCatalog() (*layer2.Catalog, error) {
 	catalog, err := loadCatalog()
 	if err != nil {
 		return nil, err
 	}
-	for _, family := range catalog.ControlFamilies {
-		for _, control := range family.Controls {
-			for _, requirement := range control.AssessmentRequirements {
-				requirements[requirement.Id] = &requirement
-			}
-		}
-	}
-
-	if len(requirements) == 0 {
-		return nil, fmt.Errorf("GetAssessmentRequirements: 0 requirements found")
-	}
-
-	return requirements, nil
+	return &catalog, nil
 }
 
 // ReadAllYAMLFiles reads all YAML files in the data directory and returns the complete catalog data

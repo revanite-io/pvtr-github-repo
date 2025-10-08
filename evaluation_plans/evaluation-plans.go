@@ -1,59 +1,243 @@
 package evaluation_plans
 
 import (
+	"github.com/ossf/gemara/layer4"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/access_control"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/build_release"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/docs"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/governance"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/legal"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/quality"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/sec_assessment"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/vuln_management"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
 var (
 	// Open Source Project Security Baseline
-	OSPS_B = []*layer4.ControlEvaluation{
-		access_control.OSPS_AC_01(),
-		access_control.OSPS_AC_02(),
-		access_control.OSPS_AC_03(),
-		access_control.OSPS_AC_04(),
-		build_release.OSPS_BR_01(),
-		build_release.OSPS_BR_02(),
-		build_release.OSPS_BR_03(),
-		build_release.OSPS_BR_04(),
-		build_release.OSPS_BR_05(),
-		build_release.OSPS_BR_06(),
-		docs.OSPS_DO_01(),
-		docs.OSPS_DO_02(),
-		docs.OSPS_DO_03(),
-		docs.OSPS_DO_04(),
-		docs.OSPS_DO_05(),
-		docs.OSPS_DO_06(),
-		governance.OSPS_GV_01(),
-		governance.OSPS_GV_02(),
-		governance.OSPS_GV_03(),
-		governance.OSPS_GV_04(),
-		legal.OSPS_LE_01(),
-		legal.OSPS_LE_02(),
-		legal.OSPS_LE_03(),
-		quality.OSPS_QA_01(),
-		quality.OSPS_QA_02(),
-		quality.OSPS_QA_03(),
-		quality.OSPS_QA_04(),
-		quality.OSPS_QA_05(),
-		quality.OSPS_QA_06(),
-		quality.OSPS_QA_07(),
-		sec_assessment.OSPS_SA_01(),
-		sec_assessment.OSPS_SA_02(),
-		sec_assessment.OSPS_SA_03(),
-		vuln_management.OSPS_VM_01(),
-		vuln_management.OSPS_VM_02(),
-		vuln_management.OSPS_VM_03(),
-		vuln_management.OSPS_VM_04(),
-		vuln_management.OSPS_VM_05(),
-		vuln_management.OSPS_VM_06(),
+	OSPS = map[string][]layer4.AssessmentStep{
+		"OSPS-AC-01.01": {
+			access_control.OrgRequiresMFA,
+		},
+		"OSPS-AC-02.01": {
+			reusable_steps.GithubBuiltIn,
+		},
+		"OSPS-AC-03.01": {
+			access_control.BranchProtectionRestrictsPushes,
+		},
+		"OSPS-AC-03.02": {
+			access_control.BranchProtectionPreventsDeletion,
+		},
+		"OSPS-AC-04.01": {
+			access_control.WorkflowDefaultReadPermissions,
+		},
+		"OSPS-AC-04.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-BR-01.01": {
+			build_release.CicdSanitizedInputParameters,
+		},
+		"OSPS-BR-01.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-BR-02.01": {
+			reusable_steps.HasMadeReleases,
+			build_release.ReleaseHasUniqueIdentifier,
+		},
+		"OSPS-BR-02.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-BR-03.01": {
+			reusable_steps.HasSecurityInsightsFile,
+			build_release.EnsureInsightsLinksUseHTTPS,
+		},
+		"OSPS-BR-03.02": {
+			build_release.DistributionPointsUseHTTPS,
+		},
+		"OSPS-BR-04.01": {
+			reusable_steps.HasMadeReleases,
+			build_release.EnsureLatestReleaseHasChangelog,
+		},
+		"OSPS-BR-05.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-BR-06.01": {
+			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
+			build_release.InsightsHasSlsaAttestation,
+		},
+		"OSPS-BR-07.01": {
+			build_release.SecretScanningInUse,
+		},
+		"OSPS-BR-07.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-DO-01.01": {
+			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
+			docs.HasUserGuides,
+		},
+		"OSPS-DO-02.01": {
+			reusable_steps.HasMadeReleases,
+			reusable_steps.HasIssuesOrDiscussionsEnabled,
+			docs.AcceptsVulnReports,
+		},
+		"OSPS-DO-03.01": {
+			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
+			docs.HasSignatureVerificationGuide,
+		},
+		"OSPS-DO-03.02": {
+			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
+			docs.HasIdentityVerificationGuide,
+		},
+		"OSPS-DO-04.01": {
+			docs.HasSupportDocs,
+		},
+		"OSPS-DO-05.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-DO-06.01": {
+			reusable_steps.IsCodeRepo,
+			reusable_steps.HasMadeReleases,
+			reusable_steps.HasSecurityInsightsFile,
+			docs.HasDependencyManagementPolicy,
+		},
+		"OSPS-GV-01.01": {
+			reusable_steps.HasSecurityInsightsFile,
+			reusable_steps.IsActive,
+			governance.CoreTeamIsListed,
+			governance.ProjectAdminsListed,
+		},
+		"OSPS-GV-01.02": {
+			governance.HasRolesAndResponsibilities,
+		},
+		"OSPS-GV-02.01": {
+			reusable_steps.HasIssuesOrDiscussionsEnabled,
+		},
+		"OSPS-GV-03.01": {
+			governance.HasContributionGuide,
+		},
+		"OSPS-GV-03.02": {
+			reusable_steps.IsCodeRepo,
+			reusable_steps.HasSecurityInsightsFile,
+			reusable_steps.IsActive,
+			governance.HasContributionReviewPolicy,
+		},
+		"OSPS-GV-04.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-LE-01.01": {
+			reusable_steps.GithubTermsOfService,
+		},
+		"OSPS-LE-02.01": {
+			legal.FoundLicense,
+			legal.GoodLicense,
+		},
+		"OSPS-LE-02.02": {
+			legal.ReleasesLicensed,
+			legal.GoodLicense,
+		},
+		"OSPS-LE-03.01": {
+			legal.FoundLicense,
+		},
+		"OSPS-LE-03.02": {
+			legal.ReleasesLicensed,
+		},
+		"OSPS-QA-01.01": {
+			quality.RepoIsPublic,
+		},
+		"OSPS-QA-01.02": {
+			reusable_steps.GithubBuiltIn,
+		},
+		"OSPS-QA-02.01": {
+			quality.VerifyDependencyManagement,
+		},
+		"OSPS-QA-02.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-QA-03.01": {
+			quality.StatusChecksAreRequiredByRulesets,
+			quality.StatusChecksAreRequiredByBranchProtection,
+		},
+		"OSPS-QA-04.01": {
+			reusable_steps.IsCodeRepo,
+			reusable_steps.HasSecurityInsightsFile,
+			reusable_steps.IsActive,
+			quality.InsightsListsRepositories,
+		},
+		"OSPS-QA-04.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-QA-05.01": {
+			quality.NoBinariesInRepo,
+		},
+		"OSPS-QA-05.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-QA-06.01": {
+			reusable_steps.IsCodeRepo,
+			quality.HasOneOrMoreStatusChecks,
+		},
+		"OSPS-QA-06.02": {
+			quality.DocumentsTestExecution,
+		},
+		"OSPS-QA-06.03": {
+			reusable_steps.IsCodeRepo,
+			quality.DocumentsTestMaintenancePolicy,
+		},
+		"OSPS-QA-07.01": {
+			quality.RequiresNonAuthorApproval,
+		},
+		"OSPS-SA-01.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-SA-02.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-SA-03.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-SA-03.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-VM-01.01": {
+			reusable_steps.IsActive,
+			reusable_steps.HasSecurityInsightsFile,
+			vuln_management.HasVulnerabilityDisclosurePolicy,
+		},
+		"OSPS-VM-02.01": {
+			reusable_steps.IsCodeRepo,
+			vuln_management.HasSecContact,
+		},
+		"OSPS-VM-03.01": {
+			reusable_steps.IsActive,
+			reusable_steps.HasSecurityInsightsFile,
+			vuln_management.HasPrivateVulnerabilityReporting,
+		},
+		"OSPS-VM-04.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-VM-04.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-VM-05.01": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-VM-05.03": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-VM-05.02": {
+			reusable_steps.NotImplemented,
+		},
+		"OSPS-VM-06.01": {
+			reusable_steps.HasDependencyManagementPolicy,
+		},
+		"OSPS-VM-06.02": {
+			reusable_steps.IsCodeRepo,
+			reusable_steps.HasSecurityInsightsFile,
+			vuln_management.SastToolDefined,
+		},
 	}
 )

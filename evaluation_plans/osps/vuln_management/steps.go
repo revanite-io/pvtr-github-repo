@@ -8,7 +8,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func hasSecContact(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasSecContact(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -28,7 +28,7 @@ func hasSecContact(payloadData any, _ map[string]*layer4.Change) (result layer4.
 	return layer4.Failed, "Security contacts were not specified in Security Insights data"
 }
 
-func sastToolDefined(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func SastToolDefined(payloadData interface{}) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -48,7 +48,7 @@ func sastToolDefined(payloadData interface{}, _ map[string]*layer4.Change) (resu
 	return layer4.Failed, "No Static Application Security Testing documented in Security Insights"
 }
 
-func hasVulnerabilityDisclosurePolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasVulnerabilityDisclosurePolicy(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -61,7 +61,7 @@ func hasVulnerabilityDisclosurePolicy(payloadData any, _ map[string]*layer4.Chan
 	return layer4.Passed, "Vulnerability disclosure policy was specified in Security Insights data"
 }
 
-func hasPrivateVulnerabilityReporting(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasPrivateVulnerabilityReporting(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

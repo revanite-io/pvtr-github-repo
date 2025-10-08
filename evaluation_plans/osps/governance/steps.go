@@ -5,7 +5,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func coreTeamIsListed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func CoreTeamIsListed(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -18,7 +18,7 @@ func coreTeamIsListed(payloadData any, _ map[string]*layer4.Change) (result laye
 	return layer4.Passed, "Core team was specified in Security Insights data"
 }
 
-func projectAdminsListed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func ProjectAdminsListed(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -31,7 +31,7 @@ func projectAdminsListed(payloadData any, _ map[string]*layer4.Change) (result l
 	return layer4.Passed, "Project admins were specified in Security Insights data"
 }
 
-func hasRolesAndResponsibilities(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasRolesAndResponsibilities(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -44,7 +44,7 @@ func hasRolesAndResponsibilities(payloadData any, _ map[string]*layer4.Change) (
 	return layer4.Passed, "Roles and responsibilities were specified in Security Insights data"
 }
 
-func hasContributionGuide(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasContributionGuide(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message
@@ -65,7 +65,7 @@ func hasContributionGuide(payloadData any, _ map[string]*layer4.Change) (result 
 	return layer4.Failed, "Contribution guide not found in Security Insights data or via GitHub API"
 }
 
-func hasContributionReviewPolicy(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasContributionReviewPolicy(payloadData any) (result layer4.Result, message string) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
 		return layer4.Unknown, message

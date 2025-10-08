@@ -15,9 +15,9 @@ services:
       catalogs:
         - OSPS_B # currently this is the only available catalog to assess against
       applicability:
-        - Maturity Level 1
-        # - Maturity Level 2
-        # - Maturity Level 3
+        - maturity-1
+        # - maturity-2
+        # - maturity-3
     
     # All variables are required to run the evaluation
     vars:

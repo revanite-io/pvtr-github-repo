@@ -8,7 +8,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/data"
 )
 
-func Test_insightsListsRepositories(t *testing.T) {
+func Test_InsightsListsRepositories(t *testing.T) {
 	tests := []struct {
 		name       string
 		payload    data.Payload
@@ -61,7 +61,7 @@ func Test_insightsListsRepositories(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMsg := insightsListsRepositories(tt.payload, nil)
+			gotResult, gotMsg := InsightsListsRepositories(tt.payload)
 			if gotResult != tt.wantResult {
 				t.Errorf("result = %v, want %v", gotResult, tt.wantResult)
 			}

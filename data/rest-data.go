@@ -238,7 +238,7 @@ func (r *RestData) loadSecurityInsights() {
 func (r *RestData) getRepoContents() {
 	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve contents top level contents: %s", err.Error()))
+		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve top-level repo contents via GitHub API: %s", err.Error()))
 		return
 	}
 	r.contents.Content = content
@@ -247,7 +247,7 @@ func (r *RestData) getRepoContents() {
 		return
 	}
 	r.contents.SubContent = make(map[string]RepoContent)
-	r.Config.Logger.Trace(fmt.Sprintf("retrieved %d top-level contents", len(r.contents.Content)))
+	r.Config.Logger.Trace(fmt.Sprintf("found %d top-level objects from GitHub API", len(r.contents.Content)))
 }
 
 func (c *RepoContent) GetSubdirContentByPath(r *RestData, path string) (RepoContent, error) {

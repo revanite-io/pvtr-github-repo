@@ -36,29 +36,32 @@ func main() {
 		Version = fmt.Sprintf("%s-%s", Version, VersionPostfix)
 	}
 
-	pvtrVessel := pluginkit.NewEvaluationOrchestrator(PluginName, nil, RequiredVars)
-	pvtrVessel.PluginVersion = Version
-	pvtrVessel.PluginUri = "github.com/revanite-io/pvtr-github-repo"
+	orchestrator := pluginkit.EvaluationOrchestrator{
+		PluginName:    PluginName,
+		PluginVersion: Version,
+		PluginUri:     "github.com/revanite-io/pvtr-github-repo",
+	}
 
-	requirements, err := baseline.GetAssessmentRequirements()
+	catalog, err := baseline.GetCatalog()
 	if err != nil {
-		fmt.Printf("Error loading assessment requirements: %v\n", err)
+		fmt.Printf("Error loading OSPS Baseline catalog: %v\n", err)
 		os.Exit(1)
 	}
 
-	pvtrVessel.AddEvaluationSuite("OSPS_B", data.Loader, evaluation_plans.OSPS_B, requirements)
+	catalog.Metadata.Id = "OSPS-Baseline"
+
+	orchestrator.AddEvaluationSuite(data.Loader, evaluation_plans.OSPS, catalog)
 
 	runCmd := command.NewPluginCommands(
 		PluginName,
 		Version,
 		VersionPostfix,
 		GitCommitHash,
-		pvtrVessel,
+		&orchestrator,
 	)
 
 	err = runCmd.Execute()
 	if err != nil {
-		fmt.Printf("Error during runCmd.Execute(): %v\n", err)
 		os.Exit(1)
 	}
 }
