@@ -16,16 +16,8 @@ const dataDir string = "catalog"
 //go:embed catalog
 var files embed.FS
 
-func GetCatalog() (*layer2.Catalog, error) {
-	catalog, err := loadCatalog()
-	if err != nil {
-		return nil, err
-	}
-	return &catalog, nil
-}
-
-// ReadAllYAMLFiles reads all YAML files in the data directory and returns the complete catalog data
-func loadCatalog() (catalog layer2.Catalog, err error) {
+// GetCatalog reads all YAML files in the data directory and returns the complete catalog data
+func GetCatalog() (catalog layer2.Catalog, err error) {
 	dir, err := files.ReadDir(dataDir)
 	// Check if files are in the right place
 	if err != nil {
