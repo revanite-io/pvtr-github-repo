@@ -42,7 +42,7 @@ func main() {
 		PluginUri:     "github.com/revanite-io/pvtr-github-repo",
 	}
 
-	catalog, err := baseline.GetCatalog()
+	catalog, err := baseline.GetBaselineCatalog()
 	if err != nil {
 		fmt.Printf("Error loading OSPS Baseline catalog: %v\n", err)
 		os.Exit(1)
