@@ -68,6 +68,6 @@ require (
 )
 
 // Uncomment if you're working on a dependency locally
-replace github.com/privateerproj/privateer-sdk => ../../privateerproj/privateer-sdk
+// replace github.com/privateerproj/privateer-sdk => ../../privateerproj/privateer-sdk
 
 // replace github.com/ossf/si-tooling/v2 => ../si-tooling/v2
