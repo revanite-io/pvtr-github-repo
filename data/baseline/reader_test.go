@@ -16,16 +16,6 @@ func TestGetCatalog(t *testing.T) {
 		t.Error(err)
 	}
 	if len(catalog.ControlFamilies) == 0 {
-		t.Errorf("expected  one or more control families but got %v", len(catalog.ControlFamilies))
-	}
-}
-
-func TestLoadCatalog(t *testing.T) {
-	catalog, err := loadCatalog()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(catalog.ControlFamilies) == 0 {
 		t.Errorf("expected one or more control families but got %v", len(catalog.ControlFamilies))
 	}
 	for i, family := range catalog.ControlFamilies {

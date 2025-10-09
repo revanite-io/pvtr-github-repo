@@ -50,7 +50,7 @@ func main() {
 
 	catalog.Metadata.Id = "OSPS-Baseline"
 
-	orchestrator.AddEvaluationSuite(data.Loader, evaluation_plans.OSPS, catalog)
+	orchestrator.AddEvaluationSuite(data.Loader, evaluation_plans.OSPS, &catalog)
 
 	runCmd := command.NewPluginCommands(
 		PluginName,
