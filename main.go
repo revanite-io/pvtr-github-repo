@@ -54,7 +54,11 @@ func main() {
 	}
 
 	orchestrator.AddRequiredVars(RequiredVars)
-	orchestrator.AddEvaluationSuite("osps-baseline", nil, evaluation_plans.OSPS)
+	err = orchestrator.AddEvaluationSuite("osps-baseline", nil, evaluation_plans.OSPS)
+	if err != nil {
+		fmt.Printf("Error adding evaluation suite: %v\n", err)
+		os.Exit(1)
+	}
 
 	runCmd := command.NewPluginCommands(
 		PluginName,
