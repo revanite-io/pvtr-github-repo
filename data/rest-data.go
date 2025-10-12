@@ -30,8 +30,8 @@ type RestData struct {
 	Releases            []ReleaseData
 	Rulesets            []Ruleset
 	contents            RepoContent
-	ghClient            *github.Client
-	HttpClient          HttpClient
+	ghClient            *github.Client `json:"-" yaml:"-"`
+	HttpClient          HttpClient     `json:"-" yaml:"-"`
 }
 
 type RepoContent struct {

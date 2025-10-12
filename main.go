@@ -1,12 +1,13 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"path/filepath"
 
 	"os"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/pvtr-github-repo/data/baseline"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans"
 
 	"github.com/privateerproj/privateer-sdk/command"
@@ -29,6 +30,9 @@ var (
 		"repo",
 		"token",
 	}
+	//go:embed data/catalogs
+	files   embed.FS
+	dataDir = filepath.Join("data", "catalogs")
 )
 
 func main() {
@@ -41,16 +45,16 @@ func main() {
 		PluginVersion: Version,
 		PluginUri:     "github.com/revanite-io/pvtr-github-repo",
 	}
+	orchestrator.AddLoader(data.Loader)
 
-	catalog, err := baseline.GetBaselineCatalog()
+	err := orchestrator.AddReferenceCatalogs(dataDir, files)
 	if err != nil {
-		fmt.Printf("Error loading OSPS Baseline catalog: %v\n", err)
+		fmt.Printf("Error loading catalog: %v\n", err)
 		os.Exit(1)
 	}
 
-	catalog.Metadata.Id = "OSPS-Baseline"
-
-	orchestrator.AddEvaluationSuite(data.Loader, evaluation_plans.OSPS, &catalog)
+	orchestrator.AddRequiredVars(RequiredVars)
+	orchestrator.AddEvaluationSuite("osps-baseline", nil, evaluation_plans.OSPS)
 
 	runCmd := command.NewPluginCommands(
 		PluginName,
