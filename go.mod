@@ -8,6 +8,7 @@ require (
 	github.com/ossf/gemara v0.12.1
 	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
 	github.com/privateerproj/privateer-sdk v1.10.0
+	github.com/revanite-io/pvtr-github-repo v0.12.0
 	github.com/rhysd/actionlint v1.7.7
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	golang.org/x/oauth2 v0.32.0
