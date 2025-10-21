@@ -38,7 +38,9 @@ func HasSecurityInsightsFile(payloadData any) (result layer4.Result, message str
 	if message != "" {
 		return layer4.Unknown, message
 	}
-
+	if payload.InsightsError {
+		return layer4.NeedsReview, "An error was encountered while parsing Security Insights content"
+	}
 	if payload.Insights.Header.URL == "" {
 		return layer4.NeedsReview, "Security insights required for this assessment, but file not found"
 	}

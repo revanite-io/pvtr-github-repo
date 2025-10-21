@@ -27,6 +27,7 @@ type RestData struct {
 	WorkflowsEnabled    bool
 	WorkflowPermissions WorkflowPermissions
 	Insights            si.SecurityInsights
+	InsightsError       bool
 	Releases            []ReleaseData
 	Rulesets            []Ruleset
 	contents            RepoContent
@@ -129,7 +130,12 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 	if filepath != "" {
 		return filepath
 	}
-	for _, dirContents := range r.contents.SubContent[".github"].Content {
+
+	forgeDir, err := r.getSubdirContents(".github")
+	if err != nil {
+		r.Config.Logger.Debug(err.Error())
+	}
+	for _, dirContents := range forgeDir.Content {
 		// forge directory contents
 		if dirContents.GetType() != "file" {
 			continue
@@ -230,6 +236,7 @@ func (r *RestData) loadSecurityInsights() {
 		r.Insights = insights
 		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("failed to read security insights file: %s", err.Error()))
+			r.InsightsError = true
 		}
 		return
 	}
@@ -308,6 +315,9 @@ func (c *RepoContent) GetSubdirContentByPath(r *RestData, path string) (RepoCont
 
 // getSubdirContents fetches contents of a directory
 func (r *RestData) getSubdirContents(path string) (RepoContent, error) {
+	if len(r.contents.SubContent[path].Content) > 0 {
+		return r.contents.SubContent[path], nil
+	}
 	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, path, nil)
 	if err != nil {
 		return RepoContent{}, err

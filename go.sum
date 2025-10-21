@@ -86,8 +86,6 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/privateerproj/privateer-sdk v1.10.0 h1:LlD8TxozQmx20N9jkuixTQIPSgSfxFrFbP38FivhADM=
 github.com/privateerproj/privateer-sdk v1.10.0/go.mod h1:eDst4232KyZd98dduG534GLxBfN1VtIZR6w5lUOiigY=
-github.com/revanite-io/pvtr-github-repo v0.12.0 h1:+Xae4WXDnc//wgClCLNawxj8J7tic5u9Zyqb9wu0/zg=
-github.com/revanite-io/pvtr-github-repo v0.12.0/go.mod h1:hi1Xyinxqk6wfC/DsqA+OWFmr5bwLSBuvlsbEzcTeaY=
 github.com/rhysd/actionlint v1.7.8 h1:3d+N9ourgAxVYG4z2IFxFIk/YiT6V+VnKASfXGwT60E=
 github.com/rhysd/actionlint v1.7.8/go.mod h1:3kiS6egcbXG+vQsJIhFxTz+UKaF1JprsE0SKrpCZKvU=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
