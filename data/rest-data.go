@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -133,7 +134,7 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 
 	forgeDir, err := r.getSubdirContents(".github")
 	if err != nil {
-		r.Config.Logger.Debug(err.Error())
+		log.Printf("Failed to retrieve forge dir contents: %s", err.Error())
 	}
 	for _, dirContents := range forgeDir.Content {
 		// forge directory contents
