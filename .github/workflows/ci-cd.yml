@@ -1,0 +1,376 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+# Prevent concurrent runs on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Explicit no permissions at workflow level (set per-job)
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: "1.25.1"
+  TESTCOVERAGE_THRESHOLD: 26
+
+jobs:
+  # Job 1: Build and Test
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Tidy dependencies
+        run: go mod tidy
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Vet code
+        run: go vet ./...
+
+      - name: Build binary
+        run: make build
+
+      - name: Run tests with coverage
+        run: make test-cov
+
+      - name: Check test coverage threshold
+        run: |
+          echo "Quality Gate: checking test coverage is above threshold ..."
+          echo "Threshold             : $TESTCOVERAGE_THRESHOLD %"
+          totalCoverage=$(go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+')
+          echo "Current test coverage : $totalCoverage %"
+          if (( $(echo "$totalCoverage $TESTCOVERAGE_THRESHOLD" | awk '{print ($1 >= $2)}') )); then
+              echo "Coverage check passed"
+          else
+              echo "Current test coverage is below threshold"
+              echo "Please add more unit tests or adjust threshold to a lower value."
+              exit 1
+          fi
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-repo-binary
+          path: github-repo
+          retention-days: 7
+
+  # Job 2: Lint
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          args: --timeout=5m
+
+  # Job 3: Security Scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@v2.21.4
+        with:
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
+
+      - name: Upload Gosec results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'gosec-results.sarif'
+
+  # Job 4: Build Multi-Platform Binaries
+  build-binaries:
+    name: Build Multi-Platform Binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [build-and-test, lint]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            output: github-repo-linux-amd64
+          - os: linux
+            arch: arm64
+            output: github-repo-linux-arm64
+          - os: darwin
+            arch: amd64
+            output: github-repo-darwin-amd64
+          - os: darwin
+            arch: arm64
+            output: github-repo-darwin-arm64
+          - os: windows
+            arch: amd64
+            output: github-repo-windows-amd64.exe
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build binary for ${{ matrix.os }}/${{ matrix.arch }}
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+          VERSION: ${{ github.ref_name }}
+          COMMIT_HASH: ${{ github.sha }}
+          OUTPUT_NAME: ${{ matrix.output }}
+        run: |
+          go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.GitCommitHash=${COMMIT_HASH}' -X 'main.BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" -o "${OUTPUT_NAME}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: ${{ matrix.output }}
+          retention-days: 30
+
+  # Job 5: Build and Push Docker Image
+  docker-build-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    needs: [build-and-test, lint]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        if: secrets.DOCKERHUB_TOKEN != ''
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/pvtr-github-repo
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # Job 6: Integration Test (Self-Test)
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [docker-build-push]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Create test config
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          cat > test-config.yml << EOF
+          loglevel: info
+          write-directory: evaluation_results
+          write: true
+          output: yaml
+          services:
+            self-test:
+              plugin: github-repo
+              policy:
+                catalogs:
+                  - OSPS_B
+                applicability:
+                  - Maturity Level 1
+              vars:
+                owner: ${REPO_OWNER}
+                repo: ${REPO_NAME}
+                token: \${{ secrets.GITHUB_TOKEN }}
+          EOF
+
+      - name: Run self-assessment using Docker image
+        run: |
+          docker run --rm \
+            -v $(pwd)/test-config.yml:/.privateer/config.yml \
+            -v $(pwd)/evaluation_results:/evaluation_results \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-results
+          path: evaluation_results/
+          retention-days: 30
+
+  # Job 7: Notify on Success/Failure
+  notify:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [build-and-test, lint, security-scan, docker-build-push]
+    if: always() && (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - name: Check job statuses
+        id: check
+        run: |
+          if [ "${{ needs.build-and-test.result }}" == "failure" ] || \
+             [ "${{ needs.lint.result }}" == "failure" ] || \
+             [ "${{ needs.security-scan.result }}" == "failure" ] || \
+             [ "${{ needs.docker-build-push.result }}" == "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post to Slack (if configured)
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v2
+        with:
+          payload: |
+            {
+              "text": "GitHub Actions build result: ${{ steps.check.outputs.status }}\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}\nWorkflow: ${{ github.workflow }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
