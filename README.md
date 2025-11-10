@@ -25,15 +25,21 @@ docker run \
 
 ## GitHub Actions Usage
 
-We've pushed an image to docker hub for use in GitHub Actions.
+We've pushed images to GitHub Container Registry and Docker Hub for use in GitHub Actions.
 
-You will also need to set up a GitHub personal access token with the repository read permissions. This token should be added to your config file, or — if using the example pipeline below — as a secret in your repository.
+You will need a GitHub personal access token with repository read permissions. This token should be added to your config file or as a secret in your repository.
 
 ### Example GHA Setup
 
 - [Config](https://github.com/privateerproj/.github/blob/main/.github/pvtr-config.yml)
 - [Workflow Definition](https://github.com/privateerproj/.github/blob/main/.github/workflows/osps-baseline.yml)
 - [Action Results](https://github.com/privateerproj/.github/actions/runs/13691384519/job/38285134201)
+
+### CI/CD Pipeline
+
+This repository uses GitHub Actions for continuous integration and deployment. The workflow automatically builds, tests, performs security scanning, and publishes multi-platform binaries and Docker images.
+
+For Docker Hub publishing, add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets to your repository settings.
 
 ## Contributing
 
