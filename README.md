@@ -25,15 +25,7 @@ docker run \
 
 ## GitHub Actions Usage
 
-We've pushed an image to docker hub for use in GitHub Actions.
-
-You will also need to set up a GitHub personal access token with the repository read permissions. This token should be added to your config file, or — if using the example pipeline below — as a secret in your repository.
-
-### Example GHA Setup
-
-- [Config](https://github.com/privateerproj/.github/blob/main/.github/pvtr-config.yml)
-- [Workflow Definition](https://github.com/privateerproj/.github/blob/main/.github/workflows/osps-baseline.yml)
-- [Action Results](https://github.com/privateerproj/.github/actions/runs/13691384519/job/38285134201)
+See the [OSPS Security Baseline Scanner](https://github.com/marketplace/actions/open-source-project-security-baseline-scanner)
 
 ## Contributing
 
