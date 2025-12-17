@@ -36,7 +36,7 @@ jobs:
         with:
           go-version: 1.23.4
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@fbfd9c6c189226748411491745178e0c2017392d
+        uses: anchore/sbom-action/download-syft@43a17d6e7add2b5535efe4dcae9952337c479a93
         with:
           syft-version: v1.33.0
       - name: Run GoReleaser
