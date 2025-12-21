@@ -1,105 +1,54 @@
 package data
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"path/filepath"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/privateerproj/privateer-sdk/config"
 	"github.com/shurcooL/githubv4"
 )
 
-var (
-	binaryExtensions = map[string]bool{
-		"":       true,
-		"tar":    true,
-		"gz":     true,
-		"tgz":    true,
-		"zip":    true,
-		"rar":    true,
-		"7z":     true,
-		"bz2":    true,
-		"xz":     true,
-		"lzma":   true,
-		"lz4":    true,
-		"zst":    true,
-		"apk":    true,
-		"crx":    true,
-		"deb":    true,
-		"dex":    true,
-		"dey":    true,
-		"elf":    true,
-		"o":      true,
-		"a":      true,
-		"so":     true,
-		"macho":  true,
-		"iso":    true,
-		"class":  true,
-		"jar":    true,
-		"bundle": true,
-		"dylib":  true,
-		"lib":    true,
-		"msi":    true,
-		"dll":    true,
-		"drv":    true,
-		"efi":    true,
-		"exe":    true,
-		"ocx":    true,
-		"pyc":    true,
-		"pyo":    true,
-		"par":    true,
-		"rpm":    true,
-		"wasm":   true,
-		"whl":    true,
-	}
-
-	// Extend this with more known filenames as needed
-	knownFilenames = map[string]bool{
-		"README":          true,
-		"LICENSE":         true,
-		"CHANGELOG":       true,
-		"CONTRIBUTING":    true,
-		"CODE_OF_CONDUCT": true,
-		"TODO":            true,
-		"SECURITY":        true,
-		"NOTICE":          true,
-		"CODEOWNERS":      true,
-		".gitignore":      true,
-		".gitattributes":  true,
-		"Makefile":        true,
-		"Dockerfile":      true,
-		"Vagrantfile":     true,
-		"Gemfile":         true,
-		"Procfile":        true,
-		"Brewfile":        true,
-		"MANIFEST":        true,
-		"DCO":             true,
-		"MAINTAINERS":     true,
-		"CNAME":           true,
-	}
-)
-
-// GraphqlRepoTree is used in a query to get top 3 levels of the repository contents
 type GraphqlRepoTree struct {
 	Repository struct {
 		Object struct {
 			Tree struct {
 				Entries []struct {
 					Name   string
-					Type   string // "blob" for files, "tree" for directories
+					Type   string
 					Path   string
 					Object *struct {
+						Blob struct {
+							IsBinary    *bool
+							IsTruncated bool
+						} `graphql:"... on Blob"`
 						Tree struct {
 							Entries []struct {
 								Name   string
 								Type   string
 								Path   string
 								Object *struct {
+									Blob struct {
+										IsBinary    *bool
+										IsTruncated bool
+									} `graphql:"... on Blob"`
 									Tree struct {
 										Entries []struct {
-											Name string
-											Type string
-											Path string
+											Name   string
+											Type   string
+											Path   string
+											Object *struct {
+												Blob struct {
+													IsBinary    *bool
+													IsTruncated bool
+												} `graphql:"... on Blob"`
+											} `graphql:"object"`
 										}
 									} `graphql:"... on Tree"`
 								} `graphql:"object"`
@@ -112,19 +61,95 @@ type GraphqlRepoTree struct {
 	} `graphql:"repository(owner: $owner, name: $name)"`
 }
 
-func checkTreeForBinaries(tree *GraphqlRepoTree) (binariesFound []string) {
+type binaryChecker struct {
+	httpClient *http.Client
+	logger     hclog.Logger
+	owner      string
+	repo       string
+	branch     string
+}
+
+func (bc *binaryChecker) isBinary(isBinaryPtr *bool, isTruncated bool, path string) bool {
+	if isBinaryPtr != nil {
+		return *isBinaryPtr
+	}
+	if isTruncated {
+		binary, err := bc.checkViaPartialFetch(path)
+		if err != nil {
+			bc.logger.Trace(fmt.Sprintf("failed to check binary status via partial fetch for %s: %s", path, err.Error()))
+			return false
+		}
+		return binary
+	}
+	return false
+}
+
+func (bc *binaryChecker) checkViaPartialFetch(path string) (bool, error) {
+	segments := strings.Split(path, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	escapedPath := strings.Join(segments, "/")
+	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", bc.owner, bc.repo, bc.branch, escapedPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		return false, err
+	}
+
+	req.Header.Set("Range", "bytes=0-511")
+
+	resp, err := bc.httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	return hasNullBytes(content), nil
+}
+
+func hasNullBytes(content []byte) bool {
+	return bytes.IndexByte(content, 0) != -1
+}
+
+func checkTreeForBinaries(tree *GraphqlRepoTree, bc *binaryChecker) (binariesFound []string) {
+	if tree == nil {
+		return nil
+	}
 	for _, entry := range tree.Repository.Object.Tree.Entries {
-		binariesFound = identifyBinaries(binariesFound, entry.Type, entry.Name)
-		if entry.Type == "tree" {
+		if entry.Type == "blob" && entry.Object != nil {
+			if bc.isBinary(entry.Object.Blob.IsBinary, entry.Object.Blob.IsTruncated, entry.Path) {
+				binariesFound = append(binariesFound, entry.Name)
+			}
+		}
+		if entry.Type == "tree" && entry.Object != nil {
 			for _, subEntry := range entry.Object.Tree.Entries {
-				binariesFound = identifyBinaries(binariesFound, subEntry.Type, subEntry.Name)
-				if subEntry.Type == "tree" {
+				if subEntry.Type == "blob" && subEntry.Object != nil {
+					if bc.isBinary(subEntry.Object.Blob.IsBinary, subEntry.Object.Blob.IsTruncated, subEntry.Path) {
+						binariesFound = append(binariesFound, subEntry.Name)
+					}
+				}
+				if subEntry.Type == "tree" && subEntry.Object != nil {
 					for _, subSubEntry := range subEntry.Object.Tree.Entries {
-						binariesFound = identifyBinaries(binariesFound, subSubEntry.Type, subSubEntry.Name)
-						// if subSubEntry.Type == "tree" {
+						if subSubEntry.Type == "blob" && subSubEntry.Object != nil {
+							if bc.isBinary(subSubEntry.Object.Blob.IsBinary, subSubEntry.Object.Blob.IsTruncated, subSubEntry.Path) {
+								binariesFound = append(binariesFound, subSubEntry.Name)
+							}
+						}
 						// TODO: The current GraphQL call stops after 3 levels of depth.
 						// Additional API calls will be required for recursion if another tree is found.
-						// }
 					}
 				}
 			}
@@ -133,30 +158,10 @@ func checkTreeForBinaries(tree *GraphqlRepoTree) (binariesFound []string) {
 	return binariesFound
 }
 
-func identifyBinaries(binariesFound []string, filetype string, filename string) []string {
-	if filetype == "blob" {
-		if isBinaryFile(filename) {
-			binariesFound = append(binariesFound, filename)
-		}
-	}
-	return binariesFound
-}
-
-// TODO: this is a lightweight check, looking at filenames only.
-// GitHub's GraphQL API has an 'isBinary' field that could be used for a more accurate check,
-// but I didn't manage to get that query working as expected.
-func isBinaryFile(filename string) bool {
-	if knownFilenames[filename] {
-		return false
-	}
-	ext := filepath.Ext(filename)
-	return binaryExtensions[ext]
-}
-
 func fetchGraphqlRepoTree(config *config.Config, client *githubv4.Client, branch string) (tree *GraphqlRepoTree, err error) {
-	path := "" // TODO: I suspected we should be able to target subdirectories this way, but it hasn't succeeded
+	path := ""
 
-	fullPath := fmt.Sprintf("%s:%s", branch, path) // Ensure correct format
+	fullPath := fmt.Sprintf("%s:%s", branch, path)
 
 	variables := map[string]any{
 		"owner":  githubv4.String(config.GetString("owner")),
