@@ -3,7 +3,7 @@ package quality
 import (
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/revanite-io/pvtr-github-repo/data"
 )
@@ -12,7 +12,7 @@ func Test_InsightsListsRepositories(t *testing.T) {
 	tests := []struct {
 		name       string
 		payload    data.Payload
-		wantResult layer4.Result
+		wantResult gemara.Result
 		wantMsg    string
 	}{
 		{
@@ -30,7 +30,7 @@ func Test_InsightsListsRepositories(t *testing.T) {
 					},
 				},
 			},
-			wantResult: layer4.Passed,
+			wantResult: gemara.Passed,
 			wantMsg:    "Insights contains a list of repositories",
 		},
 		{
@@ -44,7 +44,7 @@ func Test_InsightsListsRepositories(t *testing.T) {
 					},
 				},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Insights does not contain a list of repositories",
 		},
 		{
@@ -54,14 +54,14 @@ func Test_InsightsListsRepositories(t *testing.T) {
 					Insights: si.SecurityInsights{},
 				},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Insights does not contain a list of repositories",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMsg := InsightsListsRepositories(tt.payload)
+			gotResult, gotMsg, _ := InsightsListsRepositories(tt.payload)
 			if gotResult != tt.wantResult {
 				t.Errorf("result = %v, want %v", gotResult, tt.wantResult)
 			}

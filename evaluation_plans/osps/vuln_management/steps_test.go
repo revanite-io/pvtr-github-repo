@@ -3,14 +3,14 @@ package vuln_management
 import (
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/revanite-io/pvtr-github-repo/data"
 	"github.com/stretchr/testify/assert"
 )
 
 type testingData struct {
-	expectedResult   layer4.Result
+	expectedResult   gemara.Result
 	expectedMessage  string
 	payloadData      interface{}
 	assertionMessage string
@@ -20,7 +20,7 @@ func TestSastToolDefined(t *testing.T) {
 
 	testData := []testingData{
 		{
-			expectedResult:   layer4.Passed,
+			expectedResult:   gemara.Passed,
 			expectedMessage:  "Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for SAST integration enabled",
 			payloadData: data.Payload{
@@ -43,7 +43,7 @@ func TestSastToolDefined(t *testing.T) {
 			},
 		},
 		{
-			expectedResult:   layer4.Failed,
+			expectedResult:   gemara.Failed,
 			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for SAST integration present but not explicitly enabled",
 			payloadData: data.Payload{
@@ -63,7 +63,7 @@ func TestSastToolDefined(t *testing.T) {
 			},
 		},
 		{
-			expectedResult:   layer4.Failed,
+			expectedResult:   gemara.Failed,
 			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for Non SAST tool defined",
 			payloadData: data.Payload{
@@ -83,7 +83,7 @@ func TestSastToolDefined(t *testing.T) {
 			},
 		},
 		{
-			expectedResult:   layer4.Failed,
+			expectedResult:   gemara.Failed,
 			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
 			assertionMessage: "Test for no tools defined",
 			payloadData: data.Payload{
@@ -99,7 +99,7 @@ func TestSastToolDefined(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		result, message := SastToolDefined(test.payloadData)
+		result, message, _ := SastToolDefined(test.payloadData)
 
 		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
 		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
@@ -111,12 +111,12 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 	tests := []struct {
 		name            string
 		payloadData     any
-		expectedResult  layer4.Result
+		expectedResult  gemara.Result
 		expectedMessage string
 	}{
 		{
 			name:            "Vulnerability disclosure policy present",
-			expectedResult:  layer4.Passed,
+			expectedResult:  gemara.Passed,
 			expectedMessage: "Vulnerability disclosure policy was specified in Security Insights data",
 			payloadData: data.Payload{
 				RestData: &data.RestData{
@@ -133,7 +133,7 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 		},
 		{
 			name:            "Vulnerability disclosure policy missing",
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "Vulnerability disclosure policy was NOT specified in Security Insights data",
 			payloadData: data.Payload{
 				RestData: &data.RestData{
@@ -150,7 +150,7 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 		},
 		{
 			name:            "Invalid payload",
-			expectedResult:  layer4.Unknown,
+			expectedResult:  gemara.Unknown,
 			expectedMessage: "Malformed assessment: expected payload type data.Payload, got string (invalid_payload)",
 			payloadData:     "invalid_payload",
 		},
@@ -158,7 +158,7 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, message := HasVulnerabilityDisclosurePolicy(test.payloadData)
+			result, message, _ := HasVulnerabilityDisclosurePolicy(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})
@@ -169,12 +169,12 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 	tests := []struct {
 		name            string
 		payloadData     any
-		expectedResult  layer4.Result
+		expectedResult  gemara.Result
 		expectedMessage string
 	}{
 		{
 			name:            "Private reporting via vulnerability contact email",
-			expectedResult:  layer4.Passed,
+			expectedResult:  gemara.Passed,
 			expectedMessage: "Private vulnerability reporting available via dedicated contact email in Security Insights data",
 			payloadData: data.Payload{
 				RestData: &data.RestData{
@@ -194,7 +194,7 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 		},
 		{
 			name:            "Private reporting via security champions",
-			expectedResult:  layer4.Passed,
+			expectedResult:  gemara.Passed,
 			expectedMessage: "Private vulnerability reporting available via security champions contact in Security Insights data",
 			payloadData: data.Payload{
 				RestData: &data.RestData{
@@ -224,7 +224,7 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 		},
 		{
 			name:            "Reports not accepted",
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "Project does not accept vulnerability reports according to Security Insights data",
 			payloadData: data.Payload{
 				RestData: &data.RestData{
@@ -244,7 +244,7 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 		},
 		{
 			name:            "No contact methods available",
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "No private vulnerability reporting contact method found in Security Insights data",
 			payloadData: data.Payload{
 				RestData: &data.RestData{
@@ -274,7 +274,7 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 		},
 		{
 			name:            "Invalid payload",
-			expectedResult:  layer4.Unknown,
+			expectedResult:  gemara.Unknown,
 			expectedMessage: "Malformed assessment: expected payload type data.Payload, got string (invalid_payload)",
 			payloadData:     "invalid_payload",
 		},
@@ -282,7 +282,7 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, message := HasPrivateVulnerabilityReporting(test.payloadData)
+			result, message, _ := HasPrivateVulnerabilityReporting(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})
