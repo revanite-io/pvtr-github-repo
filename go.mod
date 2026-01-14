@@ -3,9 +3,9 @@ module github.com/revanite-io/pvtr-github-repo
 go 1.25.1
 
 require (
+	github.com/gemaraproj/go-gemara v0.15.2
 	github.com/google/go-github/v74 v74.0.0
 	github.com/migueleliasweb/go-github-mock v1.5.0
-	github.com/ossf/gemara v0.15.2
 	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
 	github.com/privateerproj/privateer-sdk v1.15.3
 	github.com/rhysd/actionlint v1.7.8
@@ -20,24 +20,21 @@ require (
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/defenseunicorns/go-oscal v0.7.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
-	github.com/go-git/go-git/v5 v5.16.3 // indirect
+	github.com/go-git/go-git/v5 v5.16.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/goccy/go-yaml v1.18.0 // indirect
+	github.com/goccy/go-yaml v1.19.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-github/v71 v71.0.0 // indirect
 	github.com/google/go-github/v73 v73.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
@@ -71,7 +68,7 @@ require (
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/cobra v1.10.1 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/stretchr/testify v1.11.1
@@ -87,6 +84,7 @@ require (
 )
 
 // Uncomment if you're working on a dependency locally
-// replace github.com/privateerproj/privateer-sdk => ../../privateerproj/privateer-sdk
+replace github.com/privateerproj/privateer-sdk => ../privateer-sdk
 
 // replace github.com/ossf/si-tooling/v2 => ../si-tooling/v2
+replace github.com/gemaraproj/go-gemara => ../../ossf/go-gemara
