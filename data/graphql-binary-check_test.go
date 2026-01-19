@@ -82,7 +82,12 @@ func TestCheckTreeForBinaries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := checkTreeForBinaries(tt.tree, bc)
+			result, err := checkTreeForBinaries(tt.tree, bc)
+			// TODO: Add expected error test cases
+			if err != nil {
+				t.Errorf("checkTreeForBinaries() error = %v", err)
+				return
+			}
 
 			if len(result) != len(tt.expected) {
 				t.Errorf("got %d binaries, want %d\ngot: %v\nwant: %v",
@@ -103,28 +108,44 @@ func TestBinaryCheckerIsBinary(t *testing.T) {
 	bc := &binaryChecker{logger: hclog.NewNullLogger()}
 
 	t.Run("isBinary true returns true", func(t *testing.T) {
-		result := bc.isBinary(boolPtr(true), false, "any-file")
+		result, err := bc.check(boolPtr(true), false, "any-file")
+		if err != nil {
+			t.Errorf("check() error = %v", err)
+			return
+		}
 		if !result {
 			t.Error("expected isBinary=true to return true")
 		}
 	})
 
 	t.Run("isBinary false returns false", func(t *testing.T) {
-		result := bc.isBinary(boolPtr(false), false, "any-file")
+		result, err := bc.check(boolPtr(false), false, "any-file")
+		if err != nil {
+			t.Errorf("check() error = %v", err)
+			return
+		}
 		if result {
 			t.Error("expected isBinary=false to return false")
 		}
 	})
 
 	t.Run("isBinary false takes precedence over truncated", func(t *testing.T) {
-		result := bc.isBinary(boolPtr(false), true, "any-file")
+		result, err := bc.check(boolPtr(false), true, "any-file")
+		if err != nil {
+			t.Errorf("check() error = %v", err)
+			return
+		}
 		if result {
 			t.Error("expected isBinary=false to return false even when truncated")
 		}
 	})
 
 	t.Run("nil isBinary and not truncated returns false", func(t *testing.T) {
-		result := bc.isBinary(nil, false, "any-file")
+		result, err := bc.check(nil, false, "any-file")
+		if err != nil {
+			t.Errorf("check() error = %v", err)
+			return
+		}
 		if result {
 			t.Error("expected nil isBinary with isTruncated=false to return false")
 		}

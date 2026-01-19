@@ -69,19 +69,18 @@ type binaryChecker struct {
 	branch     string
 }
 
-func (bc *binaryChecker) isBinary(isBinaryPtr *bool, isTruncated bool, path string) bool {
+func (bc *binaryChecker) check(isBinaryPtr *bool, isTruncated bool, path string) (bool, error) {
 	if isBinaryPtr != nil {
-		return *isBinaryPtr
+		return *isBinaryPtr, nil
 	}
 	if isTruncated {
 		binary, err := bc.checkViaPartialFetch(path)
 		if err != nil {
-			bc.logger.Trace(fmt.Sprintf("failed to check binary status via partial fetch for %s: %s", path, err.Error()))
-			return false
+			return false, fmt.Errorf("failed to check binary status via partial fetch for %s: %w", path, err)
 		}
-		return binary
+		return binary, nil
 	}
-	return false
+	return false, nil
 }
 
 func (bc *binaryChecker) checkViaPartialFetch(path string) (bool, error) {
@@ -124,27 +123,39 @@ func hasNullBytes(content []byte) bool {
 	return bytes.IndexByte(content, 0) != -1
 }
 
-func checkTreeForBinaries(tree *GraphqlRepoTree, bc *binaryChecker) (binariesFound []string) {
+func checkTreeForBinaries(tree *GraphqlRepoTree, bc *binaryChecker) (binariesFound []string, err error) {
 	if tree == nil {
-		return nil
+		return nil, nil
 	}
 	for _, entry := range tree.Repository.Object.Tree.Entries {
 		if entry.Type == "blob" && entry.Object != nil {
-			if bc.isBinary(entry.Object.Blob.IsBinary, entry.Object.Blob.IsTruncated, entry.Path) {
+			isBinary, err := bc.check(entry.Object.Blob.IsBinary, entry.Object.Blob.IsTruncated, entry.Path)
+			if err != nil {
+				return nil, err
+			}
+			if isBinary {
 				binariesFound = append(binariesFound, entry.Name)
 			}
 		}
 		if entry.Type == "tree" && entry.Object != nil {
 			for _, subEntry := range entry.Object.Tree.Entries {
 				if subEntry.Type == "blob" && subEntry.Object != nil {
-					if bc.isBinary(subEntry.Object.Blob.IsBinary, subEntry.Object.Blob.IsTruncated, subEntry.Path) {
+					isBinary, err := bc.check(subEntry.Object.Blob.IsBinary, subEntry.Object.Blob.IsTruncated, subEntry.Path)
+					if err != nil {
+						return nil, err
+					}
+					if isBinary {
 						binariesFound = append(binariesFound, subEntry.Name)
 					}
 				}
 				if subEntry.Type == "tree" && subEntry.Object != nil {
 					for _, subSubEntry := range subEntry.Object.Tree.Entries {
 						if subSubEntry.Type == "blob" && subSubEntry.Object != nil {
-							if bc.isBinary(subSubEntry.Object.Blob.IsBinary, subSubEntry.Object.Blob.IsTruncated, subSubEntry.Path) {
+							isBinary, err := bc.check(subSubEntry.Object.Blob.IsBinary, subSubEntry.Object.Blob.IsTruncated, subSubEntry.Path)
+							if err != nil {
+								return nil, err
+							}
+							if isBinary {
 								binariesFound = append(binariesFound, subSubEntry.Name)
 							}
 						}
@@ -155,7 +166,7 @@ func checkTreeForBinaries(tree *GraphqlRepoTree, bc *binaryChecker) (binariesFou
 			}
 		}
 	}
-	return binariesFound
+	return binariesFound, nil
 }
 
 func fetchGraphqlRepoTree(config *config.Config, client *githubv4.Client, branch string) (tree *GraphqlRepoTree, err error) {

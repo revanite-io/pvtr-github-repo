@@ -113,6 +113,9 @@ func (p *Payload) GetSuspectedBinaries() (suspectedBinaries []string, err error)
 		repo:       p.Config.GetString("repo"),
 		branch:     branch,
 	}
-	binaryFileNames := checkTreeForBinaries(tree, bc)
+	binaryFileNames, err := checkTreeForBinaries(tree, bc)
+	if err != nil {
+		return nil, err
+	}
 	return binaryFileNames, nil
 }
