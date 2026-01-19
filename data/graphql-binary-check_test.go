@@ -152,25 +152,88 @@ func TestBinaryCheckerIsBinary(t *testing.T) {
 	})
 }
 
-func TestHasNullBytes(t *testing.T) {
+func TestCommonAcceptableFileExtension(t *testing.T) {
 	tests := []struct {
 		name     string
-		content  []byte
+		path     string
 		expected bool
 	}{
-		{"empty content", []byte{}, false},
-		{"text only", []byte("hello world"), false},
-		{"null at start", []byte{0x00, 'a', 'b'}, true},
-		{"null at end", []byte{'a', 'b', 0x00}, true},
-		{"null in middle", []byte{'a', 0x00, 'b'}, true},
-		{"binary content", []byte{0xcf, 0xfa, 0xed, 0xfe, 0x00}, true},
+		{name: "no extension", path: "file", expected: false},
+		{name: "empty extension", path: "file.", expected: false},
+		{name: "funky space extension", path: "file. ", expected: false},
+		{name: "md", path: "file.md", expected: true},
+		{name: "txt", path: "file.txt", expected: true},
+		{name: "yaml", path: "file.yaml", expected: true},
+		{name: "yml", path: "file.yml", expected: true},
+		{name: "json", path: "file.json", expected: true},
+		{name: "toml", path: "file.toml", expected: true},
+		{name: "ini", path: "file.ini", expected: true},
+		{name: "conf", path: "file.conf", expected: true},
+		{name: "env", path: "file.env", expected: true},
+		{name: "sh", path: "file.sh", expected: true},
+		{name: "bash", path: "file.bash", expected: true},
+		{name: "zsh", path: "file.zsh", expected: true},
+		{name: "fish", path: "file.fish", expected: true},
+		{name: "c", path: "file.c", expected: true},
+		{name: "cpp", path: "file.cpp", expected: true},
+		{name: "h", path: "file.h", expected: true},
+		{name: "hpp", path: "file.hpp", expected: true},
+		{name: "c++", path: "file.c++", expected: true},
+		{name: "h++", path: "file.h++", expected: true},
+		{name: "cxx", path: "file.cxx", expected: true},
+		{name: "hxx", path: "file.hxx", expected: true},
+		{name: "cu", path: "file.cu", expected: true},
+		{name: "cuh", path: "file.cuh", expected: true},
+		{name: "go", path: "file.go", expected: true},
+		{name: "rs", path: "file.rs", expected: true},
+		{name: "py", path: "file.py", expected: true},
+		{name: "java", path: "file.java", expected: true},
+		{name: "js", path: "file.js", expected: true},
+		{name: "ts", path: "file.ts", expected: true},
+		{name: "jsx", path: "file.jsx", expected: true},
+		{name: "tsx", path: "file.tsx", expected: true},
+		{name: "rb", path: "file.rb", expected: true},
+		{name: "php", path: "file.php", expected: true},
+		{name: "swift", path: "file.swift", expected: true},
+		{name: "kt", path: "file.kt", expected: true},
+		{name: "scala", path: "file.scala", expected: true},
+		{name: "clj", path: "file.clj", expected: true},
+		{name: "hs", path: "file.hs", expected: true},
+		{name: "css", path: "file.css", expected: true},
+		{name: "scss", path: "file.scss", expected: true},
+		{name: "sass", path: "file.sass", expected: true},
+		{name: "less", path: "file.less", expected: true},
+		{name: "html", path: "file.html", expected: true},
+		{name: "htm", path: "file.htm", expected: true},
+		{name: "xml", path: "file.xml", expected: true},
+		{name: "svg", path: "file.svg", expected: true},
+		{name: "sql", path: "file.sql", expected: true},
+		{name: "pl", path: "file.pl", expected: true},
+		{name: "lua", path: "file.lua", expected: true},
+		{name: "r", path: "file.r", expected: true},
+		{name: "m", path: "file.m", expected: true},
+		{name: "mm", path: "file.mm", expected: true},
+		{name: "dart", path: "file.dart", expected: true},
+		{name: "tf", path: "file.tf", expected: true},
+		{name: "tfvars", path: "file.tfvars", expected: true},
+		{name: "lock", path: "file.lock", expected: true},
+		{name: "log", path: "file.log", expected: true},
+		{name: "gitignore", path: "file.gitignore", expected: true},
+		{name: "dockerignore", path: "file.dockerignore", expected: true},
+		{name: "bzl", path: "file.bzl", expected: true},
+		{name: "lock", path: "file.lock", expected: true},
+		{name: "log", path: "file.log", expected: true},
+		{name: "gitignore", path: "file.gitignore", expected: true},
+		{name: "dockerignore", path: "file.dockerignore", expected: true},
+		{name: "bzl", path: "file.bzl", expected: true},
+		{name: "lock", path: "file.lock", expected: true},
+		{name: "log", path: "file.log", expected: true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasNullBytes(tt.content)
+			result := commonAcceptableFileExtension(tt.path)
 			if result != tt.expected {
-				t.Errorf("hasNullBytes(%v) = %v, want %v", tt.content, result, tt.expected)
+				t.Errorf("commonAcceptableFileExtension(%s) = %v, want %v", tt.path, result, tt.expected)
 			}
 		})
 	}
