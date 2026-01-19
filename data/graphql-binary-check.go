@@ -1,12 +1,12 @@
 package data
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,6 +73,10 @@ func (bc *binaryChecker) check(isBinaryPtr *bool, isTruncated bool, path string)
 	if isBinaryPtr != nil {
 		return *isBinaryPtr, nil
 	}
+	// If file has a common text extension, assume it's not binary to avoid unnecessary HTTP requests
+	if commonAcceptableFileExtension(path) {
+		return false, nil
+	}
 	if isTruncated {
 		binary, err := bc.checkViaPartialFetch(path)
 		if err != nil {
@@ -115,12 +119,41 @@ func (bc *binaryChecker) checkViaPartialFetch(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-
-	return hasNullBytes(content), nil
+	
+	return mimeContentTypeIsBinary(content), nil
 }
 
-func hasNullBytes(content []byte) bool {
-	return bytes.IndexByte(content, 0) != -1
+func mimeContentTypeIsBinary(content []byte) bool {
+    contentType := http.DetectContentType(content)
+
+    switch {
+	case strings.HasPrefix(contentType, "application/"):
+        return true
+    default:
+        return false
+    }
+}
+
+func commonAcceptableFileExtension(path string) bool {
+	// Extract file extension from path
+	lastDot := strings.LastIndex(path, ".")
+	if lastDot == -1 || lastDot == len(path)-1 {
+		return false // No extension or extension is empty
+	}
+	ext := strings.ToLower(path[lastDot:])
+	
+	extensions := []string{
+		".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".ini", ".conf", ".env",
+		".sh", ".bash", ".zsh", ".fish",
+		".c", ".cpp", ".h", ".hpp", ".c++", ".h++", ".cxx", ".hxx", ".cu", ".cuh",
+		".go", ".rs", ".py", ".java", ".js", ".ts", ".jsx", ".tsx",
+		".rb", ".php", ".swift", ".kt", ".scala", ".clj", ".hs",
+		".css", ".scss", ".sass", ".less", ".html", ".htm", ".xml", ".svg",
+		".sql", ".pl", ".lua", ".r", ".m", ".mm", ".dart",
+		".tf", ".tfvars", ".hcl", ".bzl", ".BUILD",
+		".lock", ".log", ".gitignore", ".dockerignore",
+	}
+	return slices.Contains(extensions, ext)
 }
 
 func checkTreeForBinaries(tree *GraphqlRepoTree, bc *binaryChecker) (binariesFound []string, err error) {
