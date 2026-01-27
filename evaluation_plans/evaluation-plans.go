@@ -8,6 +8,7 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/governance"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/legal"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/quality"
+	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/sec_assessment"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/vuln_management"
 
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
@@ -191,7 +192,8 @@ var (
 			quality.RequiresNonAuthorApproval,
 		},
 		"OSPS-SA-01.01": {
-			reusable_steps.NotImplemented,
+			reusable_steps.HasMadeReleases,
+			sec_assessment.HasDesignDocumentation,
 		},
 		"OSPS-SA-02.01": {
 			reusable_steps.NotImplemented,
