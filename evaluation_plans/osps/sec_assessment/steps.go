@@ -20,6 +20,8 @@ var DesignDocFiles = []string{
 
 // DesignDocDirectories are common directory names that typically contain design documentation
 var DesignDocDirectories = []string{
+    "adr",
+    "adrs",
 	"architecture",
 	"design",
 	"docs",
