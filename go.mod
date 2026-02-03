@@ -3,9 +3,9 @@ module github.com/revanite-io/pvtr-github-repo
 go 1.25.1
 
 require (
+	github.com/gemaraproj/go-gemara v0.15.2
 	github.com/google/go-github/v74 v74.0.0
 	github.com/migueleliasweb/go-github-mock v1.5.0
-	github.com/ossf/gemara v0.15.2
 	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
 	github.com/privateerproj/privateer-sdk v1.16.0
 	github.com/rhysd/actionlint v1.7.10
@@ -24,9 +24,9 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
-	github.com/go-git/go-git/v5 v5.16.3 // indirect
+	github.com/go-git/go-git/v5 v5.16.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/goccy/go-yaml v1.18.0 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-github/v71 v71.0.0 // indirect
 	github.com/google/go-github/v73 v73.0.0 // indirect
@@ -54,7 +54,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20250311123330-531bef5e742b
-	github.com/hashicorp/go-hclog v1.6.3 // indirect
+	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.7.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -71,7 +71,7 @@ require (
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/cobra v1.10.1 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/stretchr/testify v1.11.1
@@ -87,6 +87,8 @@ require (
 )
 
 // Uncomment if you're working on a dependency locally
-// replace github.com/privateerproj/privateer-sdk => ../../privateerproj/privateer-sdk
+replace github.com/privateerproj/privateer-sdk => ../privateer-sdk
+
+replace github.com/gemaraproj/go-gemara => ../../gemaraproj/go-gemara
 
 // replace github.com/ossf/si-tooling/v2 => ../si-tooling/v2

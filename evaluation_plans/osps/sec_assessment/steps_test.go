@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/si-tooling/v2/si"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
@@ -14,13 +14,13 @@ func Test_HasDesignDocumentation(t *testing.T) {
 	tests := []struct {
 		name       string
 		payload    any
-		wantResult layer4.Result
+		wantResult gemara.Result
 		wantMsg    string
 	}{
 		{
 			name:       "malformed payload",
 			payload:    "not a payload",
-			wantResult: layer4.Unknown,
+			wantResult: gemara.Unknown,
 			wantMsg:    "",
 		},
 		{
@@ -29,7 +29,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				GraphqlRepoData: nil,
 				RestData:        nil,
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",
 		},
 		{
@@ -38,7 +38,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{DesignDocFiles[0], "README.md"}),
 				RestData:        &data.RestData{},
 			},
-			wantResult: layer4.Passed,
+			wantResult: gemara.Passed,
 			wantMsg:    "Design documentation found: " + DesignDocFiles[0],
 		},
 		{
@@ -47,7 +47,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{strings.ToUpper(DesignDocFiles[1])}),
 				RestData:        &data.RestData{},
 			},
-			wantResult: layer4.Passed,
+			wantResult: gemara.Passed,
 			wantMsg:    "Design documentation found: " + strings.ToUpper(DesignDocFiles[1]),
 		},
 		{
@@ -70,7 +70,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 					},
 				},
 			},
-			wantResult: layer4.NeedsReview,
+			wantResult: gemara.NeedsReview,
 			wantMsg:    "No design documentation file found, but detailed guide specified in Security Insights - manual review needed to confirm design documentation with actions and actors",
 		},
 		{
@@ -79,7 +79,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md"}),
 				RestData:        &data.RestData{},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",
 		},
 		{
@@ -91,7 +91,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				}),
 				RestData: &data.RestData{},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",
 		},
 		{
@@ -100,7 +100,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"ARCHITECTURE.pdf", "design.doc"}),
 				RestData:        &data.RestData{},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",
 		},
 		{
@@ -112,7 +112,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				}),
 				RestData: &data.RestData{},
 			},
-			wantResult: layer4.NeedsReview,
+			wantResult: gemara.NeedsReview,
 			wantMsg:    "No design documentation file found in root, but found directories that may contain design documentation: docs - manual review needed",
 		},
 		{
@@ -124,7 +124,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				}),
 				RestData: &data.RestData{},
 			},
-			wantResult: layer4.NeedsReview,
+			wantResult: gemara.NeedsReview,
 			wantMsg:    "No design documentation file found in root, but found directories that may contain design documentation: architecture - manual review needed",
 		},
 		{
@@ -137,7 +137,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				}),
 				RestData: &data.RestData{},
 			},
-			wantResult: layer4.NeedsReview,
+			wantResult: gemara.NeedsReview,
 			wantMsg:    "No design documentation file found in root, but found directories that may contain design documentation: docs, design - manual review needed",
 		},
 		{
@@ -149,7 +149,7 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				}),
 				RestData: &data.RestData{},
 			},
-			wantResult: layer4.Passed,
+			wantResult: gemara.Passed,
 			wantMsg:    "Design documentation found: architecture.md",
 		},
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/privateerproj/privateer-sdk/config"
 	"github.com/revanite-io/pvtr-github-repo/data"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +28,7 @@ func TestReleasesLicensed(t *testing.T) {
 	tests := []struct {
 		name            string
 		payloadData     any
-		expectedResult  layer4.Result
+		expectedResult  gemara.Result
 		expectedMessage string
 	}{
 		{
@@ -38,7 +38,7 @@ func TestReleasesLicensed(t *testing.T) {
 					Releases: []data.ReleaseData{},
 				},
 			},
-			expectedResult:  layer4.NotApplicable,
+			expectedResult:  gemara.NotApplicable,
 			expectedMessage: "No releases found",
 		},
 		{
@@ -53,7 +53,7 @@ func TestReleasesLicensed(t *testing.T) {
 				},
 				GraphqlRepoData: &data.GraphqlRepoData{},
 			},
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "License was not found in a well known location via the GitHub API",
 		},
 		{
@@ -68,7 +68,7 @@ func TestReleasesLicensed(t *testing.T) {
 				},
 				GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
 			},
-			expectedResult:  layer4.Passed,
+			expectedResult:  gemara.Passed,
 			expectedMessage: "GitHub releases include the license(s) in the released source code.",
 		},
 	}
@@ -194,13 +194,13 @@ func TestGoodLicense(t *testing.T) {
 		payloadData     any
 		apiResponse     []byte
 		apiError        error
-		expectedResult  layer4.Result
+		expectedResult  gemara.Result
 		expectedMessage string
 	}{
 		{
 			name:            "Invalid payload",
 			payloadData:     "invalid",
-			expectedResult:  layer4.Unknown,
+			expectedResult:  gemara.Unknown,
 			expectedMessage: "Malformed assessment: expected payload type data.Payload, got string (invalid)",
 		},
 		{
@@ -211,7 +211,7 @@ func TestGoodLicense(t *testing.T) {
 			},
 			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false}]}`),
 			apiError:        nil,
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "License SPDX identifier was not found in Security Insights data or via GitHub API",
 		},
 		{
@@ -226,7 +226,7 @@ func TestGoodLicense(t *testing.T) {
 			},
 			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false}]}`),
 			apiError:        nil,
-			expectedResult:  layer4.Passed,
+			expectedResult:  gemara.Passed,
 			expectedMessage: "All license found are OSI or FSF approved",
 		},
 		{
@@ -241,7 +241,7 @@ func TestGoodLicense(t *testing.T) {
 			},
 			apiResponse:     []byte(`{"licenses":[{"licenseId":"BadLicense","isOsiApproved":false,"isFsfLibre":false}]}`),
 			apiError:        nil,
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "These licenses are not OSI or FSF approved: BadLicense",
 		},
 		{
@@ -256,7 +256,7 @@ func TestGoodLicense(t *testing.T) {
 			},
 			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false},{"licenseId":"BadLicense","isOsiApproved":false,"isFsfLibre":false}]}`),
 			apiError:        nil,
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "These licenses are not OSI or FSF approved: BadLicense",
 		},
 		{
@@ -271,7 +271,7 @@ func TestGoodLicense(t *testing.T) {
 			},
 			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false}]}`),
 			apiError:        nil,
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "These licenses are not OSI or FSF approved: UnknownLicense",
 		},
 	}

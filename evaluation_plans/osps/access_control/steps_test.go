@@ -3,7 +3,7 @@ package access_control
 import (
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/revanite-io/pvtr-github-repo/data"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,7 +30,7 @@ func Test_OrgRequiresMFA(t *testing.T) {
 	tests := []struct {
 		name        string
 		payload     data.Payload
-		wantResult  layer4.Result
+		wantResult  gemara.Result
 		wantMessage string
 	}{
 		{
@@ -38,7 +38,7 @@ func Test_OrgRequiresMFA(t *testing.T) {
 			payload: data.Payload{
 				RepositoryMetadata: stubRepoMetadata(&trueVal),
 			},
-			wantResult:  layer4.Passed,
+			wantResult:  gemara.Passed,
 			wantMessage: "Two-factor authentication is configured as required by the parent organization",
 		},
 		{
@@ -46,7 +46,7 @@ func Test_OrgRequiresMFA(t *testing.T) {
 			payload: data.Payload{
 				RepositoryMetadata: stubRepoMetadata(&falseVal),
 			},
-			wantResult:  layer4.Failed,
+			wantResult:  gemara.Failed,
 			wantMessage: "Two-factor authentication is NOT configured as required by the parent organization",
 		},
 		{
@@ -54,7 +54,7 @@ func Test_OrgRequiresMFA(t *testing.T) {
 			payload: data.Payload{
 				RepositoryMetadata: stubRepoMetadata(nil),
 			},
-			wantResult:  layer4.NotRun,
+			wantResult:  gemara.NotRun,
 			wantMessage: "Not evaluated. Two-factor authentication evaluation requires a token with org:admin permissions, or manual review",
 		},
 	}
@@ -73,7 +73,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 	tests := []struct {
 		name        string
 		payload     data.Payload
-		wantResult  layer4.Result
+		wantResult  gemara.Result
 		wantMessage string
 	}{
 		{
@@ -87,7 +87,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 					},
 				},
 			},
-			wantResult:  layer4.Passed,
+			wantResult:  gemara.Passed,
 			wantMessage: "Workflow permissions default to read only.",
 		},
 		{
@@ -101,7 +101,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 					},
 				},
 			},
-			wantResult:  layer4.Failed,
+			wantResult:  gemara.Failed,
 			wantMessage: "Workflow permissions default to read only for contents and packages, but PR approval is permitted.",
 		},
 		{
@@ -115,7 +115,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 					},
 				},
 			},
-			wantResult:  layer4.Failed,
+			wantResult:  gemara.Failed,
 			wantMessage: "Workflow permissions default to read/write, but PR approval is forbidden.",
 		},
 		{
@@ -129,7 +129,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 					},
 				},
 			},
-			wantResult:  layer4.Failed,
+			wantResult:  gemara.Failed,
 			wantMessage: "Workflow permissions default to read/write and PR approval is permitted.",
 		},
 		{
@@ -143,7 +143,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 					},
 				},
 			},
-			wantResult:  layer4.NeedsReview,
+			wantResult:  gemara.NeedsReview,
 			wantMessage: "GitHub Actions is disabled for this repository; manual review required.",
 		},
 	}
