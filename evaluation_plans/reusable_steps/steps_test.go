@@ -89,7 +89,7 @@ func TestHasDependencyManagementPolicy(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		result, message := HasDependencyManagementPolicy(test.payloadData)
+		result, message, _ := HasDependencyManagementPolicy(test.payloadData)
 		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
 		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
 	}
@@ -131,7 +131,7 @@ func TestIsCodeRepo(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result, message := IsCodeRepo(tt.payloadData)
+		result, message, _ := IsCodeRepo(tt.payloadData)
 		assert.Equal(t, tt.expectedResult, result, tt.assertionMessage)
 		assert.Equal(t, tt.expectedMessage, message, tt.assertionMessage)
 	}
@@ -184,7 +184,7 @@ func TestHasSecurityInsightsFile(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result, message := HasSecurityInsightsFile(tt.payloadData)
+		result, message, _ := HasSecurityInsightsFile(tt.payloadData)
 		assert.Equal(t, tt.expectedResult, result, tt.assertionMessage)
 		assert.Equal(t, tt.expectedMessage, message, tt.assertionMessage)
 	}
@@ -252,7 +252,7 @@ func TestIsActive(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result, message := IsActive(tt.payloadData)
+		result, message, _ := IsActive(tt.payloadData)
 		assert.Equal(t, tt.expectedResult, result, tt.assertionMessage)
 		assert.Equal(t, tt.expectedMessage, message, tt.assertionMessage)
 	}

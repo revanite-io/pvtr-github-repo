@@ -75,7 +75,7 @@ func TestReleasesLicensed(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, message := ReleasesLicensed(test.payloadData)
+			result, message, _ := ReleasesLicensed(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})
@@ -283,7 +283,7 @@ func TestGoodLicense(t *testing.T) {
 				test.payloadData = payload
 			}
 
-			result, message := GoodLicense(test.payloadData)
+			result, message, _ := GoodLicense(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})

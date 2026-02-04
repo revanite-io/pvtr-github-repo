@@ -31,7 +31,7 @@ var DesignDocDirectories = []string{
 func HasDesignDocumentation(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return gemara.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	var foundDirectories []string
@@ -43,7 +43,7 @@ func HasDesignDocumentation(payloadData any) (result gemara.Result, message stri
 			if entry.Type == "blob" {
 				for _, designFile := range DesignDocFiles {
 					if strings.EqualFold(entry.Name, designFile) {
-						return gemara.Passed, "Design documentation found: " + entry.Name
+						return gemara.Passed, "Design documentation found: " + entry.Name, confidence
 					}
 				}
 			}
@@ -61,13 +61,13 @@ func HasDesignDocumentation(payloadData any) (result gemara.Result, message stri
 
 	// If we found directories that typically contain design docs, flag for manual review
 	if len(foundDirectories) > 0 {
-		return gemara.NeedsReview, "No design documentation file found in root, but found directories that may contain design documentation: " + strings.Join(foundDirectories, ", ") + " - manual review needed"
+		return gemara.NeedsReview, "No design documentation file found in root, but found directories that may contain design documentation: " + strings.Join(foundDirectories, ", ") + " - manual review needed", confidence
 	}
 
 	// Fallback: check if DetailedGuide is specified in Security Insights
 	if data.RestData != nil && data.Insights.Project.Documentation.DetailedGuide != "" {
-		return gemara.NeedsReview, "No design documentation file found, but detailed guide specified in Security Insights - manual review needed to confirm design documentation with actions and actors"
+		return gemara.NeedsReview, "No design documentation file found, but detailed guide specified in Security Insights - manual review needed to confirm design documentation with actions and actors", confidence
 	}
 
-	return gemara.Failed, "Design documentation demonstrating all actions and actors was NOT found"
+	return gemara.Failed, "Design documentation demonstrating all actions and actors was NOT found", confidence
 }

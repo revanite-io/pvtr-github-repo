@@ -61,7 +61,7 @@ func Test_OrgRequiresMFA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMessage := OrgRequiresMFA(tt.payload)
+			gotResult, gotMessage, _ := OrgRequiresMFA(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
 		})
@@ -150,7 +150,7 @@ func Test_WorkflowDefaultReadPermissions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMessage := WorkflowDefaultReadPermissions(tt.payload)
+			gotResult, gotMessage, _ := WorkflowDefaultReadPermissions(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
 		})

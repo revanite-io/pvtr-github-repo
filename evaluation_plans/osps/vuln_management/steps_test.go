@@ -99,7 +99,7 @@ func TestSastToolDefined(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		result, message := SastToolDefined(test.payloadData)
+		result, message, _ := SastToolDefined(test.payloadData)
 
 		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
 		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
@@ -158,7 +158,7 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, message := HasVulnerabilityDisclosurePolicy(test.payloadData)
+			result, message, _ := HasVulnerabilityDisclosurePolicy(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})
@@ -282,7 +282,7 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, message := HasPrivateVulnerabilityReporting(test.payloadData)
+			result, message, _ := HasPrivateVulnerabilityReporting(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})

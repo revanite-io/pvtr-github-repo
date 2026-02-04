@@ -61,7 +61,7 @@ func Test_InsightsListsRepositories(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMsg := InsightsListsRepositories(tt.payload)
+			gotResult, gotMsg, _ := InsightsListsRepositories(tt.payload)
 			if gotResult != tt.wantResult {
 				t.Errorf("result = %v, want %v", gotResult, tt.wantResult)
 			}

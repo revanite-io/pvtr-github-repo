@@ -9,23 +9,23 @@ import (
 func OrgRequiresMFA(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return gemara.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	required := payload.RepositoryMetadata.IsMFARequiredForAdministrativeActions()
 
 	if required == nil {
-		return gemara.NotRun, "Not evaluated. Two-factor authentication evaluation requires a token with org:admin permissions, or manual review"
+		return gemara.NotRun, "Not evaluated. Two-factor authentication evaluation requires a token with org:admin permissions, or manual review", confidence
 	} else if *required {
-		return gemara.Passed, "Two-factor authentication is configured as required by the parent organization"
+		return gemara.Passed, "Two-factor authentication is configured as required by the parent organization", confidence
 	}
-	return gemara.Failed, "Two-factor authentication is NOT configured as required by the parent organization"
+	return gemara.Failed, "Two-factor authentication is NOT configured as required by the parent organization", confidence
 }
 
 func BranchProtectionRestrictsPushes(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return gemara.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 	protectionData := payload.Repository.DefaultBranchRef.BranchProtectionRule
 
@@ -45,7 +45,7 @@ func BranchProtectionRestrictsPushes(payloadData any) (result gemara.Result, mes
 func BranchProtectionPreventsDeletion(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return gemara.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	allowsDeletion := payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions
@@ -63,12 +63,12 @@ func BranchProtectionPreventsDeletion(payloadData any) (result gemara.Result, me
 func WorkflowDefaultReadPermissions(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	payload, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return gemara.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	permissions := payload.WorkflowPermissions
 	if !payload.WorkflowsEnabled {
-		return gemara.NeedsReview, "GitHub Actions is disabled for this repository; manual review required."
+		return gemara.NeedsReview, "GitHub Actions is disabled for this repository; manual review required.", confidence
 	}
 
 	if permissions.DefaultPermissions == "read" && !permissions.CanApprovePullRequest {
