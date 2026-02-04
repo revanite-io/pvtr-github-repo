@@ -1,7 +1,7 @@
 package evaluation_plans
 
 import (
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/access_control"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/build_release"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/docs"
@@ -16,7 +16,7 @@ import (
 
 var (
 	// Open Source Project Security Baseline
-	OSPS = map[string][]layer4.AssessmentStep{
+	OSPS = map[string][]gemara.AssessmentStep{
 		"OSPS-AC-01.01": {
 			access_control.OrgRequiresMFA,
 		},

@@ -1,81 +1,81 @@
 package governance
 
 import (
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func CoreTeamIsListed(payloadData any) (result layer4.Result, message string) {
+func CoreTeamIsListed(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if len(data.Insights.Repository.CoreTeam) == 0 {
-		return layer4.Failed, "Core team was NOT specified in Security Insights data"
+		return gemara.Failed, "Core team was NOT specified in Security Insights data", confidence
 	}
 
-	return layer4.Passed, "Core team was specified in Security Insights data"
+	return gemara.Passed, "Core team was specified in Security Insights data", confidence
 }
 
-func ProjectAdminsListed(payloadData any) (result layer4.Result, message string) {
+func ProjectAdminsListed(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if len(data.Insights.Project.Administrators) == 0 {
-		return layer4.Failed, "Project admins were NOT specified in Security Insights data"
+		return gemara.Failed, "Project admins were NOT specified in Security Insights data", confidence
 	}
 
-	return layer4.Passed, "Project admins were specified in Security Insights data"
+	return gemara.Passed, "Project admins were specified in Security Insights data", confidence
 }
 
-func HasRolesAndResponsibilities(payloadData any) (result layer4.Result, message string) {
+func HasRolesAndResponsibilities(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if data.Insights.Repository.Documentation.Governance == "" {
-		return layer4.Failed, "Roles and responsibilities were NOT specified in Security Insights data"
+		return gemara.Failed, "Roles and responsibilities were NOT specified in Security Insights data", confidence
 	}
 
-	return layer4.Passed, "Roles and responsibilities were specified in Security Insights data"
+	return gemara.Passed, "Roles and responsibilities were specified in Security Insights data", confidence
 }
 
-func HasContributionGuide(payloadData any) (result layer4.Result, message string) {
+func HasContributionGuide(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if data.Insights.Project.Documentation.CodeOfConduct != "" && data.Insights.Repository.Documentation.Contributing != "" {
-		return layer4.Passed, "Contributing guide specified in Security Insights data (Bonus: code of conduct location also specified)"
+		return gemara.Passed, "Contributing guide specified in Security Insights data (Bonus: code of conduct location also specified)", confidence
 	}
 
 	if data.Repository.ContributingGuidelines.Body != "" && data.Insights.Project.Documentation.CodeOfConduct != "" {
-		return layer4.Passed, "Contributing guide was found via GitHub API (Bonus: code of conduct was specified in Security Insights data)"
+		return gemara.Passed, "Contributing guide was found via GitHub API (Bonus: code of conduct was specified in Security Insights data)", confidence
 	}
 
 	if data.Repository.ContributingGuidelines.Body != "" {
-		return layer4.NeedsReview, "Contributing guide was found via GitHub API (Recommendation: Add code of conduct location to Security Insights data)"
+		return gemara.NeedsReview, "Contributing guide was found via GitHub API (Recommendation: Add code of conduct location to Security Insights data)", confidence
 	}
 
-	return layer4.Failed, "Contribution guide not found in Security Insights data or via GitHub API"
+	return gemara.Failed, "Contribution guide not found in Security Insights data or via GitHub API", confidence
 }
 
-func HasContributionReviewPolicy(payloadData any) (result layer4.Result, message string) {
+func HasContributionReviewPolicy(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 	if !data.IsCodeRepo {
-		return layer4.NotApplicable, "Repository contains no code - skipping code contribution policy check"
+		return gemara.NotApplicable, "Repository contains no code - skipping code contribution policy check", confidence
 	}
 	if data.Insights.Repository.Documentation.ReviewPolicy != "" {
-		return layer4.Passed, "Code review guide was specified in Security Insights data"
+		return gemara.Passed, "Code review guide was specified in Security Insights data", confidence
 	}
 
-	return layer4.Failed, "Code review guide was NOT specified in Security Insights data"
+	return gemara.Failed, "Code review guide was NOT specified in Security Insights data", confidence
 }

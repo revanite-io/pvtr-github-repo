@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/rhysd/actionlint"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
@@ -33,12 +33,12 @@ var untrustedVarsRegex = `.*(github\.event\.issue\.title|` +
 	`github\.event\.pull_request\.head\.repo\.default_branch|` +
 	`github\.head_ref).*`
 
-func CicdSanitizedInputParameters(payloadData any) (result layer4.Result, message string) {
+func CicdSanitizedInputParameters(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 
 	// parse the payload and see if we pass our checks
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 	workflows, err := data.GetDirectoryContent(".github/workflows")
 	if len(workflows) == 0 {
@@ -47,7 +47,7 @@ func CicdSanitizedInputParameters(payloadData any) (result layer4.Result, messag
 		} else {
 			message = "No workflows found in .github/workflows directory"
 		}
-		return layer4.NotApplicable, message
+		return gemara.NotApplicable, message, confidence
 	}
 
 	for _, file := range workflows {
@@ -56,28 +56,28 @@ func CicdSanitizedInputParameters(payloadData any) (result layer4.Result, messag
 		}
 
 		if *file.Encoding != "base64" {
-			return layer4.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name)
+			return gemara.Failed, fmt.Sprintf("File %v is not base64 encoded", file.Name), confidence
 		}
 
 		decoded, err := base64.StdEncoding.DecodeString(*file.Content)
 		if err != nil {
-			return layer4.Failed, fmt.Sprintf("Error decoding workflow file: %v", err)
+			return gemara.Failed, fmt.Sprintf("Error decoding workflow file: %v", err), confidence
 		}
 
 		workflow, actionError := actionlint.Parse(decoded)
 		if actionError != nil {
-			return layer4.Failed, fmt.Sprintf("Error parsing workflow: %v (%s)", actionError, *file.Path)
+			return gemara.Failed, fmt.Sprintf("Error parsing workflow: %v (%s)", actionError, *file.Path), confidence
 		}
 
 		// Check the workflow for untrusted inputs
 		ok, message := checkWorkflowFileForUntrustedInputs(workflow)
 
 		if !ok {
-			return layer4.Failed, message
+			return gemara.Failed, message, confidence
 		}
 	}
 
-	return layer4.Passed, "GitHub Workflows variables do not contain untrusted inputs"
+	return gemara.Passed, "GitHub Workflows variables do not contain untrusted inputs", confidence
 
 }
 
@@ -154,10 +154,10 @@ func pullVariablesFromScript(script string) []string {
 
 }
 
-func ReleaseHasUniqueIdentifier(payloadData any) (result layer4.Result, message string) {
+func ReleaseHasUniqueIdentifier(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	var noNameCount int
@@ -179,9 +179,9 @@ func ReleaseHasUniqueIdentifier(payloadData any) (result layer4.Result, message 
 		if len(sameNameFound) > 0 {
 			message = append(message, fmt.Sprintf("Found %v releases with the same name: %v", len(sameNameFound), sameNames))
 		}
-		return layer4.Failed, strings.Join(message, ". ")
+		return gemara.Failed, strings.Join(message, ". "), confidence
 	}
-	return layer4.Passed, "All releases found have a unique name"
+	return gemara.Passed, "All releases found have a unique name", confidence
 }
 
 func getLinks(data data.Payload) []string {
@@ -232,10 +232,10 @@ func insecureURI(uri string) bool {
 	return true
 }
 
-func EnsureInsightsLinksUseHTTPS(payloadData any) (result layer4.Result, message string) {
+func EnsureInsightsLinksUseHTTPS(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	links := getLinks(data)
@@ -246,50 +246,50 @@ func EnsureInsightsLinksUseHTTPS(payloadData any) (result layer4.Result, message
 		}
 	}
 	if len(badURIs) > 0 {
-		return layer4.Failed, fmt.Sprintf("The following links do not use HTTPS: %v", strings.Join(badURIs, ", "))
+		return gemara.Failed, fmt.Sprintf("The following links do not use HTTPS: %v", strings.Join(badURIs, ", ")), confidence
 	}
-	return layer4.Passed, "All links use HTTPS"
+	return gemara.Passed, "All links use HTTPS", confidence
 }
 
-func EnsureLatestReleaseHasChangelog(payloadData any) (result layer4.Result, message string) {
+func EnsureLatestReleaseHasChangelog(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	releaseDescription := data.Repository.LatestRelease.Description
 	if strings.Contains(releaseDescription, "Change Log") || strings.Contains(releaseDescription, "Changelog") {
-		return layer4.Passed, "Mention of a changelog found in the latest release"
+		return gemara.Passed, "Mention of a changelog found in the latest release", confidence
 	}
-	return layer4.Failed, "The latest release does not have mention of a changelog: \n" + releaseDescription
+	return gemara.Failed, "The latest release does not have mention of a changelog: \n" + releaseDescription, confidence
 }
 
-func InsightsHasSlsaAttestation(payloadData any) (result layer4.Result, message string) {
+func InsightsHasSlsaAttestation(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	attestations := data.Insights.Repository.Release.Attestations
 
 	for _, attestation := range attestations {
 		if attestation.PredicateURI == "https://slsa.dev/provenance/v1" {
-			return layer4.Passed, "Found SLSA attestation in security insights"
+			return gemara.Passed, "Found SLSA attestation in security insights", confidence
 		}
 	}
-	return layer4.Failed, "No SLSA attestation found in security insights"
+	return gemara.Failed, "No SLSA attestation found in security insights", confidence
 }
 
-func DistributionPointsUseHTTPS(payloadData any) (result layer4.Result, message string) {
+func DistributionPointsUseHTTPS(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	distributionPoints := data.Insights.Repository.Release.DistributionPoints
 
 	if len(distributionPoints) == 0 {
-		return layer4.NotApplicable, "No official distribution points found in Security Insights data"
+		return gemara.NotApplicable, "No official distribution points found in Security Insights data", confidence
 	}
 
 	var badURIs []string
@@ -299,22 +299,22 @@ func DistributionPointsUseHTTPS(payloadData any) (result layer4.Result, message 
 		}
 	}
 	if len(badURIs) > 0 {
-		return layer4.Failed, fmt.Sprintf("The following distribution points do not use HTTPS: %v", strings.Join(badURIs, ", "))
+		return gemara.Failed, fmt.Sprintf("The following distribution points do not use HTTPS: %v", strings.Join(badURIs, ", ")), confidence
 	}
-	return layer4.Passed, "All distribution points use HTTPS"
+	return gemara.Passed, "All distribution points use HTTPS", confidence
 }
 
-func SecretScanningInUse(payloadData any) (result layer4.Result, message string) {
+func SecretScanningInUse(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if data.SecurityPosture.PreventsPushingSecrets() && data.SecurityPosture.ScansForSecrets() {
-		return layer4.Passed, "Secret scanning is enabled and prevents pushing secrets"
+		return gemara.Passed, "Secret scanning is enabled and prevents pushing secrets", confidence
 	} else if data.SecurityPosture.PreventsPushingSecrets() || data.SecurityPosture.ScansForSecrets() {
-		return layer4.Failed, "Secret scanning is only partially enabled"
+		return gemara.Failed, "Secret scanning is only partially enabled", confidence
 	} else {
-		return layer4.Failed, "Secret scanning is not enabled"
+		return gemara.Failed, "Secret scanning is not enabled", confidence
 	}
 }

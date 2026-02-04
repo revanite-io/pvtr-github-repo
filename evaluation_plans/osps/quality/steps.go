@@ -4,38 +4,38 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
 )
 
-func RepoIsPublic(payloadData any) (result layer4.Result, message string) {
+func RepoIsPublic(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 	if data.RepositoryMetadata.IsPublic() {
-		return layer4.Passed, "Repository is public"
+		return gemara.Passed, "Repository is public", confidence
 	}
-	return layer4.Failed, "Repository is private"
+	return gemara.Failed, "Repository is private", confidence
 }
 
-func InsightsListsRepositories(payloadData any) (result layer4.Result, message string) {
+func InsightsListsRepositories(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if len(data.Insights.Project.Repositories) > 0 {
-		return layer4.Passed, "Insights contains a list of repositories"
+		return gemara.Passed, "Insights contains a list of repositories", confidence
 	}
 
-	return layer4.Failed, "Insights does not contain a list of repositories"
+	return gemara.Failed, "Insights does not contain a list of repositories", confidence
 }
 
-func StatusChecksAreRequiredByRulesets(payloadData any) (result layer4.Result, message string) {
+func StatusChecksAreRequiredByRulesets(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	// get the name of all status checks that were run
@@ -51,7 +51,7 @@ func StatusChecksAreRequiredByRulesets(payloadData any) (result layer4.Result, m
 	// get the rules that apply to the default branch
 	rules := data.GetRulesets(data.Repository.DefaultBranchRef.Name)
 	if len(rules) == 0 {
-		return layer4.Passed, "No rulesets found for default branch, continuing to evaluate branch protection"
+		return gemara.Passed, "No rulesets found for default branch, continuing to evaluate branch protection", confidence
 	}
 
 	// get the name of all required status checks
@@ -78,16 +78,16 @@ func StatusChecksAreRequiredByRulesets(payloadData any) (result layer4.Result, m
 	}
 
 	if len(missingChecks) > 0 {
-		return layer4.Failed, fmt.Sprintf("Some executed status checks are not mandatory but all should be: %s (NOTE: Not continuing to evaluate branch protection: combining requirements in rulesets and branch protection is not recommended)", strings.Join(missingChecks, ", "))
+		return gemara.Failed, fmt.Sprintf("Some executed status checks are not mandatory but all should be: %s (NOTE: Not continuing to evaluate branch protection: combining requirements in rulesets and branch protection is not recommended)", strings.Join(missingChecks, ", ")), confidence
 	}
 
-	return layer4.Passed, "No status checks were run that are not required by the rules"
+	return gemara.Passed, "No status checks were run that are not required by the rules", confidence
 }
 
-func StatusChecksAreRequiredByBranchProtection(payloadData any) (result layer4.Result, message string) {
+func StatusChecksAreRequiredByBranchProtection(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	// get the name of all status checks that were run
@@ -118,16 +118,16 @@ func StatusChecksAreRequiredByBranchProtection(payloadData any) (result layer4.R
 	}
 
 	if len(missingChecks) > 0 {
-		return layer4.Failed, fmt.Sprintf("Some executed status checks are not mandatory but all should be: %s", strings.Join(missingChecks, ", "))
+		return gemara.Failed, fmt.Sprintf("Some executed status checks are not mandatory but all should be: %s", strings.Join(missingChecks, ", ")), confidence
 	}
 
-	return layer4.Passed, "No status checks were run that are not required by branch protection"
+	return gemara.Passed, "No status checks were run that are not required by branch protection", confidence
 }
 
-func NoBinariesInRepo(payloadData any) (result layer4.Result, message string) {
+func NoBinariesInRepo(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	// TODO: This only checks the top 3 levels of the repository tree
@@ -135,42 +135,42 @@ func NoBinariesInRepo(payloadData any) (result layer4.Result, message string) {
 	suspectedBinaries, err := data.GetSuspectedBinaries()
 	if err != nil {
 		data.Config.Logger.Trace(fmt.Sprintf("unexpected response while checking for binaries: %s", err.Error()))
-		return layer4.Unknown, "Error while scanning repository for binaries, potentially due to repo size. See logs for details."
+		return gemara.Unknown, "Error while scanning repository for binaries, potentially due to repo size. See logs for details.", confidence
 	}
 
 	if len(suspectedBinaries) == 0 {
-		return layer4.Passed, "No common binary file extensions were found in the repository"
+		return gemara.Passed, "No common binary file extensions were found in the repository", confidence
 	}
-	return layer4.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(suspectedBinaries, ", "))
+	return gemara.Failed, fmt.Sprintf("Suspected binaries found in the repository: %s", strings.Join(suspectedBinaries, ", ")), confidence
 }
 
-func RequiresNonAuthorApproval(payloadData any) (result layer4.Result, message string) {
+func RequiresNonAuthorApproval(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 	protection := data.Repository.DefaultBranchRef.BranchProtectionRule
 
 	if !protection.RequiresApprovingReviews {
-		return layer4.Failed, "Branch protection rule does not require reviews"
+		return gemara.Failed, "Branch protection rule does not require reviews", confidence
 	}
 
 	reviewCount := data.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
 	if reviewCount < 1 {
-		return layer4.Failed, "Branch protection rule requires 0 approving reviews"
+		return gemara.Failed, "Branch protection rule requires 0 approving reviews", confidence
 	}
 
 	if !protection.RequireLastPushApproval {
-		return layer4.Failed, "Branch protection does not require re-approval after new commits"
+		return gemara.Failed, "Branch protection does not require re-approval after new commits", confidence
 	}
 
-	return layer4.Passed, fmt.Sprintf("Branch protection requires %d approving reviews and re-approval after new commits", reviewCount)
+	return gemara.Passed, fmt.Sprintf("Branch protection requires %d approving reviews and re-approval after new commits", reviewCount), confidence
 }
 
-func HasOneOrMoreStatusChecks(payloadData any) (result layer4.Result, message string) {
+func HasOneOrMoreStatusChecks(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	// get the name of all status checks that were run
@@ -184,22 +184,22 @@ func HasOneOrMoreStatusChecks(payloadData any) (result layer4.Result, message st
 	}
 
 	if len(statusChecks) > 0 {
-		return layer4.Passed, fmt.Sprintf("%d status checks were run", len(statusChecks))
+		return gemara.Passed, fmt.Sprintf("%d status checks were run", len(statusChecks)), confidence
 	}
 
-	return layer4.Failed, "No status checks were run"
+	return gemara.Failed, "No status checks were run", confidence
 }
 
-func VerifyDependencyManagement(payloadData any) (result layer4.Result, message string) {
+func VerifyDependencyManagement(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	// Validate required fields
 	if data.Repository.Name == "" || data.Repository.DefaultBranchRef.Name == "" ||
 		data.Repository.DefaultBranchRef.Target.OID == "" {
-		return layer4.Unknown, "Missing required repository data"
+		return gemara.Unknown, "Missing required repository data", confidence
 	}
 
 	// Check dependency manifests
@@ -207,32 +207,32 @@ func VerifyDependencyManagement(payloadData any) (result layer4.Result, message 
 	return countDependencyManifests(data)
 }
 
-func countDependencyManifests(payloadData any) (result layer4.Result, message string) {
+func countDependencyManifests(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	manifestsCount := data.DependencyManifestsCount
 	if manifestsCount > 0 {
-		return layer4.Passed, fmt.Sprintf("Found %d dependency manifests from GitHub API", manifestsCount)
+		return gemara.Passed, fmt.Sprintf("Found %d dependency manifests from GitHub API", manifestsCount), confidence
 	}
-	return layer4.NeedsReview, "No dependency manifests found in the GitHub dependency graph API. Review project to ensure dependencies are managed."
+	return gemara.NeedsReview, "No dependency manifests found in the GitHub dependency graph API. Review project to ensure dependencies are managed.", confidence
 }
 
-func DocumentsTestExecution(payloadData any) (result layer4.Result, message string) {
+func DocumentsTestExecution(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	_, message = reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
-	return layer4.NeedsReview, "Review project documentation to ensure it explains when and how tests are run"
+	return gemara.NeedsReview, "Review project documentation to ensure it explains when and how tests are run", confidence
 }
 
-func DocumentsTestMaintenancePolicy(payloadData any) (result layer4.Result, message string) {
+func DocumentsTestMaintenancePolicy(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	_, message = reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
-	return layer4.NeedsReview, "Review project documentation to ensure it contains a clear policy for maintaining tests"
+	return gemara.NeedsReview, "Review project documentation to ensure it contains a clear policy for maintaining tests", confidence
 }
