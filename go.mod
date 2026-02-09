@@ -6,11 +6,11 @@ require (
 	github.com/gemaraproj/go-gemara v0.0.1
 	github.com/google/go-github/v74 v74.0.0
 	github.com/migueleliasweb/go-github-mock v1.5.0
-	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
+	github.com/ossf/si-tooling/v2 v2.2.0
 	github.com/privateerproj/privateer-sdk v1.17.0
 	github.com/rhysd/actionlint v1.7.10
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
-	golang.org/x/oauth2 v0.34.0
+	golang.org/x/oauth2 v0.35.0
 )
 
 require (
