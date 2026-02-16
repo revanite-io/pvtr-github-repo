@@ -207,7 +207,7 @@ func getLinks(data data.Payload) []string {
 	addURLPtr(ins.Project.Documentation.ReleaseProcess)
 	addURLPtr(ins.Project.Documentation.SignatureVerification)
 	addURLPtr(ins.Project.VulnerabilityReporting.BugBountyProgram)
-	addURLPtr(ins.Project.VulnerabilityReporting.SecurityPolicy)
+	addURLPtr(ins.Project.VulnerabilityReporting.Policy)
 	addURL(ins.Repository.Url)
 	addURL(ins.Repository.License.Url)
 	addURLPtr(ins.Repository.SecurityPosture.Assessments.Self.Evidence)

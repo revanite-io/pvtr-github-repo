@@ -125,7 +125,7 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 					Insights: si.SecurityInsights{
 						Project: &si.Project{
 							VulnerabilityReporting: si.VulnerabilityReporting{
-								SecurityPolicy: ptrTo(si.URL("https://example.com/SECURITY.md")),
+								Policy: ptrTo(si.URL("https://example.com/SECURITY.md")),
 							},
 						},
 					},

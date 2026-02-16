@@ -54,7 +54,7 @@ func HasVulnerabilityDisclosurePolicy(payloadData any) (result gemara.Result, me
 		return gemara.Unknown, message, confidence
 	}
 
-	if data.Insights.Project.VulnerabilityReporting.SecurityPolicy == nil {
+	if data.Insights.Project.VulnerabilityReporting.Policy == nil {
 		return gemara.Failed, "Vulnerability disclosure policy was NOT specified in Security Insights data", confidence
 	}
 
