@@ -6,11 +6,11 @@ require (
 	github.com/gemaraproj/go-gemara v0.0.1
 	github.com/google/go-github/v74 v74.0.0
 	github.com/migueleliasweb/go-github-mock v1.5.0
-	github.com/ossf/si-tooling/v2 v2.0.5-0.20250508212737-7ddcc8c43db9
-	github.com/privateerproj/privateer-sdk v1.17.0
-	github.com/rhysd/actionlint v1.7.10
+	github.com/ossf/si-tooling/v2 v2.2.0
+	github.com/privateerproj/privateer-sdk v1.18.0
+	github.com/rhysd/actionlint v1.7.11
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
-	golang.org/x/oauth2 v0.34.0
+	golang.org/x/oauth2 v0.35.0
 )
 
 require (
@@ -49,7 +49,7 @@ require (
 )
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -78,7 +78,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
 	google.golang.org/grpc v1.71.0 // indirect
