@@ -10,6 +10,8 @@ import (
 	"github.com/revanite-io/pvtr-github-repo/data"
 )
 
+func ptrTo[T any](v T) *T { return &v }
+
 func Test_HasDesignDocumentation(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -56,15 +58,9 @@ func Test_HasDesignDocumentation(t *testing.T) {
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md"}),
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Documentation: struct {
-								DetailedGuide         string `yaml:"detailed-guide"`
-								CodeOfConduct         string `yaml:"code-of-conduct"`
-								QuickstartGuide       string `yaml:"quickstart-guide"`
-								ReleaseProcess        string `yaml:"release-process"`
-								SignatureVerification string `yaml:"signature-verification"`
-							}{
-								DetailedGuide: "https://example.com/docs",
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{
+								DetailedGuide: ptrTo(si.URL("https://example.com/docs")),
 							},
 						},
 					},
@@ -77,7 +73,13 @@ func Test_HasDesignDocumentation(t *testing.T) {
 			name: "no design file and no DetailedGuide",
 			payload: data.Payload{
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md"}),
-				RestData:        &data.RestData{},
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{},
+						},
+					},
+				},
 			},
 			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",
@@ -89,7 +91,13 @@ func Test_HasDesignDocumentation(t *testing.T) {
 					{Name: DesignDocFiles[0], Type: "tree"}, // directory, not a file
 					{Name: "README.md", Type: "blob"},
 				}),
-				RestData: &data.RestData{},
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{},
+						},
+					},
+				},
 			},
 			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",
@@ -98,7 +106,13 @@ func Test_HasDesignDocumentation(t *testing.T) {
 			name: "similar but non-matching file name should not match",
 			payload: data.Payload{
 				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"ARCHITECTURE.pdf", "design.doc"}),
-				RestData:        &data.RestData{},
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{},
+						},
+					},
+				},
 			},
 			wantResult: gemara.Failed,
 			wantMsg:    "Design documentation demonstrating all actions and actors was NOT found",

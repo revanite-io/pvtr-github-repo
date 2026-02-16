@@ -38,10 +38,10 @@ func buildSecurityPosture(repository *github.Repository, rd RestData) (SecurityP
 }
 
 func insightsClaimsSecretsTooling(insights si.SecurityInsights) bool {
-	if insights.Repository.Security.Tools == nil {
+	if insights.Repository.SecurityPosture.Tools == nil {
 		return false
 	}
-	for _, tool := range insights.Repository.Security.Tools {
+	for _, tool := range insights.Repository.SecurityPosture.Tools {
 		if tool.Type == "secret-scanning" {
 			return true
 		}

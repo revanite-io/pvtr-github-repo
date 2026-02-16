@@ -26,7 +26,7 @@ func HasUserGuides(payloadData any) (result gemara.Result, message string, confi
 		return gemara.Unknown, message, confidence
 	}
 
-	if data.Insights.Project.Documentation.DetailedGuide == "" {
+	if data.Insights.Project.Documentation.DetailedGuide == nil {
 		return gemara.Failed, "User guide was NOT specified in Security Insights data", confidence
 	}
 
@@ -39,7 +39,7 @@ func AcceptsVulnReports(payloadData any) (result gemara.Result, message string, 
 		return gemara.Unknown, message, confidence
 	}
 
-	if data.Insights.Project.Vulnerability.ReportsAccepted {
+	if data.Insights.Project.VulnerabilityReporting.ReportsAccepted {
 		return gemara.Passed, "Repository accepts vulnerability reports", confidence
 	}
 
@@ -52,7 +52,7 @@ func HasSignatureVerificationGuide(payloadData any) (result gemara.Result, messa
 		return gemara.Unknown, message, confidence
 	}
 
-	if data.Insights.Project.Documentation.SignatureVerification == "" {
+	if data.Insights.Project.Documentation.SignatureVerification == nil {
 		return gemara.Failed, "Signature verification guide was NOT specified in Security Insights data", confidence
 	}
 
@@ -65,7 +65,7 @@ func HasDependencyManagementPolicy(payloadData any) (result gemara.Result, messa
 		return gemara.Unknown, message, confidence
 	}
 
-	if data.Insights.Repository.Documentation.DependencyManagement == "" {
+	if data.Insights.Repository.Documentation.DependencyManagementPolicy == nil {
 		return gemara.Failed, "Dependency management policy was NOT specified in Security Insights data", confidence
 	}
 
@@ -78,7 +78,7 @@ func HasIdentityVerificationGuide(payloadData any) (result gemara.Result, messag
 		return gemara.Unknown, message, confidence
 	}
 
-	if data.Insights.Project.Documentation.SignatureVerification == "" {
+	if data.Insights.Project.Documentation.SignatureVerification == nil {
 		return gemara.Failed, "Identity verification guide was NOT specified in Security Insights data (checked signature-verification field)", confidence
 	}
 

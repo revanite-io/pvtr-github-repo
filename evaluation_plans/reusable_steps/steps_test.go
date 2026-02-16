@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func ptrTo[T any](v T) *T { return &v }
+
 type testingData struct {
 	expectedResult   gemara.Result
 	expectedMessage  string
@@ -18,7 +20,6 @@ type testingData struct {
 
 func TestHasDependencyManagementPolicy(t *testing.T) {
 
-	//Ick, remind me to never use anonymous structs in my code
 	testData := []testingData{
 		{
 			expectedResult:  gemara.Passed,
@@ -26,15 +27,9 @@ func TestHasDependencyManagementPolicy(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Documentation: struct {
-								Contributing         string `yaml:"contributing-guide"`
-								DependencyManagement string `yaml:"dependency-management-policy"`
-								Governance           string `yaml:"governance"`
-								ReviewPolicy         string `yaml:"review-policy"`
-								SecurityPolicy       string `yaml:"security-policy"`
-							}{
-								DependencyManagement: "https://example.com/dependency-management",
+						Repository: &si.Repository{
+							Documentation: &si.RepositoryDocumentation{
+								DependencyManagementPolicy: ptrTo(si.URL("https://example.com/dependency-management")),
 							},
 						},
 					},
@@ -48,16 +43,8 @@ func TestHasDependencyManagementPolicy(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Documentation: struct {
-								Contributing         string `yaml:"contributing-guide"`
-								DependencyManagement string `yaml:"dependency-management-policy"`
-								Governance           string `yaml:"governance"`
-								ReviewPolicy         string `yaml:"review-policy"`
-								SecurityPolicy       string `yaml:"security-policy"`
-							}{
-								DependencyManagement: "",
-							},
+						Repository: &si.Repository{
+							Documentation: &si.RepositoryDocumentation{},
 						},
 					},
 				},
@@ -70,16 +57,8 @@ func TestHasDependencyManagementPolicy(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Documentation: struct {
-								Contributing         string `yaml:"contributing-guide"`
-								DependencyManagement string `yaml:"dependency-management-policy"`
-								Governance           string `yaml:"governance"`
-								ReviewPolicy         string `yaml:"review-policy"`
-								SecurityPolicy       string `yaml:"security-policy"`
-							}{
-								DependencyManagement: *new(string), // empty string pointer effectively nil value
-							},
+						Repository: &si.Repository{
+							Documentation: &si.RepositoryDocumentation{},
 						},
 					},
 				},
@@ -202,7 +181,7 @@ func TestIsActive(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
+						Repository: &si.Repository{
 							Status: "active",
 						},
 					},
@@ -217,7 +196,7 @@ func TestIsActive(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
+						Repository: &si.Repository{
 							Status: "inactive",
 						},
 					},
@@ -232,7 +211,7 @@ func TestIsActive(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
+						Repository: &si.Repository{
 							Status: "",
 						},
 					},

@@ -100,7 +100,7 @@ func HasDependencyManagementPolicy(payloadData any) (result gemara.Result, messa
 		return gemara.Unknown, message, confidence
 	}
 
-	if len(payload.Insights.Repository.Documentation.DependencyManagement) > 0 {
+	if payload.Insights.Repository.Documentation.DependencyManagementPolicy != nil {
 		return gemara.Passed, "Found dependency management policy in documentation", confidence
 	}
 
