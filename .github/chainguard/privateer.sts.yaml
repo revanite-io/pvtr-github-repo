@@ -1,7 +1,8 @@
 issuer: https://token.actions.githubusercontent.com
 subject_pattern: repo:privateerproj/privateer:pull_request
 claim_pattern:
-  job_workflow_ref: privateerproj/privateer/.github/workflows/ci.yml@.*
+  job_workflow_ref: privateerproj/privateer/.github/workflows/ci.yml@refs/(heads/main|pull/\d+/merge)$
+
 
 permissions:
   contents: read
