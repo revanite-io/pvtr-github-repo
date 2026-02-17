@@ -20,10 +20,10 @@ func Test_InsightsListsRepositories(t *testing.T) {
 			payload: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Repositories: []si.Repo{
-								si.Repo{
-									URL: "https://github.com/org/repo",
+						Project: &si.Project{
+							Repositories: []si.ProjectRepository{
+								{
+									Url: "https://github.com/org/repo",
 								},
 							},
 						},
@@ -38,8 +38,8 @@ func Test_InsightsListsRepositories(t *testing.T) {
 			payload: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Repositories: []si.Repo{},
+						Project: &si.Project{
+							Repositories: []si.ProjectRepository{},
 						},
 					},
 				},
@@ -51,7 +51,9 @@ func Test_InsightsListsRepositories(t *testing.T) {
 			name: "insights is nil",
 			payload: data.Payload{
 				RestData: &data.RestData{
-					Insights: si.SecurityInsights{},
+					Insights: si.SecurityInsights{
+						Project: &si.Project{},
+					},
 				},
 			},
 			wantResult: gemara.Failed,

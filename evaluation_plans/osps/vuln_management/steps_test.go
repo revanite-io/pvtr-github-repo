@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func ptrTo[T any](v T) *T { return &v }
+
 type testingData struct {
 	expectedResult   gemara.Result
 	expectedMessage  string
@@ -26,12 +28,12 @@ func TestSastToolDefined(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Security: si.SecurityInfo{
-								Tools: []si.Tool{
+						Repository: &si.Repository{
+							SecurityPosture: si.SecurityPosture{
+								Tools: []si.SecurityTool{
 									{
 										Type: "SAST",
-										Integration: si.Integration{
+										Integration: si.SecurityToolIntegration{
 											Adhoc: true,
 										},
 									},
@@ -49,9 +51,9 @@ func TestSastToolDefined(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Security: si.SecurityInfo{
-								Tools: []si.Tool{
+						Repository: &si.Repository{
+							SecurityPosture: si.SecurityPosture{
+								Tools: []si.SecurityTool{
 									{
 										Type: "SAST",
 									},
@@ -69,9 +71,9 @@ func TestSastToolDefined(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Security: si.SecurityInfo{
-								Tools: []si.Tool{
+						Repository: &si.Repository{
+							SecurityPosture: si.SecurityPosture{
+								Tools: []si.SecurityTool{
 									{
 										Type: "NotSast",
 									},
@@ -89,8 +91,8 @@ func TestSastToolDefined(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Repository: si.Repository{
-							Security: si.SecurityInfo{},
+						Repository: &si.Repository{
+							SecurityPosture: si.SecurityPosture{},
 						},
 					},
 				},
@@ -121,9 +123,9 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Vulnerability: si.VulnReport{
-								SecurityPolicy: "https://example.com/SECURITY.md",
+						Project: &si.Project{
+							VulnerabilityReporting: si.VulnerabilityReporting{
+								Policy: ptrTo(si.URL("https://example.com/SECURITY.md")),
 							},
 						},
 					},
@@ -138,11 +140,7 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Vulnerability: si.VulnReport{
-								SecurityPolicy: "",
-							},
-						},
+						Project: &si.Project{},
 					},
 				},
 				GraphqlRepoData: &data.GraphqlRepoData{},
@@ -179,11 +177,11 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Vulnerability: si.VulnReport{
+						Project: &si.Project{
+							VulnerabilityReporting: si.VulnerabilityReporting{
 								ReportsAccepted: true,
-								Contact: si.Contact{
-									Email: "security@example.com",
+								Contact: &si.Contact{
+									Email: ptrTo(si.Email("security@example.com")),
 								},
 							},
 						},
@@ -199,20 +197,18 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Vulnerability: si.VulnReport{
+						Project: &si.Project{
+							VulnerabilityReporting: si.VulnerabilityReporting{
 								ReportsAccepted: true,
-								Contact: si.Contact{
-									Email: "",
-								},
+								Contact:         &si.Contact{},
 							},
 						},
-						Repository: si.Repository{
-							Security: si.SecurityInfo{
+						Repository: &si.Repository{
+							SecurityPosture: si.SecurityPosture{
 								Champions: []si.Contact{
 									{
 										Name:  "Security Champion",
-										Email: "champion@example.com",
+										Email: ptrTo(si.Email("champion@example.com")),
 									},
 								},
 							},
@@ -229,11 +225,11 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Vulnerability: si.VulnReport{
+						Project: &si.Project{
+							VulnerabilityReporting: si.VulnerabilityReporting{
 								ReportsAccepted: false,
-								Contact: si.Contact{
-									Email: "security@example.com",
+								Contact: &si.Contact{
+									Email: ptrTo(si.Email("security@example.com")),
 								},
 							},
 						},
@@ -249,20 +245,17 @@ func TestHasPrivateVulnerabilityReporting(t *testing.T) {
 			payloadData: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Vulnerability: si.VulnReport{
+						Project: &si.Project{
+							VulnerabilityReporting: si.VulnerabilityReporting{
 								ReportsAccepted: true,
-								Contact: si.Contact{
-									Email: "",
-								},
+								Contact:         &si.Contact{},
 							},
 						},
-						Repository: si.Repository{
-							Security: si.SecurityInfo{
+						Repository: &si.Repository{
+							SecurityPosture: si.SecurityPosture{
 								Champions: []si.Contact{
 									{
-										Name:  "Champion Without Email",
-										Email: "",
+										Name: "Champion Without Email",
 									},
 								},
 							},

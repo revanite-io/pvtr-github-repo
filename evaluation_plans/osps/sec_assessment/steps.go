@@ -65,7 +65,7 @@ func HasDesignDocumentation(payloadData any) (result gemara.Result, message stri
 	}
 
 	// Fallback: check if DetailedGuide is specified in Security Insights
-	if data.RestData != nil && data.Insights.Project.Documentation.DetailedGuide != "" {
+	if data.RestData != nil && data.Insights.Project.Documentation.DetailedGuide != nil {
 		return gemara.NeedsReview, "No design documentation file found, but detailed guide specified in Security Insights - manual review needed to confirm design documentation with actions and actors", confidence
 	}
 

@@ -239,7 +239,28 @@ func (r *RestData) loadSecurityInsights() {
 			r.Config.Logger.Error(fmt.Sprintf("failed to read security insights file: %s", err.Error()))
 			r.InsightsError = true
 		}
-		return
+	}
+	r.ensureInsightsInitialized()
+}
+
+func (r *RestData) ensureInsightsInitialized() {
+	if r.Insights.Repository == nil {
+		r.Insights.Repository = &si.Repository{}
+	}
+	if r.Insights.Project == nil {
+		r.Insights.Project = &si.Project{}
+	}
+	if r.Insights.Repository.Documentation == nil {
+		r.Insights.Repository.Documentation = &si.RepositoryDocumentation{}
+	}
+	if r.Insights.Repository.ReleaseDetails == nil {
+		r.Insights.Repository.ReleaseDetails = &si.ReleaseDetails{}
+	}
+	if r.Insights.Project.Documentation == nil {
+		r.Insights.Project.Documentation = &si.ProjectDocumentation{}
+	}
+	if r.Insights.Project.VulnerabilityReporting.Contact == nil {
+		r.Insights.Project.VulnerabilityReporting.Contact = &si.Contact{}
 	}
 }
 

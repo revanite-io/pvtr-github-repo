@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gemaraproj/go-gemara"
+	"github.com/ossf/si-tooling/v2/si"
 	"github.com/rhysd/actionlint"
 
 	"github.com/revanite-io/pvtr-github-repo/data"
@@ -185,48 +186,60 @@ func ReleaseHasUniqueIdentifier(payloadData any) (result gemara.Result, message 
 }
 
 func getLinks(data data.Payload) []string {
-	si := data.Insights
-	links := []string{
-		si.Header.URL,
-		si.Header.ProjectSISource,
-		si.Project.Homepage,
-		si.Project.Roadmap,
-		si.Project.Funding,
-		si.Project.Documentation.DetailedGuide,
-		si.Project.Documentation.CodeOfConduct,
-		si.Project.Documentation.QuickstartGuide,
-		si.Project.Documentation.ReleaseProcess,
-		si.Project.Documentation.SignatureVerification,
-		si.Project.Vulnerability.BugBountyProgram,
-		si.Project.Vulnerability.SecurityPolicy,
-		si.Repository.URL,
-		si.Repository.License.URL,
-		si.Repository.Security.Assessments.Self.Evidence,
+	ins := data.Insights
+	var links []string
+
+	addURL := func(u si.URL) { links = append(links, string(u)) }
+	addURLPtr := func(u *si.URL) {
+		if u != nil {
+			links = append(links, string(*u))
+		}
 	}
+
+	addURL(ins.Header.URL)
+	addURLPtr(ins.Header.ProjectSISource)
+	addURLPtr(ins.Project.HomePage)
+	addURLPtr(ins.Project.Roadmap)
+	addURLPtr(ins.Project.Funding)
+	addURLPtr(ins.Project.Documentation.DetailedGuide)
+	addURLPtr(ins.Project.Documentation.CodeOfConduct)
+	addURLPtr(ins.Project.Documentation.QuickstartGuide)
+	addURLPtr(ins.Project.Documentation.ReleaseProcess)
+	addURLPtr(ins.Project.Documentation.SignatureVerification)
+	addURLPtr(ins.Project.VulnerabilityReporting.BugBountyProgram)
+	addURLPtr(ins.Project.VulnerabilityReporting.Policy)
+	addURL(ins.Repository.Url)
+	addURL(ins.Repository.License.Url)
+	addURLPtr(ins.Repository.SecurityPosture.Assessments.Self.Evidence)
+
 	if data.RepositoryMetadata.OrganizationBlogURL() != nil {
 		links = append(links, *data.RepositoryMetadata.OrganizationBlogURL())
 	}
-	for _, repo := range si.Project.Repositories {
-		links = append(links, repo.URL)
+	for _, repo := range ins.Project.Repositories {
+		addURL(repo.Url)
 	}
-
-	for _, repo := range si.Repository.Security.Assessments.ThirdParty {
-		links = append(links, repo.Evidence)
+	for _, assessment := range ins.Repository.SecurityPosture.Assessments.ThirdPartyAssessment {
+		addURLPtr(assessment.Evidence)
 	}
-
-	for _, tool := range si.Repository.Security.Tools {
-		links = append(links, tool.Results.Adhoc.Location)
-		links = append(links, tool.Results.CI.Location)
-		links = append(links, tool.Results.Release.Location)
+	for _, tool := range ins.Repository.SecurityPosture.Tools {
+		if tool.Results.Adhoc != nil {
+			addURL(tool.Results.Adhoc.Location)
+		}
+		if tool.Results.CI != nil {
+			addURL(tool.Results.CI.Location)
+		}
+		if tool.Results.Release != nil {
+			addURL(tool.Results.Release.Location)
+		}
 	}
 	return links
 }
 
 func insecureURI(uri string) bool {
-	if !strings.HasPrefix(uri, "https://") ||
-		!strings.HasPrefix(uri, "ssh:") ||
-		!strings.HasPrefix(uri, "git:") ||
-		!strings.HasPrefix(uri, "git@") {
+	if strings.HasPrefix(uri, "https://") ||
+		strings.HasPrefix(uri, "ssh:") ||
+		strings.HasPrefix(uri, "git:") ||
+		strings.HasPrefix(uri, "git@") {
 		return false
 	}
 	return true
@@ -270,7 +283,7 @@ func InsightsHasSlsaAttestation(payloadData any) (result gemara.Result, message 
 		return gemara.Unknown, message, confidence
 	}
 
-	attestations := data.Insights.Repository.Release.Attestations
+	attestations := data.Insights.Repository.ReleaseDetails.Attestations
 
 	for _, attestation := range attestations {
 		if attestation.PredicateURI == "https://slsa.dev/provenance/v1" {
@@ -286,7 +299,7 @@ func DistributionPointsUseHTTPS(payloadData any) (result gemara.Result, message 
 		return gemara.Unknown, message, confidence
 	}
 
-	distributionPoints := data.Insights.Repository.Release.DistributionPoints
+	distributionPoints := data.Insights.Repository.ReleaseDetails.DistributionPoints
 
 	if len(distributionPoints) == 0 {
 		return gemara.NotApplicable, "No official distribution points found in Security Insights data", confidence
@@ -294,8 +307,8 @@ func DistributionPointsUseHTTPS(payloadData any) (result gemara.Result, message 
 
 	var badURIs []string
 	for _, point := range distributionPoints {
-		if insecureURI(point.URI) {
-			badURIs = append(badURIs, point.URI)
+		if insecureURI(point.Uri) {
+			badURIs = append(badURIs, point.Uri)
 		}
 	}
 	if len(badURIs) > 0 {
