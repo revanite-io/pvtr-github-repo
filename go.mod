@@ -1,4 +1,4 @@
-module github.com/revanite-io/pvtr-github-repo
+module github.com/ossf/pvtr-github-repo-scanner
 
 go 1.25.1
 

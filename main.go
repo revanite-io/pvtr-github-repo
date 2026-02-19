@@ -7,8 +7,8 @@ import (
 
 	"os"
 
-	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans"
 
 	"github.com/privateerproj/privateer-sdk/command"
 	"github.com/privateerproj/privateer-sdk/pluginkit"
@@ -43,7 +43,7 @@ func main() {
 	orchestrator := pluginkit.EvaluationOrchestrator{
 		PluginName:    PluginName,
 		PluginVersion: Version,
-		PluginUri:     "https://github.com/revanite-io/pvtr-github-repo",
+		PluginUri:     "https://github.com/ossf/pvtr-github-repo-scanner",
 	}
 	orchestrator.AddLoader(data.Loader)
 

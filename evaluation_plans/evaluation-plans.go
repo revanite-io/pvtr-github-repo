@@ -2,16 +2,16 @@ package evaluation_plans
 
 import (
 	"github.com/gemaraproj/go-gemara"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/access_control"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/build_release"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/docs"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/governance"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/legal"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/quality"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/sec_assessment"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/osps/vuln_management"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/access_control"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/build_release"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/docs"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/governance"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/legal"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/quality"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/sec_assessment"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/vuln_management"
 
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
 var (

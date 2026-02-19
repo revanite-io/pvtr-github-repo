@@ -5,7 +5,7 @@ import (
 
 	"github.com/gemaraproj/go-gemara"
 
-	"github.com/revanite-io/pvtr-github-repo/data"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
 
 func VerifyPayload(payloadData any) (payload data.Payload, message string) {

@@ -10,8 +10,8 @@ import (
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/rhysd/actionlint"
 
-	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
 // https://securitylab.github.com/resources/github-actions-untrusted-input/
