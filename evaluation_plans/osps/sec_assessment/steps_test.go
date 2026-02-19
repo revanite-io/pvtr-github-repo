@@ -7,7 +7,7 @@ import (
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/si-tooling/v2/si"
 
-	"github.com/revanite-io/pvtr-github-repo/data"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
 
 func ptrTo[T any](v T) *T { return &v }

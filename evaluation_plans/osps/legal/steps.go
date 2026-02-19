@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/gemaraproj/go-gemara"
-	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
 type LicenseList struct {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/privateerproj/privateer-sdk/config"
-	"github.com/revanite-io/pvtr-github-repo/data"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/stretchr/testify/assert"
 )
 

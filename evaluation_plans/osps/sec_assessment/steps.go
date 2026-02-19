@@ -5,7 +5,7 @@ import (
 
 	"github.com/gemaraproj/go-gemara"
 
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
 // DesignDocFiles are common file names for design/architecture documentation
