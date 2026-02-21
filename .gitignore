@@ -15,4 +15,5 @@ coverage.out
 # A safe space for keeping local development notes
 TODO.md
 
+# ignore the local cache of claude
 .claude/

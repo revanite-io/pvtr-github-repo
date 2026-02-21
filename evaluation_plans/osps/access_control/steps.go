@@ -36,10 +36,18 @@ func BranchProtectionRestrictsPushes(payloadData any) (result gemara.Result, mes
 		result = gemara.Passed
 		message = "Branch protection rule requires approving reviews"
 	} else {
-		result = gemara.NeedsReview
-		message = "Branch protection rule does not restrict pushes or require approving reviews; Rulesets not yet evaluated."
+		if payload.RepositoryMetadata.IsDefaultBranchProtected() != nil && *payload.RepositoryMetadata.IsDefaultBranchProtected() {
+			result = gemara.Passed
+			message = "Branch rule restricts pushes"
+		} else if payload.RepositoryMetadata.DefaultBranchRequiresPRReviews() != nil && *payload.RepositoryMetadata.DefaultBranchRequiresPRReviews() {
+			result = gemara.Passed
+			message = "Branch rule requires approving reviews"
+		} else {
+			result = gemara.Failed
+			message = "Default branch is not protected"
+		}
 	}
-	return
+	return result, message, confidence
 }
 
 func BranchProtectionPreventsDeletion(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
@@ -48,16 +56,22 @@ func BranchProtectionPreventsDeletion(payloadData any) (result gemara.Result, me
 		return gemara.Unknown, message, confidence
 	}
 
-	allowsDeletion := payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions
+	branchProtectionAllowsDeletion := payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions
+	deletionRule := payload.RepositoryMetadata.IsDefaultBranchProtectedFromDeletion()
+	branchRulesAllowDeletion := deletionRule == nil || !*deletionRule
 
-	if allowsDeletion {
+	if branchProtectionAllowsDeletion && branchRulesAllowDeletion {
 		result = gemara.Failed
-		message = "Branch protection rule allows deletions"
+		message = "Default branch is not protected from deletions"
 	} else {
 		result = gemara.Passed
-		message = "Branch protection rule prevents deletions"
+		if deletionRule != nil && *deletionRule {
+			message = "Default branch is protected from deletions by rulesets"
+		} else {
+			message = "Default branch is protected from deletions by branch protection rules"
+		}
 	}
-	return
+	return result, message, confidence
 }
 
 func WorkflowDefaultReadPermissions(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
