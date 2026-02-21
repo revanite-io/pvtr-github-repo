@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -15,17 +16,24 @@ import (
 	"github.com/privateerproj/privateer-sdk/config"
 )
 
+type HttpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type RestData struct {
 	owner               string
 	repo                string
 	token               string
 	Config              *config.Config
+	WorkflowsEnabled    bool
 	WorkflowPermissions WorkflowPermissions
 	Insights            si.SecurityInsights
+	InsightsError       bool
 	Releases            []ReleaseData
 	Rulesets            []Ruleset
 	contents            RepoContent
-	ghClient            *github.Client
+	ghClient            *github.Client `json:"-" yaml:"-"`
+	HttpClient          HttpClient     `json:"-" yaml:"-"`
 }
 
 type RepoContent struct {
@@ -75,7 +83,9 @@ func (r *RestData) Setup() error {
 }
 
 func (r *RestData) MakeApiCall(endpoint string, isGithub bool) (body []byte, err error) {
-	r.Config.Logger.Trace(fmt.Sprintf("GET %s", endpoint))
+	if r.Config != nil && r.Config.Logger != nil {
+		r.Config.Logger.Trace(fmt.Sprintf("GET %s", endpoint))
+	}
 	request, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -83,8 +93,10 @@ func (r *RestData) MakeApiCall(endpoint string, isGithub bool) (body []byte, err
 	if isGithub {
 		request.Header.Set("Authorization", "Bearer "+r.token)
 	}
-	client := &http.Client{}
-	response, err := client.Do(request)
+	if r.HttpClient == nil {
+		r.HttpClient = &http.Client{}
+	}
+	response, err := r.HttpClient.Do(request)
 	if err != nil {
 		err = fmt.Errorf("error making http call: %s", err.Error())
 		return nil, err
@@ -119,7 +131,12 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 	if filepath != "" {
 		return filepath
 	}
-	for _, dirContents := range r.contents.SubContent[".github"].Content {
+
+	forgeDir, err := r.getSubdirContents(".github")
+	if err != nil {
+		log.Printf("Failed to retrieve forge dir contents: %s", err.Error())
+	}
+	for _, dirContents := range forgeDir.Content {
 		// forge directory contents
 		if dirContents.GetType() != "file" {
 			continue
@@ -220,15 +237,37 @@ func (r *RestData) loadSecurityInsights() {
 		r.Insights = insights
 		if err != nil {
 			r.Config.Logger.Error(fmt.Sprintf("failed to read security insights file: %s", err.Error()))
+			r.InsightsError = true
 		}
-		return
+	}
+	r.ensureInsightsInitialized()
+}
+
+func (r *RestData) ensureInsightsInitialized() {
+	if r.Insights.Repository == nil {
+		r.Insights.Repository = &si.Repository{}
+	}
+	if r.Insights.Project == nil {
+		r.Insights.Project = &si.Project{}
+	}
+	if r.Insights.Repository.Documentation == nil {
+		r.Insights.Repository.Documentation = &si.RepositoryDocumentation{}
+	}
+	if r.Insights.Repository.ReleaseDetails == nil {
+		r.Insights.Repository.ReleaseDetails = &si.ReleaseDetails{}
+	}
+	if r.Insights.Project.Documentation == nil {
+		r.Insights.Project.Documentation = &si.ProjectDocumentation{}
+	}
+	if r.Insights.Project.VulnerabilityReporting.Contact == nil {
+		r.Insights.Project.VulnerabilityReporting.Contact = &si.Contact{}
 	}
 }
 
 func (r *RestData) getRepoContents() {
 	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve contents top level contents: %s", err.Error()))
+		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve top-level repo contents via GitHub API: %s", err.Error()))
 		return
 	}
 	r.contents.Content = content
@@ -237,7 +276,7 @@ func (r *RestData) getRepoContents() {
 		return
 	}
 	r.contents.SubContent = make(map[string]RepoContent)
-	r.Config.Logger.Trace(fmt.Sprintf("retrieved %d top-level contents", len(r.contents.Content)))
+	r.Config.Logger.Trace(fmt.Sprintf("found %d top-level objects from GitHub API", len(r.contents.Content)))
 }
 
 func (c *RepoContent) GetSubdirContentByPath(r *RestData, path string) (RepoContent, error) {
@@ -298,6 +337,9 @@ func (c *RepoContent) GetSubdirContentByPath(r *RestData, path string) (RepoCont
 
 // getSubdirContents fetches contents of a directory
 func (r *RestData) getSubdirContents(path string) (RepoContent, error) {
+	if len(r.contents.SubContent[path].Content) > 0 {
+		return r.contents.SubContent[path], nil
+	}
 	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, path, nil)
 	if err != nil {
 		return RepoContent{}, err
@@ -319,8 +361,21 @@ func (r *RestData) getReleases() error {
 }
 
 func (r *RestData) getWorkflowPermissions() error {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/permissions/workflow", APIBase, r.owner, r.repo)
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		return err
+	}
+	var actionsData struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.Unmarshal(responseData, &actionsData); err != nil {
+		return fmt.Errorf("failed to parse actions data: %v", err)
+	}
+	r.WorkflowsEnabled = actionsData.Enabled
+
+	endpoint = fmt.Sprintf("%s/repos/%s/%s/actions/permissions/workflow", APIBase, r.owner, r.repo)
+	responseData, err = r.MakeApiCall(endpoint, true)
 	if err != nil {
 		return err
 	}

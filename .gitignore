@@ -12,4 +12,11 @@ output
 # go test coverage output
 coverage.out
 
+# A safe space for keeping local development notes
+TODO.md
+
+# ignore the local cache of terraform
 .terraform/
+
+# ignore the local cache of claude
+.claude/

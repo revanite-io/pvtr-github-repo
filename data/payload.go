@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/google/go-github/v74/github"
 	"github.com/privateerproj/privateer-sdk/config"
@@ -20,10 +21,11 @@ type Payload struct {
 	IsCodeRepo               bool
 	SecurityPosture          SecurityPosture
 	client                   *githubv4.Client
+	httpClient               *http.Client
 }
 
 func Loader(config *config.Config) (payload any, err error) {
-	graphql, client, err := getGraphqlRepoData(config)
+	graphql, client, httpClient, err := getGraphqlRepoData(config)
 	if err != nil {
 		return nil, err
 	}
@@ -65,15 +67,16 @@ func Loader(config *config.Config) (payload any, err error) {
 		DependencyManifestsCount: dependencyManifestsCount,
 		IsCodeRepo:               isCodeRepo,
 		client:                   client,
+		httpClient:               httpClient,
 		SecurityPosture:          securityPosture,
 	}), nil
 }
 
-func getGraphqlRepoData(config *config.Config) (data *GraphqlRepoData, client *githubv4.Client, err error) {
+func getGraphqlRepoData(config *config.Config) (data *GraphqlRepoData, client *githubv4.Client, httpClient *http.Client, err error) {
 	src := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: config.GetString("token")},
 	)
-	httpClient := oauth2.NewClient(context.Background(), src)
+	httpClient = oauth2.NewClient(context.Background(), src)
 	client = githubv4.NewClient(httpClient)
 
 	variables := map[string]any{
@@ -85,7 +88,7 @@ func getGraphqlRepoData(config *config.Config) (data *GraphqlRepoData, client *g
 	if err != nil {
 		config.Logger.Error(fmt.Sprintf("Error querying GitHub GraphQL API: %s", err.Error()))
 	}
-	return data, client, err
+	return data, client, httpClient, err
 }
 
 func getRestData(ghClient *github.Client, config *config.Config) (data *RestData, err error) {
@@ -98,10 +101,21 @@ func getRestData(ghClient *github.Client, config *config.Config) (data *RestData
 }
 
 func (p *Payload) GetSuspectedBinaries() (suspectedBinaries []string, err error) {
-	tree, err := fetchGraphqlRepoTree(p.Config, p.client, p.Repository.DefaultBranchRef.Name)
+	branch := p.Repository.DefaultBranchRef.Name
+	tree, err := fetchGraphqlRepoTree(p.Config, p.client, branch)
 	if err != nil {
 		return nil, err
 	}
-	binaryFileNames := checkTreeForBinaries(tree)
+	bc := &binaryChecker{
+		httpClient: p.httpClient,
+		logger:     p.Config.Logger,
+		owner:      p.Config.GetString("owner"),
+		repo:       p.Config.GetString("repo"),
+		branch:     branch,
+	}
+	binaryFileNames, err := checkTreeForBinaries(tree, bc)
+	if err != nil {
+		return nil, err
+	}
 	return binaryFileNames, nil
 }

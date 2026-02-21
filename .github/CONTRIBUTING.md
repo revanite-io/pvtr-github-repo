@@ -6,15 +6,28 @@ We'd love to accept your patches and contributions to this project. There are ju
 
 Participation in this project comes under the [Contributor Covenant Code of Conduct](./CODE_OF_CONDUCT.md)
 
+## Local Development
+
+While working on tests, the best way to run the plugin is via `go run . debug --service=<your-service>`. Ensure your local `config` file is set up correctly beforehand.
+
+You may also pull the code locally and run the local Dockerfile:
+
+1. Pull the repo
+2. Modify `example-config.yml` to use your values, and rename it to `config.yml`
+3. Build the Docker Image: `make docker-build`
+4. Run the Docker Image: `make docker-run`
+5. Review the output in the directory you've specified in your config file
+
+## Required Token Scopes
+
+![Token Scopes](../token-scopes.png)
+
 ## Code Submission
 
 Thank you for considering submitting code to Privateer!
 
 - We follow the [GitHub Pull Request Model](https://help.github.com/articles/about-pull-requests/) for all contributions.
-- For large bodies of work, we recommend creating an issue using the "Feature Request" template to outline the feature that you wish to build, and describe how it will be implemented. This gives a chance for review to happen early, and ensures no wasted effort occurs.
-- For new features, documentation must be included. Currently we do not have a formalized documentation process, so please use your best judgment until a process is in place.
 - All submissions, including submissions by project members, will require review before being merged.
-- Once review has occurred, please rebase your PR down to a single commit. This will ensure a nice clean Git history.
 - Please write a [good Git Commit message](https://chris.beams.io/posts/git-commit/)
 - Please follow the code formatting instructions below
 

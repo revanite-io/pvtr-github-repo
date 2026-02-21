@@ -3,47 +3,83 @@ package vuln_management
 import (
 	"slices"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
-func hasSecContact(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func HasSecContact(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	// TODO: Check for a contact email in SECURITY.md
 
-	if data.Insights.Project.Vulnerability.Contact.Email != "" {
-		return layer4.Passed, "Security contacts were specified in Security Insights data"
+	if data.Insights.Project.VulnerabilityReporting.Contact.Email != nil {
+		return gemara.Passed, "Security contacts were specified in Security Insights data", confidence
 	}
-	for _, champion := range data.Insights.Repository.Security.Champions {
-		if champion.Email != "" {
-			return layer4.Passed, "Security contacts were specified in Security Insights data"
+	for _, champion := range data.Insights.Repository.SecurityPosture.Champions {
+		if champion.Email != nil {
+			return gemara.Passed, "Security contacts were specified in Security Insights data", confidence
 		}
 	}
 
-	return layer4.Failed, "Security contacts were not specified in Security Insights data"
+	return gemara.Failed, "Security contacts were not specified in Security Insights data", confidence
 }
 
-func sastToolDefined(payloadData interface{}, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func SastToolDefined(payloadData interface{}) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
-	for _, tool := range data.Insights.Repository.Security.Tools {
+	for _, tool := range data.Insights.Repository.SecurityPosture.Tools {
 		if tool.Type == "SAST" {
 
-			enabled := []bool{tool.Integration.Adhoc, tool.Integration.CI, tool.Integration.Release}
+			enabled := []bool{tool.Integration.Adhoc, tool.Integration.Ci, tool.Integration.Release}
 
 			if slices.Contains(enabled, true) {
-				return layer4.Passed, "Static Application Security Testing documented in Security Insights"
+				return gemara.Passed, "Static Application Security Testing documented in Security Insights", confidence
 			}
 		}
 	}
 
-	return layer4.Failed, "No Static Application Security Testing documented in Security Insights"
+	return gemara.Failed, "No Static Application Security Testing documented in Security Insights", confidence
+}
+
+func HasVulnerabilityDisclosurePolicy(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return gemara.Unknown, message, confidence
+	}
+
+	if data.Insights.Project.VulnerabilityReporting.Policy == nil {
+		return gemara.Failed, "Vulnerability disclosure policy was NOT specified in Security Insights data", confidence
+	}
+
+	return gemara.Passed, "Vulnerability disclosure policy was specified in Security Insights data", confidence
+}
+
+func HasPrivateVulnerabilityReporting(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	data, message := reusable_steps.VerifyPayload(payloadData)
+	if message != "" {
+		return gemara.Unknown, message, confidence
+	}
+
+	if !data.Insights.Project.VulnerabilityReporting.ReportsAccepted {
+		return gemara.Failed, "Project does not accept vulnerability reports according to Security Insights data", confidence
+	}
+
+	if data.Insights.Project.VulnerabilityReporting.Contact.Email != nil {
+		return gemara.Passed, "Private vulnerability reporting available via dedicated contact email in Security Insights data", confidence
+	}
+
+	for _, champion := range data.Insights.Repository.SecurityPosture.Champions {
+		if champion.Email != nil {
+			return gemara.Passed, "Private vulnerability reporting available via security champions contact in Security Insights data", confidence
+		}
+	}
+
+	return gemara.Failed, "No private vulnerability reporting contact method found in Security Insights data", confidence
 }

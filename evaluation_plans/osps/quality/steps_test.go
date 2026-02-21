@@ -3,16 +3,16 @@ package quality
 import (
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
+	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/si-tooling/v2/si"
-	"github.com/revanite-io/pvtr-github-repo/data"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
 
-func Test_insightsListsRepositories(t *testing.T) {
+func Test_InsightsListsRepositories(t *testing.T) {
 	tests := []struct {
 		name       string
 		payload    data.Payload
-		wantResult layer4.Result
+		wantResult gemara.Result
 		wantMsg    string
 	}{
 		{
@@ -20,17 +20,17 @@ func Test_insightsListsRepositories(t *testing.T) {
 			payload: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Repositories: []si.Repo{
-								si.Repo{
-									URL: "https://github.com/org/repo",
+						Project: &si.Project{
+							Repositories: []si.ProjectRepository{
+								{
+									Url: "https://github.com/org/repo",
 								},
 							},
 						},
 					},
 				},
 			},
-			wantResult: layer4.Passed,
+			wantResult: gemara.Passed,
 			wantMsg:    "Insights contains a list of repositories",
 		},
 		{
@@ -38,30 +38,32 @@ func Test_insightsListsRepositories(t *testing.T) {
 			payload: data.Payload{
 				RestData: &data.RestData{
 					Insights: si.SecurityInsights{
-						Project: si.Project{
-							Repositories: []si.Repo{},
+						Project: &si.Project{
+							Repositories: []si.ProjectRepository{},
 						},
 					},
 				},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Insights does not contain a list of repositories",
 		},
 		{
 			name: "insights is nil",
 			payload: data.Payload{
 				RestData: &data.RestData{
-					Insights: si.SecurityInsights{},
+					Insights: si.SecurityInsights{
+						Project: &si.Project{},
+					},
 				},
 			},
-			wantResult: layer4.Failed,
+			wantResult: gemara.Failed,
 			wantMsg:    "Insights does not contain a list of repositories",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMsg := insightsListsRepositories(tt.payload, nil)
+			gotResult, gotMsg, _ := InsightsListsRepositories(tt.payload)
 			if gotResult != tt.wantResult {
 				t.Errorf("result = %v, want %v", gotResult, tt.wantResult)
 			}

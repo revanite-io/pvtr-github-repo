@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ossf/gemara/layer4"
-	"github.com/revanite-io/pvtr-github-repo/data"
+	"github.com/gemaraproj/go-gemara"
+	"github.com/privateerproj/privateer-sdk/config"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,7 +28,7 @@ func TestReleasesLicensed(t *testing.T) {
 	tests := []struct {
 		name            string
 		payloadData     any
-		expectedResult  layer4.Result
+		expectedResult  gemara.Result
 		expectedMessage string
 	}{
 		{
@@ -37,7 +38,7 @@ func TestReleasesLicensed(t *testing.T) {
 					Releases: []data.ReleaseData{},
 				},
 			},
-			expectedResult:  layer4.NotApplicable,
+			expectedResult:  gemara.NotApplicable,
 			expectedMessage: "No releases found",
 		},
 		{
@@ -52,7 +53,7 @@ func TestReleasesLicensed(t *testing.T) {
 				},
 				GraphqlRepoData: &data.GraphqlRepoData{},
 			},
-			expectedResult:  layer4.Failed,
+			expectedResult:  gemara.Failed,
 			expectedMessage: "License was not found in a well known location via the GitHub API",
 		},
 		{
@@ -67,20 +68,19 @@ func TestReleasesLicensed(t *testing.T) {
 				},
 				GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
 			},
-			expectedResult:  layer4.Passed,
+			expectedResult:  gemara.Passed,
 			expectedMessage: "GitHub releases include the license(s) in the released source code.",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, message := releasesLicensed(test.payloadData, nil)
+			result, message, _ := ReleasesLicensed(test.payloadData)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})
 	}
 }
-
 
 func TestGetLicenseList(t *testing.T) {
 	tests := []struct {
@@ -117,10 +117,10 @@ func TestGetLicenseList(t *testing.T) {
 			mockError:     nil,
 			expectedError: "Good license data was unexpectedly empty",
 			expectEmpty:   true,
-    },
+		},
 	}
-  
-  for _, test := range tests {
+
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockMakeApiCall := func(endpoint string, isGithub bool) ([]byte, error) {
 				if test.mockError != nil {
@@ -141,7 +141,7 @@ func TestGetLicenseList(t *testing.T) {
 		})
 	}
 }
-      
+
 func TestSplitSpdxExpression(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -184,6 +184,108 @@ func TestSplitSpdxExpression(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			result := splitSpdxExpression(test.input)
 			assert.Equal(t, test.expected, result)
+		})
+	}
+}
+
+func TestGoodLicense(t *testing.T) {
+	tests := []struct {
+		name            string
+		payloadData     any
+		apiResponse     []byte
+		apiError        error
+		expectedResult  gemara.Result
+		expectedMessage string
+	}{
+		{
+			name:            "Invalid payload",
+			payloadData:     "invalid",
+			expectedResult:  gemara.Unknown,
+			expectedMessage: "Malformed assessment: expected payload type data.Payload, got string (invalid)",
+		},
+		{
+			name: "No license identifiers found",
+			payloadData: data.Payload{
+				GraphqlRepoData: &data.GraphqlRepoData{},
+				Config:          &config.Config{},
+			},
+			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false}]}`),
+			apiError:        nil,
+			expectedResult:  gemara.Failed,
+			expectedMessage: "License SPDX identifier was not found in Security Insights data or via GitHub API",
+		},
+		{
+			name: "OSI approved license (MIT)",
+			payloadData: data.Payload{
+				GraphqlRepoData: func() *data.GraphqlRepoData {
+					repo := stubGraphqlRepo("")
+					repo.Repository.LicenseInfo.SpdxId = "MIT"
+					return repo
+				}(),
+				Config: &config.Config{},
+			},
+			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false}]}`),
+			apiError:        nil,
+			expectedResult:  gemara.Passed,
+			expectedMessage: "All license found are OSI or FSF approved",
+		},
+		{
+			name: "Non-approved license",
+			payloadData: data.Payload{
+				GraphqlRepoData: func() *data.GraphqlRepoData {
+					repo := stubGraphqlRepo("")
+					repo.Repository.LicenseInfo.SpdxId = "BadLicense"
+					return repo
+				}(),
+				Config: &config.Config{},
+			},
+			apiResponse:     []byte(`{"licenses":[{"licenseId":"BadLicense","isOsiApproved":false,"isFsfLibre":false}]}`),
+			apiError:        nil,
+			expectedResult:  gemara.Failed,
+			expectedMessage: "These licenses are not OSI or FSF approved: BadLicense",
+		},
+		{
+			name: "Multiple licenses with mixed approval",
+			payloadData: data.Payload{
+				GraphqlRepoData: func() *data.GraphqlRepoData {
+					repo := stubGraphqlRepo("")
+					repo.Repository.LicenseInfo.SpdxId = "MIT AND BadLicense"
+					return repo
+				}(),
+				Config: &config.Config{},
+			},
+			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false},{"licenseId":"BadLicense","isOsiApproved":false,"isFsfLibre":false}]}`),
+			apiError:        nil,
+			expectedResult:  gemara.Failed,
+			expectedMessage: "These licenses are not OSI or FSF approved: BadLicense",
+		},
+		{
+			name: "Unknown license ID",
+			payloadData: data.Payload{
+				GraphqlRepoData: func() *data.GraphqlRepoData {
+					repo := stubGraphqlRepo("")
+					repo.Repository.LicenseInfo.SpdxId = "UnknownLicense"
+					return repo
+				}(),
+				Config: &config.Config{},
+			},
+			apiResponse:     []byte(`{"licenses":[{"licenseId":"MIT","isOsiApproved":true,"isFsfLibre":false}]}`),
+			apiError:        nil,
+			expectedResult:  gemara.Failed,
+			expectedMessage: "These licenses are not OSI or FSF approved: UnknownLicense",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if payload, ok := test.payloadData.(data.Payload); ok {
+				payload = data.NewPayloadWithHTTPMock(payload, test.apiResponse, 200, test.apiError)
+				test.payloadData = payload
+			}
+
+			result, message, _ := GoodLicense(test.payloadData)
+			assert.Equal(t, test.expectedResult, result)
+			assert.Equal(t, test.expectedMessage, message)
 		})
 	}
 }

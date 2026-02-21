@@ -10,20 +10,41 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    uses: github/ospo-reusable-workflows/.github/workflows/release.yaml@c9afb9b655e0f5d2b3abe9c93cee54fa2992c2e0
+    uses: github/ospo-reusable-workflows/.github/workflows/release.yaml@3b691dff6b68489c8548e1295d125c93c9c29a4e
     with:
       publish: true
       release-config-name: release-drafter.yml
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
+  release_image:
+    needs: release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: github/ospo-reusable-workflows/.github/workflows/release-image.yaml@3b691dff6b68489c8548e1295d125c93c9c29a4e
+    with:
+      image-name: ${{ github.repository }}
+      full-tag: ${{ needs.release.outputs.full-tag }}
+      short-tag: ${{ needs.release.outputs.short-tag }}
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      image-registry: ghcr.io
+      image-registry-username: ${{ github.actor }}
+      image-registry-password: ${{ secrets.GITHUB_TOKEN }}
   goreleaser:
     needs: release
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: write
+      id-token: write
+    outputs:
+      attestation_matrix: ${{ steps.generate_matrix.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -31,6 +52,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.23.4
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@28d71544de8eaf1b958d335707167c5f783590ad
+        with:
+          syft-version: v1.33.0
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a
         with:
@@ -39,3 +64,36 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-checksums: dist/checksums.txt
+      - name: Generate attestation matrix
+        id: generate_matrix
+        run: |
+          matrix=$(ls dist/*.spdx.json | jq -R '{"sbom": ., "archive": sub("\\.spdx\\.json$"; "")}' | jq -s -c '{"include": .}')
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+      - name: Upload artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: dist
+          path: dist
+  attest-sboms:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      id-token: write
+    strategy:
+      matrix: ${{ fromJson(needs.goreleaser.outputs.attestation_matrix) }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: dist
+          path: dist
+      - name: Attest SBOM
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34
+        with:
+          subject-path: "${{ matrix.archive }}"
+          sbom-path: "${{ matrix.sbom }}"

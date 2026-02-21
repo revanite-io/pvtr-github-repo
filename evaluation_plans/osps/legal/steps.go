@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ossf/gemara/layer4"
-	"github.com/revanite-io/pvtr-github-repo/data"
-	"github.com/revanite-io/pvtr-github-repo/evaluation_plans/reusable_steps"
+	"github.com/gemaraproj/go-gemara"
+	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
 type LicenseList struct {
@@ -24,22 +24,22 @@ type License struct {
 const spdxURL = "https://raw.githubusercontent.com/spdx/license-list-data/main/json/licenses.json"
 
 func getLicenseList(data data.Payload, makeApiCall func(string, bool) ([]byte, error)) (LicenseList, string) {
-	goodLicenseList := LicenseList{}
+	GoodLicenseList := LicenseList{}
 	if makeApiCall == nil {
 		makeApiCall = data.MakeApiCall
 	}
 	response, err := makeApiCall(spdxURL, false)
 	if err != nil {
-		return goodLicenseList, fmt.Sprintf("Failed to fetch good license data: %s", err.Error())
+		return GoodLicenseList, fmt.Sprintf("Failed to fetch good license data: %s", err.Error())
 	}
-	err = json.Unmarshal(response, &goodLicenseList)
+	err = json.Unmarshal(response, &GoodLicenseList)
 	if err != nil {
-		return goodLicenseList, fmt.Sprintf("Failed to unmarshal good license data: %s", err.Error())
+		return GoodLicenseList, fmt.Sprintf("Failed to unmarshal good license data: %s", err.Error())
 	}
-	if len(goodLicenseList.Licenses) == 0 {
-		return goodLicenseList, "Good license data was unexpectedly empty"
+	if len(GoodLicenseList.Licenses) == 0 {
+		return GoodLicenseList, "Good license data was unexpectedly empty"
 	}
-	return goodLicenseList, ""
+	return GoodLicenseList, ""
 }
 
 func splitSpdxExpression(expression string) (spdx_ids []string) {
@@ -51,47 +51,48 @@ func splitSpdxExpression(expression string) (spdx_ids []string) {
 	return
 }
 
-func foundLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func FoundLicense(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 	if data.Repository.LicenseInfo.Url == "" {
-		return layer4.Failed, "License was not found in a well known location via the GitHub API"
+		return gemara.Failed, "License was not found in a well known location via the GitHub API", confidence
 	}
-	return layer4.Passed, "License was found in a well known location via the GitHub API"
+	return gemara.Passed, "License was found in a well known location via the GitHub API", confidence
 }
 
-func releasesLicensed(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func ReleasesLicensed(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	if len(data.Releases) == 0 {
-		return layer4.NotApplicable, "No releases found"
+		return gemara.NotApplicable, "No releases found", confidence
 	}
 	if data.Repository.LicenseInfo.Url == "" {
-		return layer4.Failed, "License was not found in a well known location via the GitHub API"
+		return gemara.Failed, "License was not found in a well known location via the GitHub API", confidence
 	}
-	return layer4.Passed, "GitHub releases include the license(s) in the released source code."
+	return gemara.Passed, "GitHub releases include the license(s) in the released source code.", confidence
 }
 
-func goodLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Result, message string) {
+func GoodLicense(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	data, message := reusable_steps.VerifyPayload(payloadData)
 	if message != "" {
-		return layer4.Unknown, message
+		return gemara.Unknown, message, confidence
 	}
 
 	licenses, errString := getLicenseList(data, nil)
+
 	if errString != "" {
-		return layer4.Unknown, errString
+		return gemara.Unknown, errString, confidence
 	}
 
 	apiInfo := data.Repository.LicenseInfo.SpdxId
 	siInfo := data.Insights.Repository.License.Expression
 	if apiInfo == "" && siInfo == "" {
-		return layer4.Failed, "License SPDX identifier was not found in Security Insights data or via GitHub API"
+		return gemara.Failed, "License SPDX identifier was not found in Security Insights data or via GitHub API", confidence
 	}
 
 	spdx_ids_a := splitSpdxExpression(apiInfo)
@@ -116,11 +117,13 @@ func goodLicense(payloadData any, _ map[string]*layer4.Change) (result layer4.Re
 		}
 	}
 	approvedLicenses := strings.Join(spdx_ids, ", ")
-	data.Config.Logger.Trace(fmt.Sprintf("Requested licenses: %s", approvedLicenses))
-	data.Config.Logger.Trace(fmt.Sprintf("Non-approved licenses: %s", badLicenses))
+	if data.Config.Logger != nil {
+		data.Config.Logger.Trace(fmt.Sprintf("Requested licenses: %s", approvedLicenses))
+		data.Config.Logger.Trace(fmt.Sprintf("Non-approved licenses: %s", badLicenses))
+	}
 
 	if len(badLicenses) > 0 {
-		return layer4.Failed, fmt.Sprintf("These licenses are not OSI or FSF approved: %s", strings.Join(badLicenses, ", "))
+		return gemara.Failed, fmt.Sprintf("These licenses are not OSI or FSF approved: %s", strings.Join(badLicenses, ", ")), confidence
 	}
-	return layer4.NeedsReview, "All license found are OSI or FSF approved"
+	return gemara.Passed, "All license found are OSI or FSF approved", confidence
 }

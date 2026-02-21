@@ -4,6 +4,8 @@ BUILD_WIN=@env GOOS=windows GOARCH=amd64 go build -o $(PACKNAME).exe
 BUILD_LINUX=@env GOOS=linux GOARCH=amd64 go build -o $(PACKNAME)
 BUILD_MAC=@env GOOS=darwin GOARCH=amd64 go build -o $(PACKNAME)-darwin
 
+COVERAGE = $(shell go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+')
+
 release: package release bin
 release-candidate: package release-candidate
 binary: package build
@@ -35,9 +37,11 @@ build:
 package: tidy test
 	@echo "  >  Packaging static files..."
 
-test:
+vet:
 	@echo "  >  Validating code ..."
 	@go vet ./...
+
+test: vet
 	@go clean -testcache
 	@go test ./...
 
@@ -45,11 +49,12 @@ tidy:
 	@echo "  >  Tidying go.mod ..."
 	@go mod tidy
 
-test-cov:
+test-cov: vet
 	@echo "Running tests and generating coverage output ..."
 	@go test ./... -coverprofile coverage.out -covermode count
-	@sleep 2 # Sleeping to allow for coverage.out file to get generated
-	@echo "Current test coverage : $(shell go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+') %"
+
+print-cov:
+	@echo "Current test coverage : $(COVERAGE)%"
 
 release-candidate: tidy test
 	@echo "  >  Building release candidate for Linux..."

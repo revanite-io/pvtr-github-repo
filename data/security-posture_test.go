@@ -39,7 +39,11 @@ func TestBuildSecurityPosture_SecretScanningEnabled(t *testing.T) {
 			},
 		},
 	}
-	rd := RestData{}
+	rd := RestData{
+		Insights: si.SecurityInsights{
+			Repository: &si.Repository{},
+		},
+	}
 	sp, err := buildSecurityPosture(repo, rd)
 	assert.NoError(t, err)
 	assert.True(t, sp.PreventsPushingSecrets())
@@ -56,9 +60,9 @@ func TestBuildSecurityPosture_SecretScanningDisabledButInsightsTooling(t *testin
 	}
 	rd := RestData{
 		Insights: si.SecurityInsights{
-			Repository: si.Repository{
-				Security: si.SecurityInfo{
-					Tools: []si.Tool{
+			Repository: &si.Repository{
+				SecurityPosture: si.SecurityPosture{
+					Tools: []si.SecurityTool{
 						{Type: "secret-scanning"},
 					},
 				},
@@ -73,9 +77,9 @@ func TestBuildSecurityPosture_SecretScanningDisabledButInsightsTooling(t *testin
 
 func TestInsightsClaimsSecretsTooling(t *testing.T) {
 	insights := si.SecurityInsights{
-		Repository: si.Repository{
-			Security: si.SecurityInfo{
-				Tools: []si.Tool{
+		Repository: &si.Repository{
+			SecurityPosture: si.SecurityPosture{
+				Tools: []si.SecurityTool{
 					{Type: "secret-scanning"},
 					{Type: "other-tool"},
 				},
@@ -84,11 +88,11 @@ func TestInsightsClaimsSecretsTooling(t *testing.T) {
 	}
 	assert.True(t, insightsClaimsSecretsTooling(insights))
 
-	insights.Repository.Security.Tools = []si.Tool{
+	insights.Repository.SecurityPosture.Tools = []si.SecurityTool{
 		{Type: "other-tool"},
 	}
 	assert.False(t, insightsClaimsSecretsTooling(insights))
 
-	insights.Repository.Security.Tools = nil
+	insights.Repository.SecurityPosture.Tools = nil
 	assert.False(t, insightsClaimsSecretsTooling(insights))
 }

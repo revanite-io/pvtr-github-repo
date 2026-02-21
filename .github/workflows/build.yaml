@@ -11,11 +11,11 @@ permissions:
   pull-requests: read
 
 jobs:
-  lint:
+  build:
     name: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
@@ -25,3 +25,18 @@ jobs:
         run: make build
       - name: test
         run: make test-cov
+      - name: test coverage check
+        env:
+          TESTCOVERAGE_THRESHOLD: 26
+        run: |
+          echo "Quality Gate: checking test coverage is above threshold ..."
+          echo "Threshold             : $TESTCOVERAGE_THRESHOLD %"
+          totalCoverage=`go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+'`
+          echo "Current test coverage : $totalCoverage %"
+          if (( $(echo "$totalCoverage $TESTCOVERAGE_THRESHOLD" | awk '{print ($1 >= $2)}') )); then
+              echo "OK"
+          else
+              echo "Current test coverage is below threshold. Please add more unit tests or adjust threshold to a lower value."
+              echo "Failed"
+              exit 1
+          fi

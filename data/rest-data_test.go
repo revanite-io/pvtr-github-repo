@@ -65,7 +65,12 @@ func TestCheckFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mockClient := mock.NewMockedHTTPClient()
+			ghClient := github.NewClient(mockClient)
 			rest := &RestData{
+				ghClient: ghClient,
+				owner:    "test-owner",
+				repo:     "test-repo",
 				contents: RepoContent{
 					Content: tt.toplevel,
 					SubContent: map[string]RepoContent{
