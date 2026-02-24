@@ -124,6 +124,29 @@ func TestMultipleVariables(t *testing.T) {
 
 }
 
+func TestInsecureURI(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		{"empty string is not insecure", "", false},
+		{"whitespace string is not insecure", "   ", false},
+		{"https is not insecure", "https://example.com", false},
+		{"ssh is not insecure", "ssh://example.com", false},
+		{"git protocol is not insecure", "git://example.com", false},
+		{"git@ is not insecure", "git@github.com:org/repo.git", false},
+		{"http is insecure", "http://example.com", true},
+		{"ftp is insecure", "ftp://example.com", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, insecureURI(tt.uri), tt.name)
+		})
+	}
+}
+
 func TestUnTrustedVarsRegex(t *testing.T) {
 
 	expression, err := regexp.Compile(untrustedVarsRegex)

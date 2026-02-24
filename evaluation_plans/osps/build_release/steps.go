@@ -236,7 +236,8 @@ func getLinks(data data.Payload) []string {
 }
 
 func insecureURI(uri string) bool {
-	if strings.HasPrefix(uri, "https://") ||
+	if strings.TrimSpace(uri) == "" ||
+		strings.HasPrefix(uri, "https://") ||
 		strings.HasPrefix(uri, "ssh:") ||
 		strings.HasPrefix(uri, "git:") ||
 		strings.HasPrefix(uri, "git@") {
