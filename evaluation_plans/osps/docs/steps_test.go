@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gemaraproj/go-gemara"
+	"github.com/google/go-github/v74/github"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/stretchr/testify/assert"
@@ -71,5 +72,79 @@ func TestAcceptsVulnReports(t *testing.T) {
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})
+	}
+}
+
+func TestDocumentsSecurityUpdatePolicy(t *testing.T) {
+	supportURL := si.URL("https://example.com/support")
+	releases := []data.ReleaseData{{Id: 1, Name: "v1.0.0", TagName: "v1.0.0"}}
+
+	tests := []struct {
+		name            string
+		releases        []data.ReleaseData
+		supportPolicy   *si.URL
+		rootContents    []*github.RepositoryContent
+		expectedResult  gemara.Result
+		expectedMessage string
+	}{
+		{
+			name:            "No releases is not applicable",
+			releases:        nil,
+			expectedResult:  gemara.NotApplicable,
+			expectedMessage: "No releases found; the security-update support statement requirement does not apply",
+		},
+		{
+			name:            "Release with support policy in Security Insights passes",
+			releases:        releases,
+			supportPolicy:   &supportURL,
+			expectedResult:  gemara.Passed,
+			expectedMessage: "Security update support policy was specified in Security Insights data",
+		},
+		{
+			name:            "Release with SUPPORT.md fallback needs review",
+			releases:        releases,
+			rootContents:    []*github.RepositoryContent{repoFile("SUPPORT.md")},
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "No support-policy field in Security Insights, but a SUPPORT.md file or a Support section in the readme.md was found; manual review required to confirm it states when releases stop receiving security updates",
+		},
+		{
+			name:            "Release with no support documentation fails",
+			releases:        releases,
+			expectedResult:  gemara.Failed,
+			expectedMessage: "No security update support policy was found in Security Insights data and no SUPPORT.md file or Support section in the readme.md was found",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			base := data.Payload{
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{
+								SupportPolicy: test.supportPolicy,
+							},
+						},
+					},
+					Releases: test.releases,
+				},
+				GraphqlRepoData: &data.GraphqlRepoData{},
+			}
+			payload := data.NewPayloadWithRepoContents(base, test.rootContents, nil)
+
+			result, message, _ := DocumentsSecurityUpdatePolicy(payload)
+			assert.Equal(t, test.expectedResult, result)
+			assert.Equal(t, test.expectedMessage, message)
+		})
+	}
+}
+
+// repoFile builds a minimal file entry for the mocked repository root listing.
+func repoFile(name string) *github.RepositoryContent {
+	fileType := "file"
+	return &github.RepositoryContent{
+		Name: &name,
+		Path: &name,
+		Type: &fileType,
 	}
 }

@@ -68,6 +68,31 @@ func HasDependencyManagementPolicy(payload data.Payload) (result gemara.Result, 
 	return gemara.Failed, "Dependency management policy was NOT specified in Security Insights data", gemara.Medium
 }
 
+// DocumentsSecurityUpdatePolicy evaluates OSPS-DO-05.01: once a project has made
+// a release, its documentation must describe when releases or versions will no
+// longer receive security updates.
+//
+// The requirement is conditional on a release existing, so a project with no
+// releases is NotApplicable rather than a failure. Security Insights'
+// support-policy field is the explicit, machine-readable signal; a SUPPORT.md
+// (or README "Support" section) is a weaker fallback that warrants review since
+// its contents cannot be verified to describe a security-update timeline.
+func DocumentsSecurityUpdatePolicy(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if len(payload.Releases) == 0 {
+		return gemara.NotApplicable, "No releases found; the security-update support statement requirement does not apply", confidence
+	}
+
+	if payload.Insights.Project.Documentation.SupportPolicy != nil {
+		return gemara.Passed, "Security update support policy was specified in Security Insights data", gemara.High
+	}
+
+	if payload.HasSupportMarkdown() {
+		return gemara.NeedsReview, "No support-policy field in Security Insights, but a SUPPORT.md file or a Support section in the readme.md was found; manual review required to confirm it states when releases stop receiving security updates", gemara.Medium
+	}
+
+	return gemara.Failed, "No security update support policy was found in Security Insights data and no SUPPORT.md file or Support section in the readme.md was found", gemara.Medium
+}
+
 func HasIdentityVerificationGuide(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	if payload.Insights.Project.Documentation.SignatureVerification == nil {
 		return gemara.Failed, "Identity verification guide was NOT specified in Security Insights data (checked signature-verification field)", confidence
