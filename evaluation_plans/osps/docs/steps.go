@@ -1,6 +1,8 @@
 package docs
 
 import (
+	"strings"
+
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
@@ -77,12 +79,16 @@ func HasDependencyManagementPolicy(payload data.Payload) (result gemara.Result, 
 // support-policy field is the explicit, machine-readable signal; a SUPPORT.md
 // (or README "Support" section) is a weaker fallback that warrants review since
 // its contents cannot be verified to describe a security-update timeline.
+//
+// A present-but-empty support-policy field decodes to a non-nil *URL of "", so
+// the value is trimmed rather than only nil-checked to avoid crediting an empty
+// entry as documented policy.
 func DocumentsSecurityUpdatePolicy(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	if len(payload.Releases) == 0 {
 		return gemara.NotApplicable, "No releases found; the security-update support statement requirement does not apply", confidence
 	}
 
-	if payload.Insights.Project.Documentation.SupportPolicy != nil {
+	if sp := payload.Insights.Project.Documentation.SupportPolicy; sp != nil && strings.TrimSpace(string(*sp)) != "" {
 		return gemara.Passed, "Security update support policy was specified in Security Insights data", gemara.High
 	}
 

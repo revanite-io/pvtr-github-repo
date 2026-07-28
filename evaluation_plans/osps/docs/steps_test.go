@@ -77,6 +77,7 @@ func TestAcceptsVulnReports(t *testing.T) {
 
 func TestDocumentsSecurityUpdatePolicy(t *testing.T) {
 	supportURL := si.URL("https://example.com/support")
+	emptySupportURL := si.URL("")
 	releases := []data.ReleaseData{{Id: 1, Name: "v1.0.0", TagName: "v1.0.0"}}
 
 	tests := []struct {
@@ -106,6 +107,13 @@ func TestDocumentsSecurityUpdatePolicy(t *testing.T) {
 			rootContents:    []*github.RepositoryContent{repoFile("SUPPORT.md")},
 			expectedResult:  gemara.NeedsReview,
 			expectedMessage: "No support-policy field in Security Insights, but a SUPPORT.md file or a Support section in the readme.md was found; manual review required to confirm it states when releases stop receiving security updates",
+		},
+		{
+			name:            "Release with empty support policy falls through to failure",
+			releases:        releases,
+			supportPolicy:   &emptySupportURL,
+			expectedResult:  gemara.Failed,
+			expectedMessage: "No security update support policy was found in Security Insights data and no SUPPORT.md file or Support section in the readme.md was found",
 		},
 		{
 			name:            "Release with no support documentation fails",
