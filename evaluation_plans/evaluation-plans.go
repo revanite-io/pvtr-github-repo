@@ -34,7 +34,7 @@ var (
 			access_control.WorkflowDefaultReadPermissions,
 		},
 		"OSPS-AC-04.02": {
-			reusable_steps.NotImplemented,
+			access_control.WorkflowJobPermissionsLeastPrivilege,
 		},
 		"OSPS-BR-01.01": {
 			build_release.CicdSanitizedInputParameters,
@@ -58,7 +58,7 @@ var (
 			build_release.EnsureLatestReleaseHasChangelog,
 		},
 		"OSPS-BR-05.01": {
-			reusable_steps.NotImplemented,
+			build_release.DependenciesUseStandardizedTooling,
 		},
 		"OSPS-BR-06.01": {
 			reusable_steps.HasSecurityInsightsFile,
@@ -176,7 +176,7 @@ var (
 			quality.HasOneOrMoreStatusChecks,
 		},
 		"OSPS-QA-06.02": {
-			quality.DocumentsTestExecution,
+			quality.TestExecutionDocumentation,
 		},
 		"OSPS-QA-06.03": {
 			reusable_steps.IsCodeRepo,
