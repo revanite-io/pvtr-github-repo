@@ -33,6 +33,12 @@ var (
 		`github\.event\.pull_request\.head\.label|` +
 		`github\.event\.pull_request\.head\.repo\.default_branch|` +
 		`github\.head_ref).*`)
+
+	// Refs that are only attacker-controllable in pull_request /
+	// pull_request_target workflows. On push they are trusted, so they are
+	// checked separately and flagged only for PR-triggered workflows.
+	pullRequestOnlyUntrustedVars = regexp.MustCompile(`.*(github\.ref\b|` +
+		`github\.ref_name).*`)
 )
 
 // checkAllWorkflows fetches the repository's workflow files and evaluates each
@@ -99,14 +105,25 @@ func CicdSanitizedInputParameters(payload data.Payload) (gemara.Result, string, 
 		"GitHub Workflows variables do not contain untrusted inputs")
 }
 
-// checkWorkflowFileForUntrustedInputs checks a workflow for known untrusted
-// GitHub Actions context variables used directly in run: steps.
-// These variables (e.g. issue titles, PR bodies, commit messages) are
-// user-controllable and can lead to command injection when interpolated
-// into shell scripts without sanitization.
+// checkWorkflowFileForUntrustedInputs flags GitHub Actions context variables
+// used directly in run: steps that outside contributors can control (e.g. issue
+// titles, PR bodies, commit messages, branch refs). Interpolating them into a
+// shell script without sanitization can lead to command injection.
+//
+// github.ref and github.ref_name are only attacker-controllable in
+// pull_request / pull_request_target workflows, so they are flagged only there.
 func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
 
 	var message strings.Builder
+
+	// PR triggers make github.ref and github.ref_name attacker-controllable.
+	hasPullRequestTrigger := false
+	for _, event := range workflow.On {
+		if event.EventName() == "pull_request" || event.EventName() == "pull_request_target" {
+			hasPullRequestTrigger = true
+			break
+		}
+	}
 
 	for _, job := range workflow.Jobs {
 		if job == nil {
@@ -128,7 +145,9 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 			varList := pullVariablesFromScript(run.Run.Value)
 
 			for _, name := range varList {
-				if untrustedVars.Match([]byte(name)) {
+				nameBytes := []byte(name)
+				if untrustedVars.Match(nameBytes) ||
+					(hasPullRequestTrigger && pullRequestOnlyUntrustedVars.Match(nameBytes)) {
 					fmt.Fprintf(&message, "Untrusted input found: %v\n", name)
 				}
 			}
