@@ -2,7 +2,7 @@ FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec4
 RUN apk add --no-cache wget tar unzip
 
 WORKDIR /app
-ARG VERSION=0.21.2
+ARG VERSION=0.22.0
 ARG PLATFORM=Linux_x86_64  # Change this based on your target system
 
 RUN wget https://github.com/privateerproj/privateer/releases/download/v${VERSION}/privateer_${PLATFORM}.tar.gz
