@@ -256,15 +256,39 @@ var buildInstructionHeadings = []string{
 	"getting started",
 }
 
+// buildInstructionHeadingExclusions are headings that contain a build keyword
+// but do not document how to build from source (e.g. CI status badges). They
+// are matched as substrings and take precedence over buildInstructionHeadings,
+// preventing common false positives such as "Build Status" or "Nightly Builds".
+var buildInstructionHeadingExclusions = []string{
+	"build status",
+	"build passing",
+	"nightly build",
+}
+
 // hasBuildInstructionHeading reports whether any of the provided document
 // headings references build-from-source instructions per OSPS-DO-07.01.
 func hasBuildInstructionHeading(headings []string) bool {
 	for _, heading := range headings {
 		normalized := strings.ToLower(strings.TrimSpace(heading))
+		if isExcludedBuildHeading(normalized) {
+			continue
+		}
 		for _, keyword := range buildInstructionHeadings {
 			if strings.Contains(normalized, keyword) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// isExcludedBuildHeading reports whether a normalized heading matches a known
+// non-build-instruction phrase (see buildInstructionHeadingExclusions).
+func isExcludedBuildHeading(normalized string) bool {
+	for _, exclusion := range buildInstructionHeadingExclusions {
+		if strings.Contains(normalized, exclusion) {
+			return true
 		}
 	}
 	return false

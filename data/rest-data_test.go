@@ -103,6 +103,10 @@ func TestHasBuildInstructionHeading(t *testing.T) {
 		{name: "getting started", headings: []string{"Getting Started"}, expected: true},
 		{name: "compile section", headings: []string{"How to Compile the Project"}, expected: true},
 		{name: "development setup", headings: []string{"Development Setup"}, expected: true},
+		{name: "build status badge excluded", headings: []string{"Build Status"}, expected: false},
+		{name: "build passing badge excluded", headings: []string{"Build passing"}, expected: false},
+		{name: "nightly builds excluded", headings: []string{"Nightly Builds"}, expected: false},
+		{name: "excluded alongside valid", headings: []string{"Build Status", "Building from source"}, expected: true},
 	}
 
 	for _, tt := range tests {
