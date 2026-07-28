@@ -187,7 +187,25 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 	return filepath
 }
 
-// dependencyToolingConfigFiles are the config files read by automated
+// checkFileInSubdir returns the path to filename within the given subdirectory
+// (case-insensitive), or "" when the directory or file is absent. It lets build
+// documentation stored outside the root and .github (e.g. docs/BUILDING.md) be
+// discovered per OSPS-DO-07.01.
+func (r *RestData) checkFileInSubdir(dir, filename string) string {
+	subdir, err := r.getSubdirContents(dir)
+	if err != nil {
+		return ""
+	}
+	for _, dirContents := range subdir.Content {
+		if dirContents.GetType() != "file" {
+			continue
+		}
+		if strings.EqualFold(dirContents.GetName(), filename) {
+			return dirContents.GetPath()
+		}
+	}
+	return ""
+}
 // dependency-update tools (Dependabot, Renovate). Their presence is direct
 // evidence a repository manages its dependencies, observable even when
 // security-insights.yml is absent.
@@ -251,6 +269,8 @@ var buildInstructionFiles = []string{
 	"BUILD.md",
 	"BUILDING.md",
 	"DEVELOPMENT.md",
+	"INSTALL.md",
+	"INSTALL",
 	"Taskfile.yml",
 	"Taskfile.yaml",
 }
@@ -258,13 +278,13 @@ var buildInstructionFiles = []string{
 // buildInstructionHeadings are documentation section headings that indicate the
 // project explains how to build or set up the software from source per
 // OSPS-DO-07.01. Matching is case-insensitive and substring-based (see
-// hasBuildInstructionHeading), so short roots such as "build" and "compile"
+// hasBuildInstructionHeading), so short roots such as "build" and "compil"
 // intentionally cover their variants ("building", "build from source",
-// "compiling", etc.).
+// "compiling", "compilation", etc.).
 var buildInstructionHeadings = []string{
 	"build",
-	"compile",
-	"install from source",
+	"compil",
+	"from source",
 	"development setup",
 	"developer setup",
 	"getting started",
@@ -310,16 +330,20 @@ func isExcludedBuildHeading(normalized string) bool {
 
 // HasBuildInstructions returns true when the repository documents how to build
 // the software from source per OSPS-DO-07.01. It is satisfied by a well-known
-// build automation or build documentation file (e.g. Makefile, BUILDING.md), or
-// by a build-related section heading in the README or CONTRIBUTING guide.
+// build automation or build documentation file (e.g. Makefile, BUILDING.md) in
+// the repository root, .github, or docs directory, or by a build-related
+// section heading in the README or CONTRIBUTING guide.
 func (r *RestData) HasBuildInstructions() bool {
 	for _, filename := range buildInstructionFiles {
 		if r.checkFile(filename) != "" {
 			return true
 		}
+		if r.checkFileInSubdir("docs", filename) != "" {
+			return true
+		}
 	}
 
-	for _, docName := range []string{"readme.md", "contributing.md"} {
+	for _, docName := range []string{"readme.md", "readme.markdown", "readme", "contributing.md", "contributing.markdown", "contributing"} {
 		docPath := r.checkFile(docName)
 		if docPath == "" {
 			continue

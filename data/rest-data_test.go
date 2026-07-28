@@ -102,6 +102,8 @@ func TestHasBuildInstructionHeading(t *testing.T) {
 		{name: "phrase with surrounding text", headings: []string{"Building from source"}, expected: true},
 		{name: "getting started", headings: []string{"Getting Started"}, expected: true},
 		{name: "compile section", headings: []string{"How to Compile the Project"}, expected: true},
+		{name: "compilation variant", headings: []string{"Compilation"}, expected: true},
+		{name: "from source phrase", headings: []string{"Installing from source"}, expected: true},
 		{name: "development setup", headings: []string{"Development Setup"}, expected: true},
 		{name: "build status badge excluded", headings: []string{"Build Status"}, expected: false},
 		{name: "build passing badge excluded", headings: []string{"Build passing"}, expected: false},
@@ -125,6 +127,7 @@ func TestHasBuildInstructions(t *testing.T) {
 		name        string
 		toplevel    []*github.RepositoryContent
 		githubDir   []*github.RepositoryContent
+		docsDir     []*github.RepositoryContent
 		fileContent string                   // markdown returned for README/CONTRIBUTING lookups
 		responses   []mock.MockBackendOption // overrides the content response when set (e.g. to simulate failures)
 		expected    bool
@@ -179,6 +182,24 @@ func TestHasBuildInstructions(t *testing.T) {
 			githubDir:   dummyGithubDir,
 			fileContent: "# My Project\n\n## Usage\n\nJust run it.\n",
 			expected:    false,
+		},
+		{
+			name:     "BUILDING.md in docs",
+			toplevel: []*github.RepositoryContent{},
+			githubDir: dummyGithubDir,
+			docsDir: []*github.RepositoryContent{
+				{Type: github.Ptr("file"), Name: github.Ptr("BUILDING.md"), Path: github.Ptr("docs/BUILDING.md")},
+			},
+			expected: true,
+		},
+		{
+			name: "extensionless README with build heading",
+			toplevel: []*github.RepositoryContent{
+				{Type: github.Ptr("file"), Name: github.Ptr("README"), Path: github.Ptr("README")},
+			},
+			githubDir:   dummyGithubDir,
+			fileContent: "# My Project\n\n## Compilation\n\nRun `make`.\n",
+			expected:    true,
 		},
 		{
 			name:      "no build documentation",
@@ -246,6 +267,7 @@ func TestHasBuildInstructions(t *testing.T) {
 					Content: tt.toplevel,
 					SubContent: map[string]RepoContent{
 						".github": {Content: tt.githubDir},
+						"docs":    {Content: tt.docsDir},
 					},
 				},
 			}
