@@ -995,6 +995,79 @@ func TestClassifyUntrustedCodeIsolation(t *testing.T) {
 	}
 }
 
+func TestEvaluateUntrustedCodeIsolation(t *testing.T) {
+	tests := []struct {
+		name         string
+		workflows    []data.WorkflowFile
+		wantResult   gemara.Result
+		wantContains string
+	}{
+		{
+			name:         "privileged workflow checking out untrusted code fails",
+			workflows:    []data.WorkflowFile{{Name: "pwn.yml", Path: "p/pwn.yml", Content: pwnRequestWorkflow}},
+			wantResult:   gemara.Failed,
+			wantContains: "expose privileged credentials",
+		},
+		{
+			name:         "no privileged workflows passes",
+			workflows:    []data.WorkflowFile{{Name: "push.yml", Path: "p/push.yml", Content: safePushWorkflow}},
+			wantResult:   gemara.Passed,
+			wantContains: "No workflows run untrusted code",
+		},
+		{
+			// A parse failure must not assert a control violation on a file we
+			// never understood; it degrades to NeedsReview like evaluateWorkflows.
+			name:         "an unparseable file needs review rather than failing",
+			workflows:    []data.WorkflowFile{{Name: "broken.yml", Path: "p/broken.yml", Content: "this is not a workflow"}},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			name:         "a truncated file needs review rather than passing silently",
+			workflows:    []data.WorkflowFile{{Name: "huge.yml", Path: "p/huge.yml", Truncated: true}},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			// A real pwn-request must not be masked by an unreadable sibling,
+			// regardless of file ordering.
+			name: "a real violation outranks an unreadable sibling listed first",
+			workflows: []data.WorkflowFile{
+				{Name: "broken.yml", Path: "p/broken.yml", Content: "not a workflow"},
+				{Name: "pwn.yml", Path: "p/pwn.yml", Content: pwnRequestWorkflow},
+			},
+			wantResult:   gemara.Failed,
+			wantContains: "expose privileged credentials",
+		},
+		{
+			// A privileged-but-safe workflow alongside an unreadable one keeps
+			// both review reasons in the message.
+			name: "privileged review and unreadable file combine into needs review",
+			workflows: []data.WorkflowFile{
+				{Name: "label.yml", Path: "p/label.yml", Content: safePRTargetWorkflow},
+				{Name: "huge.yml", Path: "p/huge.yml", Truncated: true},
+			},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			name:         "non-workflow extensions are ignored, not flagged",
+			workflows:    []data.WorkflowFile{{Name: "README.md", Path: "p/README.md", Content: "not a workflow"}},
+			wantResult:   gemara.Passed,
+			wantContains: "No workflows run untrusted code",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message := evaluateUntrustedCodeIsolation(tt.workflows)
+			t.Log(message)
+			assert.Equal(t, tt.wantResult, result)
+			assert.Contains(t, message, tt.wantContains)
+		})
+	}
+}
+
 // alwaysPasses and alwaysFails stand in for the real per-workflow checks so
 // these cases exercise only how evaluateWorkflows combines their results.
 func alwaysPasses(*actionlint.Workflow) (bool, string) { return true, "" }
@@ -1116,6 +1189,9 @@ func TestStepChecksOutUntrustedCode(t *testing.T) {
 		{"unrelated build command is safe", "make build && npm test", false},
 		{"head ref echoed without checkout is safe", "echo ${{ github.head_ref }}", false},
 		{"unrelated head ref and safe checkout are not combined", "echo ${{ github.head_ref }}\ngit checkout main", false},
+		{"checkout named only in a full-line comment is safe", "# gh pr checkout ${{ github.event.issue.number }} is insecure", false},
+		{"checkout named only in a trailing comment is safe", "make build # git checkout pull/123/head would be unsafe", false},
+		{"real checkout with a trailing comment is still flagged", "gh pr checkout ${{ github.event.issue.number }} # fetch PR", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

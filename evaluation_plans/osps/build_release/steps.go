@@ -76,6 +76,11 @@ var (
 	// `echo github.head_ref` and `git checkout main` elsewhere in the same script
 	// would be incorrectly combined into a violation.
 	shellCommandSeparator = regexp.MustCompile(`[;\n]|&&|\|\|`)
+
+	// A '#' begins a shell comment when it starts a command segment or follows
+	// whitespace. Everything from there to the end of the segment is stripped
+	// before matching so a checkout named only in a comment is not flagged.
+	shellCommentPattern = regexp.MustCompile(`(^|\s)#.*$`)
 )
 
 // checkAllWorkflows fetches the repository's workflow files and evaluates each
@@ -155,7 +160,8 @@ func CicdBranchNameSanitized(payload data.Payload) (gemara.Result, string, gemar
 //   - Failed: a privileged workflow checks out an untrusted fork's code (the
 //     "pwn request" pattern), directly exposing base-repo secrets and token.
 //   - NeedsReview: a workflow runs in a privileged context but no dangerous
-//     checkout was detected. The residual vectors (see
+//     checkout was detected, or one or more workflow files could not be read
+//     (truncated by the API or unparseable). The residual vectors (see
 //     checkWorkflowForUntrustedCodeAccess) are not statically decidable, so a
 //     human must confirm the credentials are actually isolated.
 //   - Passed: no workflow runs in a privileged context.
@@ -171,23 +177,61 @@ func CicdUntrustedCodeIsolation(payload data.Payload) (gemara.Result, string, ge
 		return gemara.NotApplicable, "No workflows found in .github/workflows directory", confidence
 	}
 
+	result, message := evaluateUntrustedCodeIsolation(workflows)
+	return result, message, confidence
+}
+
+// evaluateUntrustedCodeIsolation decodes the workflow files, classifies the
+// readable ones, and applies the tiered verdict. It is separated from payload
+// retrieval so the file-walking behaviour is unit-testable without a payload
+// fixture, mirroring evaluateWorkflows.
+//
+// Files we could not read (truncated by the API or unparseable) are collected as
+// uninspected rather than short-circuiting the check. Bailing on the first such
+// file would make the verdict order-dependent and could let an unreadable
+// sibling mask a real pwn-request in a later workflow. A parse failure in
+// particular must not yield Failed: that would assert the repository violates
+// the control based on a file we never understood.
+func evaluateUntrustedCodeIsolation(workflows []data.WorkflowFile) (gemara.Result, string) {
 	var parsed []namedWorkflow
+	var uninspected []string
 	for _, file := range workflows {
 		if !strings.HasSuffix(file.Name, ".yml") && !strings.HasSuffix(file.Name, ".yaml") {
 			continue
 		}
 		if file.Truncated {
-			return gemara.NeedsReview, fmt.Sprintf("Workflow file %v is too large to retrieve for inspection; manual review required", file.Path), confidence
+			uninspected = append(uninspected, fmt.Sprintf("%s (too large to retrieve)", file.Path))
+			continue
 		}
 		workflow, parseErr := actionlint.Parse([]byte(file.Content))
 		if parseErr != nil {
-			return gemara.Failed, fmt.Sprintf("Error parsing workflow: %v (%s)", parseErr, file.Path), confidence
+			uninspected = append(uninspected, fmt.Sprintf("%s (%v)", file.Path, parseErr))
+			continue
 		}
 		parsed = append(parsed, namedWorkflow{name: file.Name, workflow: workflow})
 	}
 
 	result, message := classifyUntrustedCodeIsolation(parsed)
-	return result, message, confidence
+
+	// A confirmed violation in a readable workflow takes precedence: an
+	// unreadable sibling can never mask a real finding.
+	if result == gemara.Failed {
+		return result, message
+	}
+
+	// Otherwise any uninspected file degrades the verdict to NeedsReview so a
+	// pwn-request hiding in a file we could not read is never silently passed.
+	if len(uninspected) > 0 {
+		reviewMessage := fmt.Sprintf(
+			"Unable to evaluate %d of %d workflow files, manual review required: %s",
+			len(uninspected), len(workflows), strings.Join(uninspected, "; "))
+		if result == gemara.NeedsReview {
+			reviewMessage = message + " " + reviewMessage
+		}
+		return gemara.NeedsReview, reviewMessage
+	}
+
+	return result, message
 }
 
 // namedWorkflow pairs a parsed workflow with its filename so aggregate
@@ -325,6 +369,10 @@ func stepChecksOutUntrustedCode(script string) bool {
 	// Preserve line continuations before splitting the script into commands.
 	script = strings.ReplaceAll(script, "\\\n", " ")
 	for _, command := range shellCommandSeparator.Split(script, -1) {
+		// Strip trailing shell comments so a checkout mentioned only in a
+		// comment (e.g. `# gh pr checkout is unsafe`) is not treated as a
+		// real command and misreported as a violation.
+		command = stripShellComment(command)
 		if ghPrCheckoutCommand.MatchString(command) {
 			return true
 		}
@@ -333,6 +381,16 @@ func stepChecksOutUntrustedCode(script string) bool {
 		}
 	}
 	return false
+}
+
+// stripShellComment removes a trailing shell comment from a single command
+// segment. A '#' starts a comment only at the beginning of the segment or when
+// preceded by whitespace, so an embedded '#' (e.g. in a URL fragment) is kept.
+func stripShellComment(command string) string {
+	if loc := shellCommentPattern.FindStringIndex(command); loc != nil {
+		return command[:loc[0]]
+	}
+	return command
 }
 
 // checkWorkflowFileForBranchNameUsage checks a workflow for unsanitized branch name
