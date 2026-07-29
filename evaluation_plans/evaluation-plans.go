@@ -90,7 +90,7 @@ var (
 			docs.HasSupportDocs,
 		},
 		"OSPS-DO-05.01": {
-			reusable_steps.NotImplemented,
+			docs.DocumentsSecurityUpdatePolicy,
 		},
 		"OSPS-DO-06.01": {
 			reusable_steps.IsCodeRepo,
