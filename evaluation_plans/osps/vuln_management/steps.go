@@ -109,83 +109,265 @@ func matchSast(text string) string {
 	return ""
 }
 
-// workflowRunsOnChanges reports whether a workflow is triggered by an event that
-// fires on changes to the codebase, i.e. a pull request or a push. Only these
-// can act as a gate on incoming changes; scheduled or manual runs cannot.
-func workflowRunsOnChanges(workflow *actionlint.Workflow) bool {
-	for _, event := range workflow.On {
-		switch event.EventName() {
-		case "pull_request", "pull_request_target", "push":
+// matchesGitHubGlob matches the branch-filter glob syntax needed here: *, **,
+// and ?. Character classes and extglobs are conservatively treated as no match.
+func matchesGitHubGlob(value, pattern string) bool {
+	var expression strings.Builder
+	expression.WriteByte('^')
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '*':
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
+				expression.WriteString(".*")
+				i++
+			} else {
+				expression.WriteString("[^/]*")
+			}
+		case '?':
+			expression.WriteString("[^/]")
+		case '[', ']', '+':
+			return false
+		default:
+			expression.WriteString(regexp.QuoteMeta(pattern[i : i+1]))
+		}
+	}
+	expression.WriteByte('$')
+	return regexp.MustCompile(expression.String()).MatchString(value)
+}
+
+func branchFilterIncludes(filter *actionlint.WebhookEventFilter, branch string) bool {
+	if filter.IsEmpty() {
+		return true
+	}
+	included := false
+	for _, pattern := range filter.Values {
+		if pattern == nil {
+			continue
+		}
+		value := pattern.Value
+		negated := strings.HasPrefix(value, "!")
+		value = strings.TrimPrefix(value, "!")
+		if matchesGitHubGlob(branch, value) {
+			included = !negated
+		}
+	}
+	return included
+}
+
+func branchFilterExcludes(filter *actionlint.WebhookEventFilter, branch string) bool {
+	if filter.IsEmpty() {
+		return false
+	}
+	for _, pattern := range filter.Values {
+		if pattern != nil && matchesGitHubGlob(branch, pattern.Value) {
 			return true
 		}
 	}
 	return false
 }
 
-// detectSastToolInInsights returns correlation names for every Security Insights
-// tool declared as a SAST tool integrated into continuous integration. Adhoc or
-// release-only integrations are ignored because they do not evaluate incoming
-// changes.
-func detectSastToolInInsights(tools []si.SecurityTool) []string {
-	var names []string
+// workflowCoversChanges reports whether a workflow runs for every pull request
+// targeting the default branch or every pushed commit. The second return value
+// marks relevant triggers whose filters prevent proving full coverage.
+func workflowCoversChanges(workflow *actionlint.Workflow, defaultBranch string) (bool, bool) {
+	uncertain := false
+	for _, event := range workflow.On {
+		switch event.EventName() {
+		case "pull_request_target":
+			// This event runs in the base repository context and does not prove
+			// that the pull request's code is what the SAST tool analyzes.
+			uncertain = true
+			continue
+		case "pull_request", "push":
+		default:
+			continue
+		}
+
+		webhook, ok := event.(*actionlint.WebhookEvent)
+		if !ok {
+			uncertain = true
+			continue
+		}
+		types := make(map[string]bool)
+		for _, eventType := range webhook.Types {
+			if eventType != nil {
+				types[eventType.Value] = true
+			}
+		}
+		pathsFiltered := !webhook.Paths.IsEmpty() || !webhook.PathsIgnore.IsEmpty()
+
+		if event.EventName() == "push" {
+			branchesUnfiltered := webhook.Branches.IsEmpty() && webhook.BranchesIgnore.IsEmpty()
+			tagsUnfiltered := webhook.Tags.IsEmpty() && webhook.TagsIgnore.IsEmpty()
+			if pathsFiltered || !branchesUnfiltered || !tagsUnfiltered {
+				uncertain = true
+				continue
+			}
+			return true, false
+		}
+
+		typesCoverChanges := len(types) == 0 || (types["opened"] && types["synchronize"])
+		branchCovered := defaultBranch != "" &&
+			branchFilterIncludes(webhook.Branches, defaultBranch) &&
+			!branchFilterExcludes(webhook.BranchesIgnore, defaultBranch)
+		if typesCoverChanges && !pathsFiltered && branchCovered {
+			return true, false
+		}
+		uncertain = true
+	}
+	return false, uncertain
+}
+
+type sastDetection struct {
+	sources           []string
+	policyDocumented  bool
+	inspectionBlocked bool
+	coverageProven    bool
+}
+
+// detectSastToolInInsights identifies SAST tools integrated into continuous
+// integration. A non-empty rulesets declaration documents the policy applied by
+// the tool; adhoc or release-only integrations do not evaluate incoming changes.
+func detectSastToolInInsights(tools []si.SecurityTool) sastDetection {
+	var detection sastDetection
 	for _, tool := range tools {
 		if strings.EqualFold(tool.Type, "SAST") && tool.Integration.Ci {
 			name := strings.TrimSpace(tool.Name)
 			if name == "" {
 				name = "SAST"
 			}
-			names = append(names, name)
+			detection.sources = append(detection.sources, name)
+			if len(tool.Rulesets) > 0 {
+				detection.policyDocumented = true
+			}
 		}
 	}
-	return names
+	return detection
 }
 
 // detectSastInWorkflows inspects workflow files for a known SAST tool invoked by
-// a workflow that runs on changes. It returns correlation names (the identifier,
-// the workflow name, and the job name/ID) that a required status-check context
-// can be matched against. Files that cannot be read or parsed are skipped rather
-// than treated as evidence.
-func detectSastInWorkflows(files []data.WorkflowFile) []string {
-	var sources []string
+// a workflow that runs on changes. Local reusable workflows are resolved from
+// the fetched files, while recognizable remote workflow names are detected
+// directly. Any file or remote call that cannot be inspected is recorded so an
+// absence of SAST evidence cannot be reported as a definitive failure.
+func detectSastInWorkflows(files []data.WorkflowFile, defaultBranch string) sastDetection {
+	var detection sastDetection
+	parsed := make(map[string]*actionlint.Workflow)
 	for _, file := range files {
 		isWorkflowYAML := strings.HasSuffix(file.Name, ".yml") || strings.HasSuffix(file.Name, ".yaml")
-		if !isWorkflowYAML || file.Truncated {
+		if !isWorkflowYAML {
+			continue
+		}
+		if file.Truncated {
+			detection.inspectionBlocked = true
 			continue
 		}
 		workflow, err := actionlint.Parse([]byte(file.Content))
 		if err != nil || workflow == nil {
+			detection.inspectionBlocked = true
 			continue
 		}
-		if !workflowRunsOnChanges(workflow) {
-			continue
+		parsed[strings.TrimPrefix(file.Path, "./")] = workflow
+	}
+
+	var inspectJob func(*actionlint.Job, map[string]bool) ([]string, bool)
+	inspectJob = func(job *actionlint.Job, visiting map[string]bool) ([]string, bool) {
+		if id := jobUsesSast(job); id != "" {
+			return []string{id}, false
+		}
+		if job.WorkflowCall == nil || job.WorkflowCall.Uses == nil {
+			return nil, false
 		}
 
-		workflowName := ""
-		if workflow.Name != nil {
-			workflowName = workflow.Name.Value
+		uses := strings.TrimSpace(job.WorkflowCall.Uses.Value)
+		if id := matchSast(uses); id != "" {
+			return []string{id}, false
+		}
+		if !strings.HasPrefix(uses, "./") {
+			return nil, true
+		}
+
+		path := strings.TrimPrefix(uses, "./")
+		if visiting[path] {
+			return nil, true
+		}
+		called, ok := parsed[path]
+		if !ok {
+			return nil, true
+		}
+		visiting[path] = true
+		defer delete(visiting, path)
+
+		blocked := false
+		for _, calledJob := range called.Jobs {
+			if calledJob == nil {
+				continue
+			}
+			sources, callBlocked := inspectJob(calledJob, visiting)
+			blocked = blocked || callBlocked
+			if len(sources) > 0 {
+				if calledJob.Name != nil && calledJob.Name.Value != "" {
+					sources = append(sources, calledJob.Name.Value)
+				}
+				if calledJob.ID != nil && calledJob.ID.Value != "" {
+					sources = append(sources, calledJob.ID.Value)
+				}
+				return sources, blocked
+			}
+		}
+		return nil, blocked
+	}
+
+	for path, workflow := range parsed {
+		coversChanges, coverageUncertain := workflowCoversChanges(workflow, defaultBranch)
+		detection.inspectionBlocked = detection.inspectionBlocked || coverageUncertain
+		if !coversChanges {
+			continue
 		}
 
 		for _, job := range workflow.Jobs {
 			if job == nil {
 				continue
 			}
-			id := jobUsesSast(job)
-			if id == "" {
+			sources, blocked := inspectJob(job, map[string]bool{path: true})
+			detection.inspectionBlocked = detection.inspectionBlocked || blocked
+			if len(sources) == 0 {
 				continue
 			}
-			sources = append(sources, id)
-			if workflowName != "" {
-				sources = append(sources, workflowName)
+			detection.coverageProven = true
+
+			workflowName := ""
+			if workflow.Name != nil {
+				workflowName = strings.TrimSpace(workflow.Name.Value)
 			}
-			if job.Name != nil && job.Name.Value != "" {
-				sources = append(sources, job.Name.Value)
+			jobName := ""
+			if job.Name != nil {
+				jobName = strings.TrimSpace(job.Name.Value)
 			}
-			if job.ID != nil && job.ID.Value != "" {
-				sources = append(sources, job.ID.Value)
+			if jobName == "" && job.ID != nil {
+				jobName = strings.TrimSpace(job.ID.Value)
+			}
+
+			for _, source := range sources {
+				// Tool identifiers are reliable exact contexts in their own
+				// right. Generic job names are only retained as part of the
+				// complete workflow/job context below.
+				if matchSast(source) != "" {
+					detection.sources = append(detection.sources, source)
+				}
+			}
+			if workflowName != "" && jobName != "" {
+				detection.sources = append(detection.sources, workflowName+" / "+jobName)
+				for _, calledJob := range sources[1:] {
+					calledJob = strings.TrimSpace(calledJob)
+					if calledJob != "" && matchSast(calledJob) == "" {
+						detection.sources = append(detection.sources, workflowName+" / "+jobName+" / "+calledJob)
+					}
+				}
 			}
 		}
 	}
-	return sources
+	return detection
 }
 
 // jobUsesSast returns the SAST identifier a job invokes via a step's `uses:`
@@ -218,28 +400,16 @@ func jobUsesSast(job *actionlint.Job) string {
 	return ""
 }
 
-// requiredCheckMatchesSast reports whether any required status-check context
-// corresponds to a detected SAST tool: either the context name itself carries a
-// known SAST identifier, or it correlates with one of the SAST source names
-// (workflow/job names) that produced the check.
+// requiredCheckMatchesSast reports whether a required status-check context
+// exactly matches a detected tool or complete workflow/job context.
 func requiredCheckMatchesSast(requiredContexts, sastSources []string) bool {
 	for _, context := range requiredContexts {
-		trimmed := strings.TrimSpace(context)
-		if trimmed == "" {
+		normalizedContext := strings.ToLower(strings.TrimSpace(context))
+		if normalizedContext == "" {
 			continue
 		}
-		if matchSast(trimmed) != "" {
-			return true
-		}
-		lowerContext := strings.ToLower(trimmed)
 		for _, source := range sastSources {
-			lowerSource := strings.ToLower(strings.TrimSpace(source))
-			// Guard against short, generic tokens producing spurious substring
-			// matches (e.g. a job called "ci").
-			if len(lowerSource) < 4 {
-				continue
-			}
-			if strings.Contains(lowerContext, lowerSource) || strings.Contains(lowerSource, lowerContext) {
+			if normalizedContext == strings.ToLower(strings.TrimSpace(source)) {
 				return true
 			}
 		}
@@ -253,12 +423,24 @@ func requiredCheckMatchesSast(requiredContexts, sastSources []string) bool {
 // Security Insights or a workflow triggered by pull_request/push) and that it is
 // enforced as a required status check that blocks merges to the default branch.
 func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	var sastSources []string
+	var detection sastDetection
 	if payload.RestData != nil && payload.Insights.Repository != nil {
-		sastSources = append(sastSources, detectSastToolInInsights(payload.Insights.Repository.SecurityPosture.Tools)...)
+		insightsDetection := detectSastToolInInsights(payload.Insights.Repository.SecurityPosture.Tools)
+		detection.sources = append(detection.sources, insightsDetection.sources...)
+		detection.policyDocumented = insightsDetection.policyDocumented
 	}
-	if files, err := payload.GetWorkflowFiles(); err == nil {
-		sastSources = append(sastSources, detectSastInWorkflows(files)...)
+	files, err := payload.GetWorkflowFiles()
+	if err != nil {
+		detection.inspectionBlocked = true
+	} else {
+		defaultBranch := ""
+		if payload.GraphqlRepoData != nil {
+			defaultBranch = payload.Repository.DefaultBranchRef.Name
+		}
+		workflowDetection := detectSastInWorkflows(files, defaultBranch)
+		detection.sources = append(detection.sources, workflowDetection.sources...)
+		detection.inspectionBlocked = workflowDetection.inspectionBlocked
+		detection.coverageProven = workflowDetection.coverageProven
 	}
 
 	// Union the status-check contexts required on the default branch from both
@@ -274,18 +456,24 @@ func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message 
 
 	adminObservable := payload.RepositoryMetadata != nil && payload.RepositoryMetadata.ViewerCanAdminister()
 
-	return evaluateSastEnforcement(sastSources, requiredContexts, adminObservable)
+	return evaluateSastEnforcement(detection, requiredContexts, adminObservable)
 }
 
 // evaluateSastEnforcement applies the OSPS-VM-06.02 decision matrix to the
 // gathered signals, kept separate from data access so it can be unit tested with
 // plain inputs.
-func evaluateSastEnforcement(sastSources, requiredContexts []string, adminObservable bool) (gemara.Result, string, gemara.ConfidenceLevel) {
-	if len(sastSources) == 0 {
+func evaluateSastEnforcement(detection sastDetection, requiredContexts []string, adminObservable bool) (gemara.Result, string, gemara.ConfidenceLevel) {
+	if detection.inspectionBlocked && !detection.coverageProven {
+		return gemara.NeedsReview, "Workflow inspection was incomplete, so the scanner could not determine whether SAST runs on all changes", gemara.Low
+	}
+	if len(detection.sources) == 0 {
 		return gemara.Failed, "No Static Application Security Testing runs on changes, in Security Insights or a CI workflow triggered by pull requests or pushes", gemara.Medium
 	}
 
-	if requiredCheckMatchesSast(requiredContexts, sastSources) {
+	if requiredCheckMatchesSast(requiredContexts, detection.sources) {
+		if !detection.policyDocumented {
+			return gemara.NeedsReview, "A SAST tool runs in CI and is enforced as a required status check, but no documented SAST ruleset or policy was found in Security Insights", gemara.Medium
+		}
 		return gemara.Passed, "A SAST tool runs in CI and is enforced as a required status check on the default branch, blocking merges on violations", gemara.High
 	}
 
