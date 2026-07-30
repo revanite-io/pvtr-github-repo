@@ -24,6 +24,18 @@ type SecurityPolicy struct {
 	Content string
 }
 
+// SecurityAdvisories captures the repository's published GitHub security
+// advisories (GHSAs) as observed through the REST API. Like PrivateVulnReporting,
+// Known distinguishes an observed value from "could not observe": GitHub returns
+// 403/404 for repositories without the advisory database enabled or without
+// permission, which leaves Known false rather than reporting a confident Count
+// of zero. Steps rely on that distinction to choose NeedsReview over a confident
+// result when the signal is absent.
+type SecurityAdvisories struct {
+	Count int
+	Known bool
+}
+
 // privateVulnReportingResponse is the body of
 // GET /repos/{owner}/{repo}/private-vulnerability-reporting.
 type privateVulnReportingResponse struct {
@@ -70,4 +82,41 @@ func (r *RestData) loadSecurityPolicy() {
 		return
 	}
 	r.SecurityPolicy.Content = content
+}
+
+// securityAdvisory is the subset of a repository security advisory returned by
+// GET /repos/{owner}/{repo}/security-advisories that we need: only the state, so
+// we can restrict the count to advisories that are actually published.
+type securityAdvisory struct {
+	State string `json:"state"`
+}
+
+// getSecurityAdvisories queries the repository security advisories endpoint for
+// published advisories and records how many were found on RestData. A published
+// GitHub Security Advisory (GHSA) is public evidence that the project publishes
+// data about discovered vulnerabilities (OSPS-VM-04.01).
+//
+// Any failure — including the 403/404 GitHub returns when the advisory database
+// is unavailable for a repository or the token lacks access — leaves Known false
+// so callers treat the status as unknown rather than a confirmed "none
+// published". The endpoint is paginated; a project with published advisories
+// needs only one to satisfy the check, so a single (first-page) request is
+// sufficient to answer "are there any?".
+func (r *RestData) getSecurityAdvisories() {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/security-advisories?state=published&per_page=100", APIBase, r.owner, r.repo)
+	body, err := r.MakeApiCall(endpoint, true)
+	if err != nil {
+		return
+	}
+	var parsed []securityAdvisory
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return
+	}
+	count := 0
+	for _, advisory := range parsed {
+		if advisory.State == "published" {
+			count++
+		}
+	}
+	r.SecurityAdvisories = SecurityAdvisories{Count: count, Known: true}
 }

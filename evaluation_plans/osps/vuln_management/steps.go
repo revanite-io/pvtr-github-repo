@@ -695,3 +695,54 @@ func HasPrivateVulnerabilityReporting(payload data.Payload) (result gemara.Resul
 
 	return gemara.Failed, "No private vulnerability reporting contact in Security Insights data and GitHub private vulnerability reporting is disabled", gemara.Medium
 }
+
+// hasDisclosurePolicySignal reports whether any observable evidence of a
+// vulnerability disclosure process exists, so PublishesVulnerabilityData can
+// distinguish "a channel likely exists but nothing is published yet" from a
+// project with no visible security process at all.
+func hasDisclosurePolicySignal(payload data.Payload) bool {
+	if payload.Insights.Project.VulnerabilityReporting.Policy != nil {
+		return true
+	}
+	if payload.SecurityPolicy.Present || payload.Repository.IsSecurityPolicyEnabled {
+		return true
+	}
+	if payload.PrivateVulnReporting.Enabled {
+		return true
+	}
+	return false
+}
+
+// PublishesVulnerabilityData assesses OSPS-VM-04.01: the project must publicly
+// publish data about discovered vulnerabilities. A published GitHub Security
+// Advisory (GHSA) is direct, public evidence of that. When none are observable
+// the check never fails — a project may simply have had no vulnerabilities to
+// disclose yet — and instead defers to human review.
+func PublishesVulnerabilityData(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if payload.SecurityAdvisories.Known && payload.SecurityAdvisories.Count > 0 {
+		return gemara.Passed, fmt.Sprintf("%d published GitHub security advisory(ies) publicly document discovered vulnerabilities", payload.SecurityAdvisories.Count), gemara.High
+	}
+
+	if !payload.SecurityAdvisories.Known {
+		return gemara.NeedsReview, "Published GitHub security advisories could not be observed; confirm manually whether the project publicly publishes data about discovered vulnerabilities", gemara.Low
+	}
+
+	if hasDisclosurePolicySignal(payload) {
+		return gemara.NeedsReview, "No published GitHub security advisories were found, but a vulnerability disclosure process exists; confirm manually where discovered vulnerabilities are publicly published", gemara.Low
+	}
+
+	return gemara.NeedsReview, "No published GitHub security advisories were found; confirm manually whether the project publicly publishes data about discovered vulnerabilities", gemara.Low
+}
+
+// HasVexDocument assesses OSPS-VM-04.02: vulnerabilities in software components
+// not affecting the project must be accounted for in a VEX document. GitHub
+// exposes no VEX signal, so the check looks for a VEX document published in the
+// repository. Absence cannot confirm a violation — the project may have no
+// non-affecting vulnerabilities to account for — so it defers to human review.
+func HasVexDocument(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if len(payload.VexDocuments) > 0 {
+		return gemara.Passed, fmt.Sprintf("VEX document(s) found in the repository: %s", strings.Join(payload.VexDocuments, ", ")), gemara.Medium
+	}
+
+	return gemara.NeedsReview, "No VEX document was found in the repository; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document", gemara.Low
+}
