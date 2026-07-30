@@ -379,6 +379,81 @@ func TestUnTrustedVarsRegex(t *testing.T) {
 
 	assert.True(t, untrustedVars.Match([]byte("github.event.issue.title")), "regex match failed")
 	assert.True(t, untrustedVars.Match([]byte("github.event.commits.arbitrary.payload.message")), "regex match failed")
+
+	// Attacker-controllable branch-ref variables consolidated into BR-01.01.
+	// Only the PR *source* branch (head) is attacker-named via a fork, so it
+	// belongs in untrustedVars regardless of trigger.
+	assert.True(t, untrustedVars.Match([]byte("github.head_ref")), "github.head_ref should match")
+	assert.True(t, untrustedVars.Match([]byte("github.event.pull_request.head.ref")), "github.event.pull_request.head.ref should match")
+
+	// The base/target ref is an existing upstream branch (maintainer-controlled),
+	// not attacker-injectable, so it must NOT be flagged unconditionally.
+	assert.False(t, untrustedVars.Match([]byte("github.base_ref")), "github.base_ref should not match untrustedVars")
+	assert.False(t, untrustedVars.Match([]byte("github.event.pull_request.base.ref")), "github.event.pull_request.base.ref should not match untrustedVars")
+
+	// github.ref / github.ref_name are trigger-dependent and must NOT be in
+	// the unconditional untrustedVars set (they are handled separately).
+	assert.False(t, untrustedVars.Match([]byte("github.ref")), "github.ref should not match untrustedVars")
+	assert.False(t, untrustedVars.Match([]byte("github.ref_name")), "github.ref_name should not match untrustedVars")
+
+	assert.False(t, untrustedVars.Match([]byte("github.workspace")), "github.workspace should not match")
+}
+
+func TestPullRequestOnlyUntrustedVarsRegex(t *testing.T) {
+
+	assert.True(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref")), "github.ref should match")
+	assert.True(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref_name")), "github.ref_name should match")
+	assert.False(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref_type")), "github.ref_type should not match")
+	assert.False(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref_protected")), "github.ref_protected should not match")
+	assert.False(t, pullRequestOnlyUntrustedVars.Match([]byte("github.workspace")), "github.workspace should not match")
+}
+
+// These tests confirm BR-01.01 covers the branch-ref variables, including the
+// push-vs-PR trigger distinction for github.ref / github.ref_name.
+
+func untrustedInputsWorkflow(trigger, expr string) string {
+	return `name: Test
+on:
+  ` + trigger + `:
+    branches: [main]
+
+jobs:
+  job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: echo "value is ${{ ` + expr + ` }}"
+`
+}
+
+func TestUntrustedInputsBranchRefCoverage(t *testing.T) {
+	tests := []struct {
+		name           string
+		trigger        string
+		expr           string
+		expectedResult bool
+	}{
+		{"head_ref flagged", "pull_request", "github.head_ref", false},
+		{"pr head ref flagged", "pull_request", "github.event.pull_request.head.ref", false},
+		{"head_ref flagged even on push", "push", "github.head_ref", false},
+		{"base_ref not flagged (maintainer-controlled target)", "pull_request", "github.base_ref", true},
+		{"pr base ref not flagged (maintainer-controlled target)", "pull_request", "github.event.pull_request.base.ref", true},
+		{"github.ref flagged in pull_request", "pull_request", "github.ref", false},
+		{"github.ref_name flagged in pull_request_target", "pull_request_target", "github.ref_name", false},
+		{"github.ref not flagged on push", "push", "github.ref", true},
+		{"github.ref_name not flagged on push", "push", "github.ref_name", true},
+		{"github.workspace never flagged", "pull_request", "github.workspace", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, errs := actionlint.Parse([]byte(untrustedInputsWorkflow(tt.trigger, tt.expr)))
+			assert.Empty(t, errs)
+			result, message := checkWorkflowFileForUntrustedInputs(workflow)
+			t.Log(message)
+			assert.Equal(t, tt.expectedResult, result, tt.name)
+		})
+	}
 }
 
 func TestDependenciesUseStandardizedTooling(t *testing.T) {
