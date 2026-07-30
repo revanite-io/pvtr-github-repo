@@ -109,8 +109,11 @@ func matchSast(text string) string {
 	return ""
 }
 
-// matchesGitHubGlob matches the branch-filter glob syntax needed here: *, **,
-// and ?. Character classes and extglobs are conservatively treated as no match.
+// matchesGitHubGlob matches the branch-filter glob syntax needed here: * and **.
+// GitHub's ref-filter grammar treats ?, +, and character classes as quantifiers
+// or extended patterns whose semantics differ from ordinary globbing, so those
+// are conservatively treated as no match rather than risking a false coverage
+// claim for a branch GitHub would not actually match.
 func matchesGitHubGlob(value, pattern string) bool {
 	var expression strings.Builder
 	expression.WriteByte('^')
@@ -123,9 +126,7 @@ func matchesGitHubGlob(value, pattern string) bool {
 			} else {
 				expression.WriteString("[^/]*")
 			}
-		case '?':
-			expression.WriteString("[^/]")
-		case '[', ']', '+':
+		case '?', '+', '[', ']':
 			return false
 		default:
 			expression.WriteString(regexp.QuoteMeta(pattern[i : i+1]))
@@ -218,9 +219,18 @@ func workflowCoversChanges(workflow *actionlint.Workflow, defaultBranch string) 
 	return false, uncertain
 }
 
+// sastSource is a detected signal that SAST runs on changes: either a tool
+// identifier or a complete workflow/job status-check context. policyDocumented
+// records whether that specific source carries a documented SAST ruleset or
+// policy (only Security Insights sources can), so a Pass is only granted when
+// the enforced check corresponds to a source whose policy is documented.
+type sastSource struct {
+	name             string
+	policyDocumented bool
+}
+
 type sastDetection struct {
-	sources           []string
-	policyDocumented  bool
+	sources           []sastSource
 	inspectionBlocked bool
 	coverageProven    bool
 }
@@ -236,10 +246,10 @@ func detectSastToolInInsights(tools []si.SecurityTool) sastDetection {
 			if name == "" {
 				name = "SAST"
 			}
-			detection.sources = append(detection.sources, name)
-			if len(tool.Rulesets) > 0 {
-				detection.policyDocumented = true
-			}
+			detection.sources = append(detection.sources, sastSource{
+				name:             name,
+				policyDocumented: len(tool.Rulesets) > 0,
+			})
 		}
 	}
 	return detection
@@ -351,17 +361,18 @@ func detectSastInWorkflows(files []data.WorkflowFile, defaultBranch string) sast
 			for _, source := range sources {
 				// Tool identifiers are reliable exact contexts in their own
 				// right. Generic job names are only retained as part of the
-				// complete workflow/job context below.
+				// complete workflow/job context below. Workflow-detected sources
+				// never carry documented-policy evidence on their own.
 				if matchSast(source) != "" {
-					detection.sources = append(detection.sources, source)
+					detection.sources = append(detection.sources, sastSource{name: source})
 				}
 			}
 			if workflowName != "" && jobName != "" {
-				detection.sources = append(detection.sources, workflowName+" / "+jobName)
+				detection.sources = append(detection.sources, sastSource{name: workflowName + " / " + jobName})
 				for _, calledJob := range sources[1:] {
 					calledJob = strings.TrimSpace(calledJob)
 					if calledJob != "" && matchSast(calledJob) == "" {
-						detection.sources = append(detection.sources, workflowName+" / "+jobName+" / "+calledJob)
+						detection.sources = append(detection.sources, sastSource{name: workflowName + " / " + jobName + " / " + calledJob})
 					}
 				}
 			}
@@ -401,20 +412,26 @@ func jobUsesSast(job *actionlint.Job) string {
 }
 
 // requiredCheckMatchesSast reports whether a required status-check context
-// exactly matches a detected tool or complete workflow/job context.
-func requiredCheckMatchesSast(requiredContexts, sastSources []string) bool {
+// exactly matches a detected tool or complete workflow/job context. withPolicy
+// is true only when at least one matched source carries a documented SAST
+// ruleset or policy, so enforcement of a policy-less tool is not mistaken for a
+// documented gate even when an unrelated tool does document one.
+func requiredCheckMatchesSast(requiredContexts []string, sastSources []sastSource) (matched bool, withPolicy bool) {
 	for _, context := range requiredContexts {
 		normalizedContext := strings.ToLower(strings.TrimSpace(context))
 		if normalizedContext == "" {
 			continue
 		}
 		for _, source := range sastSources {
-			if normalizedContext == strings.ToLower(strings.TrimSpace(source)) {
-				return true
+			if normalizedContext == strings.ToLower(strings.TrimSpace(source.name)) {
+				matched = true
+				if source.policyDocumented {
+					withPolicy = true
+				}
 			}
 		}
 	}
-	return false
+	return matched, withPolicy
 }
 
 // SastEnforcedOnChanges implements OSPS-VM-06.02: all changes to the codebase
@@ -427,7 +444,6 @@ func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message 
 	if payload.RestData != nil && payload.Insights.Repository != nil {
 		insightsDetection := detectSastToolInInsights(payload.Insights.Repository.SecurityPosture.Tools)
 		detection.sources = append(detection.sources, insightsDetection.sources...)
-		detection.policyDocumented = insightsDetection.policyDocumented
 	}
 	files, err := payload.GetWorkflowFiles()
 	if err != nil {
@@ -470,8 +486,8 @@ func evaluateSastEnforcement(detection sastDetection, requiredContexts []string,
 		return gemara.Failed, "No Static Application Security Testing runs on changes, in Security Insights or a CI workflow triggered by pull requests or pushes", gemara.Medium
 	}
 
-	if requiredCheckMatchesSast(requiredContexts, detection.sources) {
-		if !detection.policyDocumented {
+	if matched, matchedWithPolicy := requiredCheckMatchesSast(requiredContexts, detection.sources); matched {
+		if !matchedWithPolicy {
 			return gemara.NeedsReview, "A SAST tool runs in CI and is enforced as a required status check, but no documented SAST ruleset or policy was found in Security Insights", gemara.Medium
 		}
 		return gemara.Passed, "A SAST tool runs in CI and is enforced as a required status check on the default branch, blocking merges on violations", gemara.High
