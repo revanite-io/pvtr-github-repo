@@ -109,12 +109,6 @@ func matchSast(text string) string {
 	return ""
 }
 
-// isWorkflowYAML reports whether a file name is a GitHub Actions workflow
-// definition by extension.
-func isWorkflowYAML(name string) bool {
-	return strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml")
-}
-
 // workflowRunsOnChanges reports whether a workflow is triggered by an event that
 // fires on changes to the codebase, i.e. a pull request or a push. Only these
 // can act as a gate on incoming changes; scheduled or manual runs cannot.
@@ -154,7 +148,8 @@ func detectSastToolInInsights(tools []si.SecurityTool) []string {
 func detectSastInWorkflows(files []data.WorkflowFile) []string {
 	var sources []string
 	for _, file := range files {
-		if !isWorkflowYAML(file.Name) || file.Truncated {
+		isWorkflowYAML := strings.HasSuffix(file.Name, ".yml") || strings.HasSuffix(file.Name, ".yaml")
+		if !isWorkflowYAML || file.Truncated {
 			continue
 		}
 		workflow, err := actionlint.Parse([]byte(file.Content))
@@ -252,20 +247,6 @@ func requiredCheckMatchesSast(requiredContexts, sastSources []string) bool {
 	return false
 }
 
-// gatherRequiredCheckContexts unions the status-check contexts required on the
-// default branch from both sources the scanner can observe: classic branch
-// protection (admin-only) and repository rulesets (publicly readable).
-func gatherRequiredCheckContexts(payload data.Payload) []string {
-	var contexts []string
-	if payload.GraphqlRepoData != nil {
-		contexts = append(contexts, payload.Repository.DefaultBranchRef.BranchProtectionRule.RequiredStatusCheckContexts...)
-	}
-	if payload.RepositoryMetadata != nil {
-		contexts = append(contexts, payload.RepositoryMetadata.RequiredStatusCheckContexts()...)
-	}
-	return contexts
-}
-
 // SastEnforcedOnChanges implements OSPS-VM-06.02: all changes to the codebase
 // must be automatically evaluated for security weaknesses and blocked on
 // violations. It confirms both that a SAST tool runs on changes (in CI, per
@@ -280,7 +261,17 @@ func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message 
 		sastSources = append(sastSources, detectSastInWorkflows(files)...)
 	}
 
-	requiredContexts := gatherRequiredCheckContexts(payload)
+	// Union the status-check contexts required on the default branch from both
+	// sources the scanner can observe: classic branch protection (admin-only)
+	// and repository rulesets (publicly readable).
+	var requiredContexts []string
+	if payload.GraphqlRepoData != nil {
+		requiredContexts = append(requiredContexts, payload.Repository.DefaultBranchRef.BranchProtectionRule.RequiredStatusCheckContexts...)
+	}
+	if payload.RepositoryMetadata != nil {
+		requiredContexts = append(requiredContexts, payload.RepositoryMetadata.RequiredStatusCheckContexts()...)
+	}
+
 	adminObservable := payload.RepositoryMetadata != nil && payload.RepositoryMetadata.ViewerCanAdminister()
 
 	return evaluateSastEnforcement(sastSources, requiredContexts, adminObservable)
