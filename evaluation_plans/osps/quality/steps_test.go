@@ -603,3 +603,135 @@ func TestTestExecutionDocumentationEvidenceFetchError(t *testing.T) {
 		t.Fatal("expected an error when the README fetch fails, got nil")
 	}
 }
+
+func relWithAssets(tag string, assetNames ...string) data.ReleaseData {
+	assets := make([]data.ReleaseAsset, 0, len(assetNames))
+	for _, name := range assetNames {
+		assets = append(assets, data.ReleaseAsset{Name: name})
+	}
+	return data.ReleaseData{TagName: tag, Assets: assets}
+}
+
+func TestReleasesHaveSBOM(t *testing.T) {
+	tests := []struct {
+		name        string
+		releases    []data.ReleaseData
+		wantResult  gemara.Result
+		wantMsgPart string
+	}{
+		{
+			name:        "no releases",
+			releases:    nil,
+			wantResult:  gemara.NotApplicable,
+			wantMsgPart: "No releases found",
+		},
+		{
+			name:        "release with no assets",
+			releases:    []data.ReleaseData{{TagName: "v1.0.0"}},
+			wantResult:  gemara.NotApplicable,
+			wantMsgPart: "no attached assets",
+		},
+		{
+			name:        "compiled asset with spdx sbom passes",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "app-linux-amd64", "app.exe", "app.spdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v1.0.0",
+		},
+		{
+			name:        "compiled asset with cyclonedx sbom passes",
+			releases:    []data.ReleaseData{relWithAssets("v2.0.0", "lib.jar", "lib.cdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v2.0.0",
+		},
+		{
+			name:        "compiled asset with bom.json passes",
+			releases:    []data.ReleaseData{relWithAssets("v3.0.0", "tool.dll", "bom.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v3.0.0",
+		},
+		{
+			name:        "compiled asset without sbom fails",
+			releases:    []data.ReleaseData{relWithAssets("v1.2.3", "app.exe", "app.exe.sha256")},
+			wantResult:  gemara.Failed,
+			wantMsgPart: "v1.2.3",
+		},
+		{
+			name: "one of several releases missing sbom fails and names it",
+			releases: []data.ReleaseData{
+				relWithAssets("v1.0.0", "app.exe", "app.spdx.json"),
+				relWithAssets("v1.1.0", "app.exe"),
+			},
+			wantResult:  gemara.Failed,
+			wantMsgPart: "v1.1.0",
+		},
+		{
+			name:        "no compiled assets but sbom present passes",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "notes.txt", "app.spdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "No compiled release assets",
+		},
+		{
+			name:        "no compiled assets and no sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "README.md", "notes.txt")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "No compiled release assets were observed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := data.Payload{RestData: &data.RestData{Releases: tt.releases}}
+			gotResult, gotMsg, _ := ReleasesHaveSBOM(payload)
+			if gotResult != tt.wantResult {
+				t.Errorf("result = %v, want %v (msg: %q)", gotResult, tt.wantResult, gotMsg)
+			}
+			if tt.wantMsgPart != "" && !strings.Contains(gotMsg, tt.wantMsgPart) {
+				t.Errorf("message %q does not contain %q", gotMsg, tt.wantMsgPart)
+			}
+		})
+	}
+}
+
+func TestIsSBOMAsset(t *testing.T) {
+	cases := map[string]bool{
+		"app.spdx.json":        true,
+		"app.spdx":             true,
+		"sbom.xml":             true,
+		"my-sbom.json":         true,
+		"bom.json":             true,
+		"project.cdx.json":     true,
+		"cyclonedx-output.txt": true,
+		"APP.SPDX.JSON":        true,
+		"random-bomb.txt":      false,
+		"shabomb":              false,
+		"app.exe":              false,
+		"":                     false,
+	}
+	for name, want := range cases {
+		if got := isSBOMAsset(name); got != want {
+			t.Errorf("isSBOMAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestIsCompiledReleaseAsset(t *testing.T) {
+	cases := map[string]bool{
+		"app.exe":        true,
+		"lib.so":         true,
+		"lib.dylib":      true,
+		"tool.jar":       true,
+		"pkg.whl":        true,
+		"installer.msi":  true,
+		"app.spdx.json":  false,
+		"app.exe.sig":    false,
+		"app.exe.sha256": false,
+		"README.md":      false,
+		"source.tar.gz":  false,
+		"":               false,
+	}
+	for name, want := range cases {
+		if got := isCompiledReleaseAsset(name); got != want {
+			t.Errorf("isCompiledReleaseAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
