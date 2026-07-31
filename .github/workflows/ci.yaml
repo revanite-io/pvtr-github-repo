@@ -37,3 +37,46 @@ jobs:
           expected_count=$(go run ./cmd/list-supported-catalogs | wc -l | tr -d ' ')
           actual_count=$(grep -c '^COMPAT_CONFIG_OK ' integration_output.txt)
           test "$actual_count" -eq "$expected_count"
+
+  image-smoke-test:
+    name: Container Image Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build -t pvtr-github-repo-scanner:smoke .
+      - name: Run image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Mirror how osps-baseline-action invokes the published image.
+          cat > /tmp/pvtr-config.yml <<EOF
+          loglevel: info
+          write-directory: evaluation_results
+          write: true
+          output: yaml
+          services:
+            pvtr:
+              plugin: github-repo
+              policy:
+                catalogs:
+                  - osps-baseline-2026-02
+                applicability:
+                  - Maturity Level 1
+              vars:
+                owner: ossf
+                repo: pvtr-github-repo-scanner
+                token: ${GITHUB_TOKEN}
+          EOF
+          mkdir -p evaluation_results
+          chmod 777 evaluation_results
+          docker run --rm \
+            -v /tmp/pvtr-config.yml:/.privateer/config.yml \
+            -v "$PWD/evaluation_results:/.privateer/bin/evaluation_results" \
+            pvtr-github-repo-scanner:smoke
+      - name: Verify scan wrote results
+        run: |
+          ls -R evaluation_results
+          test -n "$(find evaluation_results -name '*.log' -type f)"

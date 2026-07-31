@@ -25,6 +25,12 @@ COPY --from=core /app/pvtr .
 COPY --from=plugin /plugin/github-repo .
 COPY --from=plugin /plugin/container-entrypoint.sh .
 
+# Register the plugin in the manifest so pvtr treats it as installed.
+# pvtr only runs plugins listed in plugins.json; without this, `pvtr run`
+# exits with "requested plugin that is not installed: github-repo".
+# Keep in sync with the manifest written by .github/scripts/ci.sh.
+RUN printf '%s\n' '{"plugins":[{"name":"github-repo","version":"local","binaryPath":"github-repo"}]}' > plugins.json
+
 # The config file must be provided at run time.
 # example: docker run -v /path/to/config.yml:/.privateer/config.yml privateer-image
 CMD ["./container-entrypoint.sh"]
