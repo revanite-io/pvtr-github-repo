@@ -39,6 +39,9 @@ var (
 		"OSPS-BR-01.01": {
 			build_release.CicdSanitizedInputParameters,
 		},
+		"OSPS-BR-01.03": {
+			build_release.CicdUntrustedCodeIsolation,
+		},
 		"OSPS-BR-02.01": {
 			build_release.ReleaseHasUniqueIdentifier,
 		},
