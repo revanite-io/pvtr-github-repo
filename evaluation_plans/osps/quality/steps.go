@@ -307,6 +307,12 @@ func DocumentsTestMaintenancePolicy(payload data.Payload) (result gemara.Result,
 // has no SBOM field, so the published assets are the only observable evidence.
 // GitHub's auto-generated source archives are not part of the REST asset list,
 // so every asset seen here is a deliberately published artifact.
+//
+// Assets are classified into three buckets: SBOM documents, definitely-compiled
+// artifacts (by extension), and ambiguous artifacts that are plausibly compiled
+// (archives and extensionless files, which commonly bundle native binaries).
+// Because an SBOM may be retained privately or distributed elsewhere, a missing
+// SBOM is reported as NeedsReview rather than a definitive failure.
 func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	// The control only applies once a release exists.
 	if len(payload.Releases) == 0 {
@@ -314,34 +320,45 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 	}
 
 	var (
-		totalAssets            int
-		releasesWithCompiled   []string
-		releasesMissingSBOM    []string
-		sawSBOMWithoutCompiled bool
+		totalAssets              int
+		releasesWithArtifacts    []string
+		releasesMissingSBOM      []string
+		sawDefiniteCompiledAsset bool
+		sawSBOMWithoutArtifacts  bool
 	)
 
 	for _, release := range payload.Releases {
-		hasCompiled := false
 		hasSBOM := false
+		hasCompiled := false
+		hasAmbiguous := false
 		for _, asset := range release.Assets {
 			totalAssets++
-			if isSBOMAsset(asset.Name) {
+			name := asset.Name
+			if isSBOMAsset(name) {
 				hasSBOM = true
 				continue
 			}
-			if isCompiledReleaseAsset(asset.Name) {
+			if isSignatureOrChecksumAsset(strings.ToLower(strings.TrimSpace(name))) {
+				continue
+			}
+			if isCompiledReleaseAsset(name) {
 				hasCompiled = true
+			} else if isAmbiguousBinaryAsset(name) {
+				hasAmbiguous = true
 			}
 		}
 
 		label := releaseLabel(release)
-		if hasCompiled {
-			releasesWithCompiled = append(releasesWithCompiled, label)
+		if hasCompiled || hasAmbiguous {
+			releasesWithArtifacts = append(releasesWithArtifacts, label)
+			if hasCompiled {
+				sawDefiniteCompiledAsset = true
+			}
 			if !hasSBOM {
 				releasesMissingSBOM = append(releasesMissingSBOM, label)
 			}
 		} else if hasSBOM {
-			sawSBOMWithoutCompiled = true
+			sawSBOMWithoutArtifacts = true
 		}
 	}
 
@@ -351,25 +368,31 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 		return gemara.NotApplicable, "Releases exist but publish no attached assets to inspect for compiled software or SBOMs; distribution may occur outside GitHub releases", gemara.Low
 	}
 
-	// No compiled assets were published, so the "compiled released software
-	// assets" precondition is not met by the observable evidence.
-	if len(releasesWithCompiled) == 0 {
-		if sawSBOMWithoutCompiled {
-			return gemara.Passed, "No compiled release assets were found, and at least one release publishes an SBOM", gemara.Low
+	// No compiled or archived assets were published, so the "compiled released
+	// software assets" precondition is not met by the observable evidence.
+	if len(releasesWithArtifacts) == 0 {
+		if sawSBOMWithoutArtifacts {
+			return gemara.Passed, "No compiled or archived release assets were found, and at least one release publishes an SBOM", gemara.Low
 		}
-		return gemara.NeedsReview, "No compiled release assets were observed among published release assets; review the project to confirm whether any compiled artifacts are distributed and require an SBOM", gemara.Low
+		return gemara.NeedsReview, "No compiled or archived release assets were observed among published release assets; review the project to confirm whether any compiled artifacts are distributed and require an SBOM", gemara.Low
 	}
 
-	// Every release that publishes compiled assets also publishes an SBOM.
+	// Every release that publishes compiled or archived assets also publishes an
+	// SBOM. Confidence is higher when at least one artifact was unambiguously a
+	// compiled binary rather than an archive or extensionless file.
 	if len(releasesMissingSBOM) == 0 {
-		return gemara.Passed, fmt.Sprintf("All release(s) publishing compiled assets also publish an SBOM: %s", strings.Join(releasesWithCompiled, ", ")), gemara.Medium
+		conf := gemara.Low
+		if sawDefiniteCompiledAsset {
+			conf = gemara.Medium
+		}
+		return gemara.Passed, fmt.Sprintf("All release(s) publishing compiled or archived assets also publish an SBOM: %s", strings.Join(releasesWithArtifacts, ", ")), conf
 	}
 
 	// An SBOM absent from GitHub release assets is not proof that one does not
 	// exist. Publishers may retain it as private compliance documentation or
 	// distribute it through another channel, so request manual evidence rather
 	// than reporting a definitive failure.
-	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
+	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled or archived software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
 }
 
 // releaseLabel returns a human-friendly identifier for a release, preferring the
@@ -461,6 +484,52 @@ func isCompiledReleaseAsset(name string) bool {
 		if strings.HasSuffix(lower, ext) {
 			return true
 		}
+	}
+	return false
+}
+
+// ambiguousArchiveExtensions are archive/compression suffixes that commonly
+// bundle compiled binaries (but may also contain source). Assets matching these
+// are treated as plausibly compiled and routed to manual review.
+var ambiguousArchiveExtensions = []string{
+	".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tbz", ".tar.xz", ".txz",
+	".tar.zst", ".tar.lz", ".tar.lzma", ".tar",
+	".zip", ".gz", ".bz2", ".xz", ".zst", ".7z", ".rar", ".bin",
+}
+
+// extensionlessNonBinaryNames are common extensionless files that are not
+// compiled artifacts, so an extensionless asset with one of these names is not
+// treated as plausibly compiled.
+var extensionlessNonBinaryNames = map[string]bool{
+	"license": true, "licence": true, "readme": true, "notice": true,
+	"authors": true, "copying": true, "changelog": true, "changes": true,
+	"install": true, "makefile": true, "dockerfile": true, "version": true,
+	"contributing": true, "codeowners": true, "manifest": true, "owners": true,
+	"maintainers": true, "security": true,
+}
+
+// isAmbiguousBinaryAsset reports whether a release asset is plausibly a compiled
+// binary even though it is not identified by a definite compiled extension.
+// This covers archives (which frequently bundle native binaries) and
+// extensionless files (common for native executables), excluding well-known
+// extensionless documentation files. Matching is case-insensitive.
+func isAmbiguousBinaryAsset(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return false
+	}
+	if isSBOMAsset(lower) || isSignatureOrChecksumAsset(lower) || isCompiledReleaseAsset(lower) {
+		return false
+	}
+	for _, ext := range ambiguousArchiveExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	// Extensionless assets are commonly native executables (e.g.
+	// "mytool_linux_amd64"). Exclude recognizable documentation files.
+	if !strings.Contains(lower, ".") {
+		return !extensionlessNonBinaryNames[lower]
 	}
 	return false
 }

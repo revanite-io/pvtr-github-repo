@@ -668,13 +668,37 @@ func TestReleasesHaveSBOM(t *testing.T) {
 			name:        "no compiled assets but sbom present passes",
 			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "notes.txt", "app.spdx.json")},
 			wantResult:  gemara.Passed,
-			wantMsgPart: "No compiled release assets",
+			wantMsgPart: "No compiled or archived release assets",
 		},
 		{
 			name:        "no compiled assets and no sbom needs review",
 			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "README.md", "notes.txt")},
 			wantResult:  gemara.NeedsReview,
-			wantMsgPart: "No compiled release assets were observed",
+			wantMsgPart: "No compiled or archived release assets were observed",
+		},
+		{
+			name:        "archived binary without sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "mytool_1.0_linux_amd64.tar.gz", "checksums.txt")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "may be retained privately",
+		},
+		{
+			name:        "archived binary with sbom passes",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "mytool-windows-x64.zip", "mytool.spdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v1.0.0",
+		},
+		{
+			name:        "extensionless binary without sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "mytool_linux_amd64")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "may be retained privately",
+		},
+		{
+			name:        "extensionless docs only need review as no artifacts",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "LICENSE", "README")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "No compiled or archived release assets were observed",
 		},
 	}
 
@@ -732,6 +756,29 @@ func TestIsCompiledReleaseAsset(t *testing.T) {
 	for name, want := range cases {
 		if got := isCompiledReleaseAsset(name); got != want {
 			t.Errorf("isCompiledReleaseAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestIsAmbiguousBinaryAsset(t *testing.T) {
+	cases := map[string]bool{
+		"mytool_1.0_linux_amd64.tar.gz": true,
+		"mytool-windows-x64.zip":        true,
+		"blob.bin":                      true,
+		"mytool_linux_amd64":            true,
+		"kubectl":                       true,
+		"LICENSE":                       false,
+		"README":                        false,
+		"Makefile":                      false,
+		"app.exe":                       false,
+		"notes.txt":                     false,
+		"app.spdx.json":                 false,
+		"checksums.txt":                 false,
+		"":                              false,
+	}
+	for name, want := range cases {
+		if got := isAmbiguousBinaryAsset(name); got != want {
+			t.Errorf("isAmbiguousBinaryAsset(%q) = %v, want %v", name, got, want)
 		}
 	}
 }
