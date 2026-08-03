@@ -623,7 +623,28 @@ func TestReleasesHaveSBOM(t *testing.T) {
 			name:        "no releases",
 			releases:    nil,
 			wantResult:  gemara.NotApplicable,
-			wantMsgPart: "No releases found",
+			wantMsgPart: "No published releases found",
+		},
+		{
+			name:        "release retrieval error needs review",
+			releases:    nil,
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "could not be retrieved",
+		},
+		{
+			name:        "draft release is ignored",
+			releases:    []data.ReleaseData{{TagName: "v-next", Draft: true, Assets: []data.ReleaseAsset{{Name: "app.exe"}}}},
+			wantResult:  gemara.NotApplicable,
+			wantMsgPart: "No published releases found",
+		},
+		{
+			name: "draft release does not contaminate published release",
+			releases: []data.ReleaseData{
+				{TagName: "v-next", Draft: true, Assets: []data.ReleaseAsset{{Name: "app.exe"}}},
+				relWithAssets("v1.0.0", "app.exe", "app.spdx.json"),
+			},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v1.0.0",
 		},
 		{
 			name:        "release with no assets",
@@ -704,7 +725,11 @@ func TestReleasesHaveSBOM(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payload := data.Payload{RestData: &data.RestData{Releases: tt.releases}}
+			restData := &data.RestData{Releases: tt.releases}
+			if tt.name == "release retrieval error needs review" {
+				restData.ReleasesError = errors.New("GitHub API unavailable")
+			}
+			payload := data.Payload{RestData: restData}
 			gotResult, gotMsg, _ := ReleasesHaveSBOM(payload)
 			if gotResult != tt.wantResult {
 				t.Errorf("result = %v, want %v (msg: %q)", gotResult, tt.wantResult, gotMsg)
@@ -729,6 +754,10 @@ func TestIsSBOMAsset(t *testing.T) {
 		"random-bomb.txt":      false,
 		"shabomb":              false,
 		"app.exe":              false,
+		"app.spdx.json.sig":    false,
+		"cyclonedx-cli.tar.gz": false,
+		"cyclonedx-cli.exe":    false,
+		"app.spdx.json.exe":    false,
 		"":                     false,
 	}
 	for name, want := range cases {
@@ -766,6 +795,8 @@ func TestIsAmbiguousBinaryAsset(t *testing.T) {
 		"mytool-windows-x64.zip":        true,
 		"blob.bin":                      true,
 		"mytool_linux_amd64":            true,
+		"mytool-v1.2-linux-amd64":       true,
+		"cyclonedx-cli-linux.tar.gz":    true,
 		"kubectl":                       true,
 		"LICENSE":                       false,
 		"README":                        false,

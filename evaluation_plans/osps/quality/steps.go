@@ -314,9 +314,23 @@ func DocumentsTestMaintenancePolicy(payload data.Payload) (result gemara.Result,
 // Because an SBOM may be retained privately or distributed elsewhere, a missing
 // SBOM is reported as NeedsReview rather than a definitive failure.
 func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	// The control only applies once a release exists.
-	if len(payload.Releases) == 0 {
-		return gemara.NotApplicable, "No releases found; the SBOM-for-releases requirement does not apply", gemara.High
+	if payload.RestData == nil {
+		return gemara.NeedsReview, "Release data is unavailable; review publisher evidence for released assets and SBOMs", gemara.Low
+	}
+	if payload.ReleasesError != nil {
+		return gemara.NeedsReview, fmt.Sprintf("Release data could not be retrieved: %v. Review publisher evidence for released assets and SBOMs", payload.ReleasesError), gemara.Low
+	}
+
+	// Draft releases are not published software releases and must not affect the
+	// assessment, even when an authenticated caller can observe them.
+	publishedReleases := 0
+	for _, release := range payload.Releases {
+		if !release.Draft {
+			publishedReleases++
+		}
+	}
+	if publishedReleases == 0 {
+		return gemara.NotApplicable, "No published releases found; the SBOM-for-releases requirement does not apply", gemara.High
 	}
 
 	var (
@@ -328,6 +342,9 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 	)
 
 	for _, release := range payload.Releases {
+		if release.Draft {
+			continue
+		}
 		hasSBOM := false
 		hasCompiled := false
 		hasAmbiguous := false
@@ -419,7 +436,7 @@ var sbomExtensionSuffixes = []string{
 // names (e.g. "random-bomb.txt").
 func isSBOMAsset(name string) bool {
 	lower := strings.ToLower(strings.TrimSpace(name))
-	if lower == "" {
+	if lower == "" || isSignatureOrChecksumAsset(lower) {
 		return false
 	}
 
@@ -429,7 +446,24 @@ func isSBOMAsset(name string) bool {
 		}
 	}
 
-	// Format markers that are unambiguous wherever they appear in the name.
+	// Archives may be tools or distributions whose product name contains an
+	// SBOM-format marker (for example cyclonedx-cli). Do not classify an archive
+	// as an SBOM based on a marker alone.
+	for _, suffix := range ambiguousArchiveExtensions {
+		if strings.HasSuffix(lower, suffix) {
+			return false
+		}
+	}
+
+	// A compiled artifact may also include an SBOM-format marker in its product
+	// name. Marker-only matching must not override a definite binary suffix.
+	for _, suffix := range compiledReleaseAssetExtensions {
+		if strings.HasSuffix(lower, suffix) {
+			return false
+		}
+	}
+
+	// Format markers that are unambiguous in non-archive document names.
 	if strings.Contains(lower, "cyclonedx") || strings.Contains(lower, ".spdx") || strings.Contains(lower, ".cdx") {
 		return true
 	}
@@ -508,6 +542,15 @@ var extensionlessNonBinaryNames = map[string]bool{
 	"maintainers": true, "security": true,
 }
 
+// knownNonBinaryExtensions identify common documentation and metadata files. An
+// unrecognized suffix remains ambiguous because versioned native binaries often
+// contain dots without having a file extension (for example tool-v1.2-linux).
+var knownNonBinaryExtensions = []string{
+	".txt", ".md", ".markdown", ".rst", ".adoc",
+	".json", ".yaml", ".yml", ".xml", ".toml", ".ini", ".cfg", ".conf",
+	".csv", ".html", ".htm", ".pdf",
+}
+
 // isAmbiguousBinaryAsset reports whether a release asset is plausibly a compiled
 // binary even though it is not identified by a definite compiled extension.
 // This covers archives (which frequently bundle native binaries) and
@@ -526,12 +569,17 @@ func isAmbiguousBinaryAsset(name string) bool {
 			return true
 		}
 	}
-	// Extensionless assets are commonly native executables (e.g.
-	// "mytool_linux_amd64"). Exclude recognizable documentation files.
-	if !strings.Contains(lower, ".") {
-		return !extensionlessNonBinaryNames[lower]
+	if extensionlessNonBinaryNames[lower] {
+		return false
 	}
-	return false
+	for _, ext := range knownNonBinaryExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return false
+		}
+	}
+	// Unknown suffixes remain ambiguous: a dot may be part of a version rather
+	// than a true extension (for example "mytool-v1.2-linux-amd64").
+	return true
 }
 
 // signatureOrChecksumSuffixes identify signature, certificate, and checksum
