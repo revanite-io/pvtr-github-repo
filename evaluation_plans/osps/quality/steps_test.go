@@ -650,18 +650,18 @@ func TestReleasesHaveSBOM(t *testing.T) {
 			wantMsgPart: "v3.0.0",
 		},
 		{
-			name:        "compiled asset without sbom fails",
+			name:        "compiled asset without published sbom needs review",
 			releases:    []data.ReleaseData{relWithAssets("v1.2.3", "app.exe", "app.exe.sha256")},
-			wantResult:  gemara.Failed,
-			wantMsgPart: "v1.2.3",
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "may be retained privately",
 		},
 		{
-			name: "one of several releases missing sbom fails and names it",
+			name: "one of several releases missing published sbom needs review and names it",
 			releases: []data.ReleaseData{
 				relWithAssets("v1.0.0", "app.exe", "app.spdx.json"),
 				relWithAssets("v1.1.0", "app.exe"),
 			},
-			wantResult:  gemara.Failed,
+			wantResult:  gemara.NeedsReview,
 			wantMsgPart: "v1.1.0",
 		},
 		{

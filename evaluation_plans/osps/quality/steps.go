@@ -365,8 +365,11 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 		return gemara.Passed, fmt.Sprintf("All release(s) publishing compiled assets also publish an SBOM: %s", strings.Join(releasesWithCompiled, ", ")), gemara.Medium
 	}
 
-	// Some or all releases with compiled assets are missing an SBOM.
-	return gemara.Failed, fmt.Sprintf("Release(s) publishing compiled assets without an SBOM: %s", strings.Join(releasesMissingSBOM, ", ")), gemara.Medium
+	// An SBOM absent from GitHub release assets is not proof that one does not
+	// exist. Publishers may retain it as private compliance documentation or
+	// distribute it through another channel, so request manual evidence rather
+	// than reporting a definitive failure.
+	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
 }
 
 // releaseLabel returns a human-friendly identifier for a release, preferring the
