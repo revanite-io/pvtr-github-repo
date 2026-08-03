@@ -142,11 +142,12 @@ type mockSecurityPosture struct {
 	scans            bool
 	observable       bool
 	insightsDeclares bool
+	definesPolicy    bool
 }
 
 func (m mockSecurityPosture) PreventsPushingSecrets() bool          { return m.preventsPush }
 func (m mockSecurityPosture) ScansForSecrets() bool                 { return m.scans }
-func (m mockSecurityPosture) DefinesPolicyForHandlingSecrets() bool { return false }
+func (m mockSecurityPosture) DefinesPolicyForHandlingSecrets() bool { return m.definesPolicy }
 func (m mockSecurityPosture) SecretScanningObservable() bool        { return m.observable }
 func (m mockSecurityPosture) InsightsDeclaresSecretScanning() bool  { return m.insightsDeclares }
 
@@ -201,6 +202,38 @@ func TestSecretScanningInUse(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result, message, _ := SecretScanningInUse(data.Payload{SecurityPosture: tc.posture})
+			assert.Equal(t, tc.expectedResult, result)
+			assert.Contains(t, message, tc.expectedMessage)
+		})
+	}
+}
+
+func TestSecretsManagementPolicy(t *testing.T) {
+	testCases := []struct {
+		name            string
+		posture         mockSecurityPosture
+		expectedResult  gemara.Result
+		expectedMessage string
+	}{
+		{
+			name:            "documented policy passes",
+			posture:         mockSecurityPosture{definesPolicy: true},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "A documented policy for managing secrets and credentials was found",
+		},
+		{
+			// No observable policy: it may live in docs we cannot read, so this is
+			// unconfirmed rather than a violation.
+			name:            "no observable policy needs review",
+			posture:         mockSecurityPosture{definesPolicy: false},
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "manual review is required",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, message, _ := SecretsManagementPolicy(data.Payload{SecurityPosture: tc.posture})
 			assert.Equal(t, tc.expectedResult, result)
 			assert.Contains(t, message, tc.expectedMessage)
 		})
@@ -348,164 +381,81 @@ func TestUnTrustedVarsRegex(t *testing.T) {
 
 	assert.True(t, untrustedVars.Match([]byte("github.event.issue.title")), "regex match failed")
 	assert.True(t, untrustedVars.Match([]byte("github.event.commits.arbitrary.payload.message")), "regex match failed")
+
+	// Attacker-controllable branch-ref variables consolidated into BR-01.01.
+	// Only the PR *source* branch (head) is attacker-named via a fork, so it
+	// belongs in untrustedVars regardless of trigger.
+	assert.True(t, untrustedVars.Match([]byte("github.head_ref")), "github.head_ref should match")
+	assert.True(t, untrustedVars.Match([]byte("github.event.pull_request.head.ref")), "github.event.pull_request.head.ref should match")
+
+	// The base/target ref is an existing upstream branch (maintainer-controlled),
+	// not attacker-injectable, so it must NOT be flagged unconditionally.
+	assert.False(t, untrustedVars.Match([]byte("github.base_ref")), "github.base_ref should not match untrustedVars")
+	assert.False(t, untrustedVars.Match([]byte("github.event.pull_request.base.ref")), "github.event.pull_request.base.ref should not match untrustedVars")
+
+	// github.ref / github.ref_name are trigger-dependent and must NOT be in
+	// the unconditional untrustedVars set (they are handled separately).
+	assert.False(t, untrustedVars.Match([]byte("github.ref")), "github.ref should not match untrustedVars")
+	assert.False(t, untrustedVars.Match([]byte("github.ref_name")), "github.ref_name should not match untrustedVars")
+
+	assert.False(t, untrustedVars.Match([]byte("github.workspace")), "github.workspace should not match")
 }
 
-var branchNameBadWorkflowFile = `name: Deploy on push
+func TestPullRequestOnlyUntrustedVarsRegex(t *testing.T) {
 
+	assert.True(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref")), "github.ref should match")
+	assert.True(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref_name")), "github.ref_name should match")
+	assert.False(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref_type")), "github.ref_type should not match")
+	assert.False(t, pullRequestOnlyUntrustedVars.Match([]byte("github.ref_protected")), "github.ref_protected should not match")
+	assert.False(t, pullRequestOnlyUntrustedVars.Match([]byte("github.workspace")), "github.workspace should not match")
+}
+
+// These tests confirm BR-01.01 covers the branch-ref variables, including the
+// push-vs-PR trigger distinction for github.ref / github.ref_name.
+
+func untrustedInputsWorkflow(trigger, expr string) string {
+	return `name: Test
 on:
-  pull_request:
+  ` + trigger + `:
     branches: [main]
 
 jobs:
-  deploy:
+  job:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Echo branch
-        run: echo "Deploying branch ${{ github.head_ref }}"
+      - name: Echo
+        run: echo "value is ${{ ` + expr + ` }}"
 `
+}
 
-var branchNameGoodWorkflowFile = `name: Deploy on push
-
-on:
-  pull_request:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Echo workspace
-        run: echo "Workspace is ${{ github.workspace }}"
-`
-
-func TestCicdBranchNameSanitized(t *testing.T) {
-
-	testData := []testingData{
-		{
-			expectedResult:   false,
-			workflowFile:     branchNameBadWorkflowFile,
-			assertionMessage: "Unsanitized branch name variable not detected",
-		},
-		{
-			expectedResult:   true,
-			workflowFile:     branchNameGoodWorkflowFile,
-			assertionMessage: "Branch name variable detected where it should not have been",
-		},
+func TestUntrustedInputsBranchRefCoverage(t *testing.T) {
+	tests := []struct {
+		name           string
+		trigger        string
+		expr           string
+		expectedResult bool
+	}{
+		{"head_ref flagged", "pull_request", "github.head_ref", false},
+		{"pr head ref flagged", "pull_request", "github.event.pull_request.head.ref", false},
+		{"head_ref flagged even on push", "push", "github.head_ref", false},
+		{"base_ref not flagged (maintainer-controlled target)", "pull_request", "github.base_ref", true},
+		{"pr base ref not flagged (maintainer-controlled target)", "pull_request", "github.event.pull_request.base.ref", true},
+		{"github.ref flagged in pull_request", "pull_request", "github.ref", false},
+		{"github.ref_name flagged in pull_request_target", "pull_request_target", "github.ref_name", false},
+		{"github.ref not flagged on push", "push", "github.ref", true},
+		{"github.ref_name not flagged on push", "push", "github.ref_name", true},
+		{"github.workspace never flagged", "pull_request", "github.workspace", true},
 	}
 
-	for _, data := range testData {
-		workflow, _ := actionlint.Parse([]byte(data.workflowFile))
-		result, message := checkWorkflowFileForBranchNameUsage(workflow)
-		t.Log(message)
-		assert.Equal(t, data.expectedResult, result, data.assertionMessage)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, errs := actionlint.Parse([]byte(untrustedInputsWorkflow(tt.trigger, tt.expr)))
+			assert.Empty(t, errs)
+			result, message := checkWorkflowFileForUntrustedInputs(workflow)
+			t.Log(message)
+			assert.Equal(t, tt.expectedResult, result, tt.name)
+		})
 	}
-}
-
-func TestPushWorkflowWithGithubRefIsNotFlagged(t *testing.T) {
-	pushWorkflow := `name: Deploy on push
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Echo ref
-        run: echo "Ref is ${{ github.ref }}"
-`
-	workflow, _ := actionlint.Parse([]byte(pushWorkflow))
-	result, message := checkWorkflowFileForBranchNameUsage(workflow)
-	t.Log(message)
-	assert.True(t, result, "github.ref in push workflow should not be flagged")
-}
-
-func TestPRWorkflowWithGithubRefIsFlagged(t *testing.T) {
-	prWorkflow := `name: PR check
-
-on:
-  pull_request:
-    branches: [main]
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Echo ref
-        run: echo "Ref is ${{ github.ref_name }}"
-`
-	workflow, _ := actionlint.Parse([]byte(prWorkflow))
-	result, message := checkWorkflowFileForBranchNameUsage(workflow)
-	t.Log(message)
-	assert.False(t, result, "github.ref_name in pull_request workflow should be flagged")
-}
-
-func TestPullRequestTargetWorkflowWithGithubRefIsFlagged(t *testing.T) {
-	prTargetWorkflow := `name: PR target check
-
-on:
-  pull_request_target:
-    branches: [main]
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Echo ref
-        run: echo "Ref is ${{ github.ref }}"
-`
-	workflow, _ := actionlint.Parse([]byte(prTargetWorkflow))
-	result, message := checkWorkflowFileForBranchNameUsage(workflow)
-	t.Log(message)
-	assert.False(t, result, "github.ref in pull_request_target workflow should be flagged")
-}
-
-func TestPushWorkflowWithAlwaysUnsafeVarIsFlagged(t *testing.T) {
-	pushWorkflow := `name: Deploy on push
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Echo branch
-        run: echo "Branch is ${{ github.head_ref }}"
-`
-	workflow, _ := actionlint.Parse([]byte(pushWorkflow))
-	result, message := checkWorkflowFileForBranchNameUsage(workflow)
-	t.Log(message)
-	assert.False(t, result, "github.head_ref in push workflow should still be flagged")
-}
-
-func TestAlwaysUnsafeBranchVarsRegex(t *testing.T) {
-
-	assert.True(t, alwaysUnsafeBranchVars.Match([]byte("github.head_ref")), "github.head_ref should match")
-	assert.True(t, alwaysUnsafeBranchVars.Match([]byte("github.base_ref")), "github.base_ref should match")
-	assert.True(t, alwaysUnsafeBranchVars.Match([]byte("github.event.pull_request.head.ref")), "github.event.pull_request.head.ref should match")
-	assert.True(t, alwaysUnsafeBranchVars.Match([]byte("github.event.pull_request.base.ref")), "github.event.pull_request.base.ref should match")
-	assert.False(t, alwaysUnsafeBranchVars.Match([]byte("github.workspace")), "github.workspace should not match")
-	assert.False(t, alwaysUnsafeBranchVars.Match([]byte("secrets.TOKEN")), "secrets.TOKEN should not match")
-	assert.False(t, alwaysUnsafeBranchVars.Match([]byte("github.ref")), "github.ref should not match branchNameVars")
-	assert.False(t, alwaysUnsafeBranchVars.Match([]byte("github.ref_name")), "github.ref_name should not match branchNameVars")
-}
-
-func TestPullRequestOnlyUnsafeBranchVarsRegex(t *testing.T) {
-
-	assert.True(t, pullRequestOnlyUnsafeBranchVars.Match([]byte("github.ref")), "github.ref should match")
-	assert.True(t, pullRequestOnlyUnsafeBranchVars.Match([]byte("github.ref_name")), "github.ref_name should match")
-	assert.False(t, pullRequestOnlyUnsafeBranchVars.Match([]byte("github.ref_type")), "github.ref_type should not match")
-	assert.False(t, pullRequestOnlyUnsafeBranchVars.Match([]byte("github.ref_protected")), "github.ref_protected should not match")
-	assert.False(t, pullRequestOnlyUnsafeBranchVars.Match([]byte("github.workspace")), "github.workspace should not match")
 }
 
 // --- OSPS-BR-01.03 tests ---

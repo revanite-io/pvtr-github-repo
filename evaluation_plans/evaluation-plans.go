@@ -39,9 +39,6 @@ var (
 		"OSPS-BR-01.01": {
 			build_release.CicdSanitizedInputParameters,
 		},
-		"OSPS-BR-01.02": {
-			build_release.CicdBranchNameSanitized,
-		},
 		"OSPS-BR-01.03": {
 			build_release.CicdUntrustedCodeIsolation,
 		},
@@ -71,7 +68,7 @@ var (
 			build_release.SecretScanningInUse,
 		},
 		"OSPS-BR-07.02": {
-			reusable_steps.NotImplemented,
+			build_release.SecretsManagementPolicy,
 		},
 		"OSPS-DO-01.01": {
 			reusable_steps.HasSecurityInsightsFile,
@@ -93,11 +90,15 @@ var (
 			docs.HasSupportDocs,
 		},
 		"OSPS-DO-05.01": {
-			reusable_steps.NotImplemented,
+			docs.DocumentsSecurityUpdatePolicy,
 		},
 		"OSPS-DO-06.01": {
 			reusable_steps.IsCodeRepo,
 			docs.HasDependencyManagementPolicy,
+		},
+		"OSPS-DO-07.01": {
+			reusable_steps.IsCodeRepo,
+			docs.HasBuildInstructions,
 		},
 		"OSPS-GV-01.01": {
 			reusable_steps.IsActive,

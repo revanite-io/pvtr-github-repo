@@ -187,7 +187,25 @@ func (r *RestData) checkFile(filename string) (filepath string) {
 	return filepath
 }
 
-// dependencyToolingConfigFiles are the config files read by automated
+// checkFileInSubdir returns the path to filename within the given subdirectory
+// (case-insensitive), or "" when the directory or file is absent. It lets build
+// documentation stored outside the root and .github (e.g. docs/BUILDING.md) be
+// discovered per OSPS-DO-07.01.
+func (r *RestData) checkFileInSubdir(dir, filename string) string {
+	subdir, err := r.getSubdirContents(dir)
+	if err != nil {
+		return ""
+	}
+	for _, dirContents := range subdir.Content {
+		if dirContents.GetType() != "file" {
+			continue
+		}
+		if strings.EqualFold(dirContents.GetName(), filename) {
+			return dirContents.GetPath()
+		}
+	}
+	return ""
+}
 // dependency-update tools (Dependabot, Renovate). Their presence is direct
 // evidence a repository manages its dependencies, observable even when
 // security-insights.yml is absent.
@@ -237,6 +255,114 @@ func (r *RestData) HasSupportMarkdown() bool {
 			}
 		}
 	}
+	return false
+}
+
+// buildInstructionFiles are well-known files whose presence indicates the
+// project documents how to build the software from source, satisfying
+// OSPS-DO-07.01 as developer task documentation or build automation. Matching
+// is case-insensitive (see checkFile), so a single canonical spelling covers
+// common variants such as "makefile" or "MAKEFILE".
+var buildInstructionFiles = []string{
+	"Makefile",
+	"GNUmakefile",
+	"BUILD.md",
+	"BUILDING.md",
+	"DEVELOPMENT.md",
+	"INSTALL.md",
+	"INSTALL",
+	"Taskfile.yml",
+	"Taskfile.yaml",
+}
+
+// buildInstructionHeadings are documentation section headings that indicate the
+// project explains how to build or set up the software from source per
+// OSPS-DO-07.01. Matching is case-insensitive and substring-based (see
+// hasBuildInstructionHeading), so short roots such as "build" and "compil"
+// intentionally cover their variants ("building", "build from source",
+// "compiling", "compilation", etc.).
+var buildInstructionHeadings = []string{
+	"build",
+	"compil",
+	"from source",
+	"development setup",
+	"developer setup",
+	"getting started",
+}
+
+// buildInstructionHeadingExclusions are headings that contain a build keyword
+// but do not document how to build from source (e.g. CI status badges). They
+// are matched as substrings and take precedence over buildInstructionHeadings,
+// preventing common false positives such as "Build Status" or "Nightly Builds".
+var buildInstructionHeadingExclusions = []string{
+	"build status",
+	"build passing",
+	"nightly build",
+}
+
+// hasBuildInstructionHeading reports whether any of the provided document
+// headings references build-from-source instructions per OSPS-DO-07.01.
+func hasBuildInstructionHeading(headings []string) bool {
+	for _, heading := range headings {
+		normalized := strings.ToLower(strings.TrimSpace(heading))
+		if isExcludedBuildHeading(normalized) {
+			continue
+		}
+		for _, keyword := range buildInstructionHeadings {
+			if strings.Contains(normalized, keyword) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isExcludedBuildHeading reports whether a normalized heading matches a known
+// non-build-instruction phrase (see buildInstructionHeadingExclusions).
+func isExcludedBuildHeading(normalized string) bool {
+	for _, exclusion := range buildInstructionHeadingExclusions {
+		if strings.Contains(normalized, exclusion) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasBuildInstructions returns true when the repository documents how to build
+// the software from source per OSPS-DO-07.01. It is satisfied by a well-known
+// build automation or build documentation file (e.g. Makefile, BUILDING.md) in
+// the repository root, .github, or docs directory, or by a build-related
+// section heading in the README or CONTRIBUTING guide.
+func (r *RestData) HasBuildInstructions() bool {
+	for _, filename := range buildInstructionFiles {
+		if r.checkFile(filename) != "" {
+			return true
+		}
+		if r.checkFileInSubdir("docs", filename) != "" {
+			return true
+		}
+	}
+
+	for _, docName := range []string{"readme.md", "readme.markdown", "readme", "contributing.md", "contributing.markdown", "contributing"} {
+		docPath := r.checkFile(docName)
+		if docPath == "" {
+			continue
+		}
+		contents, err := r.getSourceFile(r.owner, r.repo, docPath)
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("failed to retrieve %s file data: %s", docName, err.Error()))
+			continue
+		}
+		content, err := contents.GetContent()
+		if err != nil {
+			r.Config.Logger.Error(fmt.Sprintf("failed to unpack %s contents: %s", docName, err.Error()))
+			continue
+		}
+		if hasBuildInstructionHeading(parseMarkdownHeadings([]byte(content))) {
+			return true
+		}
+	}
+
 	return false
 }
 
