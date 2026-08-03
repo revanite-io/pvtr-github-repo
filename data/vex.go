@@ -39,11 +39,6 @@ func isVexPath(p string) bool {
 		return true
 	}
 
-	// CSAF advisories are frequently VEX; treat a .csaf.json/.csaf file as VEX.
-	if strings.HasSuffix(base, ".csaf.json") || ext == ".csaf" {
-		return true
-	}
-
 	// CycloneDX VEX naming, e.g. bom.cdx-vex.json or app.cyclonedx-vex.json, and
 	// OpenVEX naming, e.g. openvex.json or product.openvex.json. Gated on a
 	// structured-data extension so VEX *tooling* source/docs (openvex.go,
