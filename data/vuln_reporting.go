@@ -31,9 +31,14 @@ type SecurityPolicy struct {
 // permission, which leaves Known false rather than reporting a confident Count
 // of zero. Steps rely on that distinction to choose NeedsReview over a confident
 // result when the signal is absent.
+//
+// Only the first page of results is fetched (one is enough to answer "are there
+// any?"), so CountIsLowerBound is set when that page came back full and the true
+// total may be higher; callers use it to phrase the count as "at least".
 type SecurityAdvisories struct {
-	Count int
-	Known bool
+	Count             int
+	Known             bool
+	CountIsLowerBound bool
 }
 
 // privateVulnReportingResponse is the body of
@@ -118,5 +123,7 @@ func (r *RestData) getSecurityAdvisories() {
 			count++
 		}
 	}
-	r.SecurityAdvisories = SecurityAdvisories{Count: count, Known: true}
+	// Only the first page (per_page=100) is fetched; a full page means the true
+	// total may be higher, so the count is reported as a lower bound.
+	r.SecurityAdvisories = SecurityAdvisories{Count: count, Known: true, CountIsLowerBound: len(parsed) >= 100}
 }

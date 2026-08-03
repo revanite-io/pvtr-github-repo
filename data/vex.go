@@ -45,8 +45,11 @@ func isVexPath(p string) bool {
 	}
 
 	// CycloneDX VEX naming, e.g. bom.cdx-vex.json or app.cyclonedx-vex.json, and
-	// OpenVEX naming, e.g. openvex.json or product.openvex.json.
-	if strings.Contains(base, "cdx-vex") || strings.Contains(base, "cyclonedx-vex") || strings.Contains(base, "openvex") {
+	// OpenVEX naming, e.g. openvex.json or product.openvex.json. Gated on a
+	// structured-data extension so VEX *tooling* source/docs (openvex.go,
+	// cyclonedx-vex.md) are not mistaken for a published VEX document.
+	if structuredDataExtensions[ext] &&
+		(strings.Contains(base, "cdx-vex") || strings.Contains(base, "cyclonedx-vex") || strings.Contains(base, "openvex")) {
 		return true
 	}
 
@@ -60,18 +63,22 @@ func isVexPath(p string) bool {
 }
 
 // detectVexDocuments walks the already-fetched repository tree and returns the
-// names of files that look like VEX documents. It reuses the tree gathered for
-// binary analysis, so it adds no extra API calls. OSPS-VM-04.02 uses the result
-// to report whether the project publishes a VEX feed.
+// repo-root-relative paths of files that look like VEX documents. It reuses the
+// tree gathered for binary analysis, so it adds no extra API calls. Paths (not
+// bare names) are collected so the OSPS-VM-04.02 evidence message is unambiguous
+// when a VEX file lives in a subdirectory (e.g. security/vex/bom.json).
 func detectVexDocuments(tree *GraphqlRepoTree) []string {
 	if tree == nil {
 		return nil
 	}
-	found, err := walkTree(tree, func(_ *bool, _ bool, p string, _ int) (bool, error) {
-		return isVexPath(p), nil
+	var found []string
+	_, _ = walkTree(tree, func(_ *bool, _ bool, p string, _ int) (bool, error) {
+		if isVexPath(p) {
+			found = append(found, p)
+		}
+		// Return false so walkTree does not also collect the bare name; this
+		// closure captures the full path itself.
+		return false, nil
 	})
-	if err != nil {
-		return nil
-	}
 	return found
 }

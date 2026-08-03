@@ -28,6 +28,13 @@ func TestIsVexPath(t *testing.T) {
 		{"src/vex.go", false},
 		{"vex/helper.go", false},
 		{"config.yaml", false},
+		// VEX tooling source/docs must not be mistaken for a VEX document.
+		{"openvex.go", false},
+		{"openvex.md", false},
+		{"docs/openvex.png", false},
+		{"pkg/cyclonedx-vex.go", false},
+		{"cdx-vex-writer.py", false},
+		{"README-openvex.txt", false},
 	}
 
 	for _, test := range tests {
@@ -61,5 +68,15 @@ func TestDetectVexDocuments(t *testing.T) {
 		})
 
 		assert.Empty(t, detectVexDocuments(tree))
+	})
+
+	t.Run("returns full path for nested vex document", func(t *testing.T) {
+		tree := buildTreeWithNested(
+			[]testEntry{{name: "README.md"}},
+			[]testEntry{{name: "product.vex.json"}, {name: "notes.md"}},
+		)
+
+		found := detectVexDocuments(tree)
+		assert.Equal(t, []string{"subdir/product.vex.json"}, found)
 	})
 }

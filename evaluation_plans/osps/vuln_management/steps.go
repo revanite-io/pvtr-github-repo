@@ -696,6 +696,36 @@ func HasPrivateVulnerabilityReporting(payload data.Payload) (result gemara.Resul
 	return gemara.Failed, "No private vulnerability reporting contact in Security Insights data and GitHub private vulnerability reporting is disabled", gemara.Medium
 }
 
+// vmRepoIsActive reports whether the repository should be treated as active for
+// the "while active" OSPS-VM-04 requirements. It mirrors the codebase's
+// SI-first-then-GitHub-observable pattern so the VM-04 checks still run when a
+// project publishes no security-insights.yml: an explicit Security Insights
+// "active" status is authoritative, and otherwise a repository that GitHub does
+// not report as archived or disabled is treated as active. RepositoryMetadata is
+// nil-guarded so the gate degrades to the Security Insights signal alone in unit
+// tests that supply no metadata.
+func vmRepoIsActive(payload data.Payload) bool {
+	if payload.Insights.Repository != nil && payload.Insights.Repository.Status == "active" {
+		return true
+	}
+	if payload.RepositoryMetadata != nil && payload.RepositoryMetadata.IsActive() {
+		return true
+	}
+	return false
+}
+
+// IsActiveForVulnData gates the OSPS-VM-04 assessments on the project being
+// active, using a GitHub-observable fallback so the checks apply even to
+// repositories without a security-insights.yml. Unlike reusable_steps.IsActive
+// (Security-Insights-only), an unarchived, non-disabled repository counts as
+// active here; archived or disabled repositories are NotApplicable.
+func IsActiveForVulnData(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if vmRepoIsActive(payload) {
+		return gemara.Passed, "Repository is active", confidence
+	}
+	return gemara.NotApplicable, "Repository is archived or disabled", confidence
+}
+
 // hasDisclosurePolicySignal reports whether any observable evidence of a
 // vulnerability disclosure process exists, so PublishesVulnerabilityData can
 // distinguish "a channel likely exists but nothing is published yet" from a
@@ -720,7 +750,11 @@ func hasDisclosurePolicySignal(payload data.Payload) bool {
 // disclose yet — and instead defers to human review.
 func PublishesVulnerabilityData(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	if payload.SecurityAdvisories.Known && payload.SecurityAdvisories.Count > 0 {
-		return gemara.Passed, fmt.Sprintf("%d published GitHub security advisory(ies) publicly document discovered vulnerabilities", payload.SecurityAdvisories.Count), gemara.High
+		countPhrase := fmt.Sprintf("%d", payload.SecurityAdvisories.Count)
+		if payload.SecurityAdvisories.CountIsLowerBound {
+			countPhrase = "at least " + countPhrase
+		}
+		return gemara.Passed, fmt.Sprintf("%s published GitHub security advisory(ies) publicly document discovered vulnerabilities", countPhrase), gemara.High
 	}
 
 	if !payload.SecurityAdvisories.Known {

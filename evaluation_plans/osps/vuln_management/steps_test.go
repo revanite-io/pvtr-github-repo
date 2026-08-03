@@ -763,6 +763,12 @@ func TestPublishesVulnerabilityData(t *testing.T) {
 			expectedMessage: "2 published GitHub security advisory(ies) publicly document discovered vulnerabilities",
 		},
 		{
+			name:            "Full page reports count as a lower bound",
+			advisories:      data.SecurityAdvisories{Count: 100, Known: true, CountIsLowerBound: true},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "at least 100 published GitHub security advisory(ies) publicly document discovered vulnerabilities",
+		},
+		{
 			name:            "Advisory status unobservable warrants review",
 			advisories:      data.SecurityAdvisories{Known: false},
 			expectedResult:  gemara.NeedsReview,
@@ -840,6 +846,70 @@ func TestHasVexDocument(t *testing.T) {
 			payload := data.Payload{VexDocuments: test.vexDocuments}
 
 			result, message, _ := HasVexDocument(payload)
+			assert.Equal(t, test.expectedResult, result)
+			assert.Equal(t, test.expectedMessage, message)
+		})
+	}
+}
+
+// fakeActiveMetadata implements data.RepositoryMetadata for the active-gate
+// tests, overriding only IsActive; the embedded nil interface is never called.
+type fakeActiveMetadata struct {
+	data.RepositoryMetadata
+	active bool
+}
+
+func (f fakeActiveMetadata) IsActive() bool { return f.active }
+
+func TestIsActiveForVulnData(t *testing.T) {
+	tests := []struct {
+		name            string
+		siStatus        string
+		metadata        data.RepositoryMetadata
+		expectedResult  gemara.Result
+		expectedMessage string
+	}{
+		{
+			name:            "Security Insights active passes",
+			siStatus:        "active",
+			expectedResult:  gemara.Passed,
+			expectedMessage: "Repository is active",
+		},
+		{
+			name:            "No SI file but GitHub reports active passes",
+			siStatus:        "",
+			metadata:        fakeActiveMetadata{active: true},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "Repository is active",
+		},
+		{
+			name:            "No SI file and GitHub reports archived is not applicable",
+			siStatus:        "",
+			metadata:        fakeActiveMetadata{active: false},
+			expectedResult:  gemara.NotApplicable,
+			expectedMessage: "Repository is archived or disabled",
+		},
+		{
+			name:            "No SI status and no metadata is not applicable",
+			siStatus:        "",
+			metadata:        nil,
+			expectedResult:  gemara.NotApplicable,
+			expectedMessage: "Repository is archived or disabled",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload := data.Payload{
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{
+						Repository: &si.Repository{Status: test.siStatus},
+					},
+				},
+				RepositoryMetadata: test.metadata,
+			}
+
+			result, message, _ := IsActiveForVulnData(payload)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})

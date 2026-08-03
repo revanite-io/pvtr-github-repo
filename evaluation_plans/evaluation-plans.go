@@ -210,11 +210,11 @@ var (
 			vuln_management.HasPrivateVulnerabilityReporting,
 		},
 		"OSPS-VM-04.01": {
-			reusable_steps.IsActive,
+			vuln_management.IsActiveForVulnData,
 			vuln_management.PublishesVulnerabilityData,
 		},
 		"OSPS-VM-04.02": {
-			reusable_steps.IsActive,
+			vuln_management.IsActiveForVulnData,
 			vuln_management.HasVexDocument,
 		},
 		"OSPS-VM-05.01": {

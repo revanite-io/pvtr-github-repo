@@ -2,6 +2,7 @@ package data
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,13 +56,15 @@ func TestGetPrivateVulnReporting(t *testing.T) {
 }
 
 func TestGetSecurityAdvisories(t *testing.T) {
+	fullPage := "[" + strings.TrimSuffix(strings.Repeat(`{"state":"published"},`, 100), ",") + "]"
 	tests := []struct {
-		name       string
-		body       string
-		statusCode int
-		httpErr    error
-		wantCount  int
-		wantKnown  bool
+		name         string
+		body         string
+		statusCode   int
+		httpErr      error
+		wantCount    int
+		wantKnown    bool
+		wantLowerBnd bool
 	}{
 		{
 			name:      "single published advisory",
@@ -80,6 +83,13 @@ func TestGetSecurityAdvisories(t *testing.T) {
 			body:      `[]`,
 			wantCount: 0,
 			wantKnown: true,
+		},
+		{
+			name:         "full page marks count as lower bound",
+			body:         fullPage,
+			wantCount:    100,
+			wantKnown:    true,
+			wantLowerBnd: true,
 		},
 		{
 			name:       "forbidden leaves status unknown",
@@ -103,6 +113,7 @@ func TestGetSecurityAdvisories(t *testing.T) {
 
 			assert.Equal(t, test.wantCount, payload.SecurityAdvisories.Count)
 			assert.Equal(t, test.wantKnown, payload.SecurityAdvisories.Known)
+			assert.Equal(t, test.wantLowerBnd, payload.SecurityAdvisories.CountIsLowerBound)
 		})
 	}
 }
