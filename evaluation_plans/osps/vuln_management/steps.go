@@ -109,6 +109,13 @@ func matchSast(text string) string {
 	return ""
 }
 
+func canonicalSastToolID(id string) string {
+	if strings.HasPrefix(id, "sonar") {
+		return "sonar"
+	}
+	return id
+}
+
 // matchesGitHubGlob matches the branch-filter glob syntax needed here: * and **.
 // GitHub's ref-filter grammar treats ?, +, and character classes as quantifiers
 // or extended patterns whose semantics differ from ordinary globbing, so those
@@ -220,12 +227,14 @@ func workflowCoversChanges(workflow *actionlint.Workflow, defaultBranch string) 
 }
 
 // sastSource is a detected signal that SAST runs on changes: either a tool
-// identifier or a complete workflow/job status-check context. policyDocumented
-// records whether that specific source carries a documented SAST ruleset or
-// policy (only Security Insights sources can), so a Pass is only granted when
-// the enforced check corresponds to a source whose policy is documented.
+// identifier or a workflow/job status-check context. toolID links workflow
+// aliases to policy evidence for the same tool in Security Insights.
+// workflowAlias prevents separate Insights declarations in the same tool family
+// from lending policy evidence to each other.
 type sastSource struct {
 	name             string
+	toolID           string
+	workflowAlias    bool
 	policyDocumented bool
 }
 
@@ -246,8 +255,13 @@ func detectSastToolInInsights(tools []si.SecurityTool) sastDetection {
 			if name == "" {
 				name = "SAST"
 			}
+			toolID := canonicalSastToolID(matchSast(name))
+			if toolID == "" {
+				toolID = strings.ToLower(name)
+			}
 			detection.sources = append(detection.sources, sastSource{
 				name:             name,
+				toolID:           toolID,
 				policyDocumented: len(tool.Rulesets) > 0,
 			})
 		}
@@ -346,39 +360,63 @@ func detectSastInWorkflows(files []data.WorkflowFile, defaultBranch string) sast
 			}
 			detection.coverageProven = true
 
-			workflowName := ""
-			if workflow.Name != nil {
-				workflowName = strings.TrimSpace(workflow.Name.Value)
-			}
 			jobName := ""
 			if job.Name != nil {
 				jobName = strings.TrimSpace(job.Name.Value)
 			}
-			if jobName == "" && job.ID != nil {
-				jobName = strings.TrimSpace(job.ID.Value)
+			jobID := ""
+			if job.ID != nil {
+				jobID = strings.TrimSpace(job.ID.Value)
 			}
+			checkName := jobName
+			if checkName == "" {
+				checkName = jobID
+			}
+			toolID := canonicalSastToolID(matchSast(sources[0]))
 
 			for _, source := range sources {
 				// Tool identifiers are reliable exact contexts in their own
-				// right. Generic job names are only retained as part of the
-				// complete workflow/job context below. Workflow-detected sources
-				// never carry documented-policy evidence on their own.
+				// right. Workflow-detected aliases receive policy evidence later
+				// only when Security Insights documents this same tool.
 				if matchSast(source) != "" {
-					detection.sources = append(detection.sources, sastSource{name: source})
+					detection.sources = append(detection.sources, sastSource{name: source, toolID: toolID, workflowAlias: true})
 				}
 			}
-			if workflowName != "" && jobName != "" {
-				detection.sources = append(detection.sources, sastSource{name: workflowName + " / " + jobName})
+			if job.WorkflowCall == nil {
+				if checkName != "" {
+					detection.sources = append(detection.sources, sastSource{name: checkName, toolID: toolID, workflowAlias: true})
+				}
+			} else if checkName != "" {
 				for _, calledJob := range sources[1:] {
 					calledJob = strings.TrimSpace(calledJob)
-					if calledJob != "" && matchSast(calledJob) == "" {
-						detection.sources = append(detection.sources, sastSource{name: workflowName + " / " + jobName + " / " + calledJob})
+					if calledJob != "" {
+						detection.sources = append(detection.sources, sastSource{
+							name:          checkName + " / " + calledJob,
+							toolID:        toolID,
+							workflowAlias: true,
+						})
 					}
 				}
 			}
 		}
 	}
 	return detection
+}
+
+// associateSastPolicies propagates documented policy evidence from Security
+// Insights to workflow check aliases for the same canonical SAST tool.
+func associateSastPolicies(sources []sastSource) {
+	documentedTools := make(map[string]bool)
+	for _, source := range sources {
+		if source.toolID != "" && source.policyDocumented {
+			documentedTools[source.toolID] = true
+		}
+	}
+	for i := range sources {
+		if sources[i].workflowAlias && documentedTools[sources[i].toolID] {
+			sources[i].policyDocumented = true
+		}
+	}
 }
 
 // jobUsesSast returns the SAST identifier a job invokes via a step's `uses:`
@@ -458,6 +496,7 @@ func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message 
 		detection.inspectionBlocked = workflowDetection.inspectionBlocked
 		detection.coverageProven = workflowDetection.coverageProven
 	}
+	associateSastPolicies(detection.sources)
 
 	// Union the status-check contexts required on the default branch from both
 	// sources the scanner can observe: classic branch protection (admin-only)
