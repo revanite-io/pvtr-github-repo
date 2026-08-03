@@ -25,7 +25,7 @@ var structuredDataExtensions = map[string]bool{
 
 // isVexPath reports whether a repository path looks like a VEX document. It
 // recognises the common conventions — an OpenVEX/CSAF/CycloneDX-VEX file
-// (e.g. product.vex.json, openvex.json, bom.cdx-vex.json, advisory.csaf.json)
+// (e.g. product.vex.json, openvex.json, bom.cdx-vex.json, advisory.vex.csaf.json)
 // or any structured-data file living under a vex/ directory — while avoiding
 // false positives from words that merely contain "vex".
 func isVexPath(p string) bool {
