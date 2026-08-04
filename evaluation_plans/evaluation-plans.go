@@ -229,8 +229,7 @@ var (
 		},
 		"OSPS-VM-06.02": {
 			reusable_steps.IsCodeRepo,
-			reusable_steps.HasSecurityInsightsFile,
-			vuln_management.SastToolDefined,
+			vuln_management.SastEnforcedOnChanges,
 		},
 	}
 )

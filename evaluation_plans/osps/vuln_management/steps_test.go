@@ -1,112 +1,691 @@
 package vuln_management
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/ossf/si-tooling/v2/si"
+	"github.com/rhysd/actionlint"
 	"github.com/stretchr/testify/assert"
 )
 
 func ptrTo[T any](v T) *T { return &v }
 
-type testingData struct {
-	expectedResult   gemara.Result
-	expectedMessage  string
-	payload          data.Payload
-	assertionMessage string
+func TestDetectSastToolInInsights(t *testing.T) {
+	tests := []struct {
+		name  string
+		tools []si.SecurityTool
+		want  []sastSource
+	}{
+		{
+			name: "SAST tool integrated in CI is detected by name",
+			tools: []si.SecurityTool{{
+				Name:        "CodeQL",
+				Type:        "SAST",
+				Rulesets:    []string{"default"},
+				Integration: si.SecurityToolIntegration{Ci: true},
+			}},
+			want: []sastSource{{name: "CodeQL", toolID: "codeql", policyDocumented: true}},
+		},
+		{
+			name: "SAST tool without rulesets carries no documented policy",
+			tools: []si.SecurityTool{{
+				Name:        "CodeQL",
+				Type:        "SAST",
+				Integration: si.SecurityToolIntegration{Ci: true},
+			}},
+			want: []sastSource{{name: "CodeQL", toolID: "codeql", policyDocumented: false}},
+		},
+		{
+			name: "SAST tool without a name falls back to a generic label",
+			tools: []si.SecurityTool{{
+				Type:        "SAST",
+				Integration: si.SecurityToolIntegration{Ci: true},
+			}},
+			want: []sastSource{{name: "SAST", toolID: "sast", policyDocumented: false}},
+		},
+		{
+			name: "SAST tool only run adhoc or at release is not CI evidence",
+			tools: []si.SecurityTool{{
+				Name:        "CodeQL",
+				Type:        "SAST",
+				Integration: si.SecurityToolIntegration{Adhoc: true, Release: true},
+			}},
+			want: nil,
+		},
+		{
+			name: "Non-SAST tool is ignored",
+			tools: []si.SecurityTool{{
+				Name:        "Dependabot",
+				Type:        "SCA",
+				Integration: si.SecurityToolIntegration{Ci: true},
+			}},
+			want: nil,
+		},
+	}
+
+	for _, test := range tests {
+		got := detectSastToolInInsights(test.tools)
+		assert.Equal(t, test.want, got.sources, test.name)
+	}
 }
 
-func TestSastToolDefined(t *testing.T) {
+const codeqlWorkflow = `name: CodeQL
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/analyze@v3
+`
 
-	testData := []testingData{
+const semgrepRunWorkflow = `name: Security
+on: [pull_request]
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - run: semgrep ci
+`
+
+const pathFilteredCodeqlWorkflow = `name: CodeQL
+on:
+  pull_request:
+    paths:
+      - src/**
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
+const filteredPullRequestWithPushWorkflow = `name: CodeQL
+on:
+  pull_request:
+    paths:
+      - src/**
+  push:
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
+const branchIgnoreCodeqlWorkflow = `name: CodeQL
+on:
+  pull_request:
+    branches-ignore:
+      - release/**
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
+const scheduledCodeqlWorkflow = `name: Scheduled CodeQL
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
+const nonSastWorkflow = `name: Build
+on: [pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make build
+`
+
+const mentionOnlyWorkflow = `name: Security
+on: [pull_request]
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TODO wire up CodeQL and semgrep"
+`
+
+const bearerHeaderWorkflow = `name: Publish
+on: [pull_request]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'curl -H "Authorization: Bearer $TOKEN" https://api.example.com'
+`
+
+const unsupportedBranchIgnoreWorkflow = `name: CodeQL
+on:
+  pull_request:
+    branches-ignore:
+      - mai+n
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
+const reusableCallerWorkflow = `name: Security
+on: [pull_request]
+jobs:
+  sast:
+    name: SAST gate
+    uses: ./.github/workflows/reusable-sast.yml
+`
+
+const reusableSastWorkflow = `name: Reusable security
+on: [workflow_call]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
+const remoteReusableSastWorkflow = `name: Security
+on: [pull_request]
+jobs:
+  sast:
+    name: Code scan
+    uses: org/security/.github/workflows/codeql.yml@v1
+`
+
+const unknownRemoteReusableWorkflow = `name: Security
+on: [pull_request]
+jobs:
+  sast:
+    uses: org/security/.github/workflows/scan.yml@v1
+`
+
+const cyclicReusableWorkflow = `name: Cyclic
+on: [workflow_call]
+jobs:
+  recurse:
+    uses: ./.github/workflows/cyclic.yml
+`
+
+func TestDetectSastInWorkflows(t *testing.T) {
+	tests := []struct {
+		name         string
+		files        []data.WorkflowFile
+		wantContains []string
+		wantEmpty    bool
+		wantBlocked  bool
+	}{
 		{
-			expectedResult:   gemara.Passed,
-			expectedMessage:  "Static Application Security Testing documented in Security Insights",
-			assertionMessage: "Test for SAST integration enabled",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Insights: si.SecurityInsights{
-						Repository: &si.Repository{
-							SecurityPosture: si.SecurityPosture{
-								Tools: []si.SecurityTool{
-									{
-										Type: "SAST",
-										Integration: si.SecurityToolIntegration{
-											Adhoc: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			name:         "CodeQL action on pull_request is detected with job correlation names",
+			files:        []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: codeqlWorkflow}},
+			wantContains: []string{"codeql", "Analyze"},
 		},
 		{
-			expectedResult:   gemara.Failed,
-			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
-			assertionMessage: "Test for SAST integration present but not explicitly enabled",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Insights: si.SecurityInsights{
-						Repository: &si.Repository{
-							SecurityPosture: si.SecurityPosture{
-								Tools: []si.SecurityTool{
-									{
-										Type: "SAST",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			name:         "semgrep run command includes job ID when no display name exists",
+			files:        []data.WorkflowFile{{Name: "sec.yml", Path: ".github/workflows/sec.yml", Content: semgrepRunWorkflow}},
+			wantContains: []string{"semgrep", "sast"},
 		},
 		{
-			expectedResult:   gemara.Failed,
-			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
-			assertionMessage: "Test for Non SAST tool defined",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Insights: si.SecurityInsights{
-						Repository: &si.Repository{
-							SecurityPosture: si.SecurityPosture{
-								Tools: []si.SecurityTool{
-									{
-										Type: "NotSast",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			name:         "SAST run on every pushed commit is detected",
+			files:        []data.WorkflowFile{{Name: "sec.yml", Path: ".github/workflows/sec.yml", Content: strings.Replace(semgrepRunWorkflow, "pull_request", "push", 1)}},
+			wantContains: []string{"semgrep"},
 		},
 		{
-			expectedResult:   gemara.Failed,
-			expectedMessage:  "No Static Application Security Testing documented in Security Insights",
-			assertionMessage: "Test for no tools defined",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Insights: si.SecurityInsights{
-						Repository: &si.Repository{
-							SecurityPosture: si.SecurityPosture{},
-						},
-					},
-				},
+			name:      "SAST that only runs on a schedule is not evidence of a gate on changes",
+			files:     []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: scheduledCodeqlWorkflow}},
+			wantEmpty: true,
+		},
+		{
+			name:        "path-filtered SAST workflow cannot prove coverage of all changes",
+			files:       []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: pathFilteredCodeqlWorkflow}},
+			wantEmpty:   true,
+			wantBlocked: true,
+		},
+		{
+			name:         "unfiltered push covers changes despite a filtered pull request trigger",
+			files:        []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: filteredPullRequestWithPushWorkflow}},
+			wantContains: []string{"codeql", "analyze"},
+		},
+		{
+			name:         "branch ignore that does not exclude default branch still covers changes",
+			files:        []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: branchIgnoreCodeqlWorkflow}},
+			wantContains: []string{"codeql", "analyze"},
+		},
+		{
+			name:      "workflow without a SAST tool is not detected",
+			files:     []data.WorkflowFile{{Name: "build.yml", Path: ".github/workflows/build.yml", Content: nonSastWorkflow}},
+			wantEmpty: true,
+		},
+		{
+			name:      "a run step that only mentions a tool is not an invocation",
+			files:     []data.WorkflowFile{{Name: "sec.yml", Path: ".github/workflows/sec.yml", Content: mentionOnlyWorkflow}},
+			wantEmpty: true,
+		},
+		{
+			name:      "a bearer auth header is not a SAST invocation",
+			files:     []data.WorkflowFile{{Name: "pub.yml", Path: ".github/workflows/pub.yml", Content: bearerHeaderWorkflow}},
+			wantEmpty: true,
+		},
+		{
+			name:        "an undecidable branches-ignore pattern cannot prove coverage",
+			files:       []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: unsupportedBranchIgnoreWorkflow}},
+			wantEmpty:   true,
+			wantBlocked: true,
+		},
+		{
+			name:        "truncated workflow records incomplete inspection",
+			files:       []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Truncated: true}, {Name: "README.md", Content: codeqlWorkflow}},
+			wantEmpty:   true,
+			wantBlocked: true,
+		},
+		{
+			name:        "unparseable workflow records incomplete inspection",
+			files:       []data.WorkflowFile{{Name: "broken.yml", Path: ".github/workflows/broken.yml", Content: "on: [pull_request]\njobs: ["}},
+			wantEmpty:   true,
+			wantBlocked: true,
+		},
+		{
+			name: "local reusable SAST workflow is resolved recursively",
+			files: []data.WorkflowFile{
+				{Name: "caller.yml", Path: ".github/workflows/caller.yml", Content: reusableCallerWorkflow},
+				{Name: "reusable-sast.yml", Path: ".github/workflows/reusable-sast.yml", Content: reusableSastWorkflow},
 			},
+			wantContains: []string{"codeql", "SAST gate / analyze"},
+		},
+		{
+			name:         "recognizable remote reusable SAST workflow is detected",
+			files:        []data.WorkflowFile{{Name: "caller.yml", Path: ".github/workflows/caller.yml", Content: remoteReusableSastWorkflow}},
+			wantContains: []string{"codeql"},
+		},
+		{
+			name:        "uninspectable remote reusable workflow records uncertainty",
+			files:       []data.WorkflowFile{{Name: "caller.yml", Path: ".github/workflows/caller.yml", Content: unknownRemoteReusableWorkflow}},
+			wantEmpty:   true,
+			wantBlocked: true,
+		},
+		{
+			name: "cyclic local reusable workflow records uncertainty",
+			files: []data.WorkflowFile{
+				{Name: "caller.yml", Path: ".github/workflows/caller.yml", Content: strings.Replace(reusableCallerWorkflow, "reusable-sast.yml", "cyclic.yml", 1)},
+				{Name: "cyclic.yml", Path: ".github/workflows/cyclic.yml", Content: cyclicReusableWorkflow},
+			},
+			wantEmpty:   true,
+			wantBlocked: true,
 		},
 	}
 
-	for _, test := range testData {
-		result, message, _ := SastToolDefined(test.payload)
+	for _, test := range tests {
+		got := detectSastInWorkflows(test.files, "main")
+		assert.Equal(t, test.wantBlocked, got.inspectionBlocked, test.name)
+		if test.wantEmpty {
+			assert.Empty(t, got.sources, test.name)
+			continue
+		}
+		var sourceNames []string
+		for _, source := range got.sources {
+			sourceNames = append(sourceNames, source.name)
+		}
+		for _, want := range test.wantContains {
+			assert.Contains(t, sourceNames, want, test.name)
+		}
+		if test.name == "CodeQL action on pull_request is detected with job correlation names" {
+			assert.NotContains(t, sourceNames, "CodeQL", "workflow name must not be used as status-check evidence")
+			assert.NotContains(t, sourceNames, "CodeQL / Analyze", "direct check context must not include workflow name")
+			assert.NotContains(t, sourceNames, "analyze", "job ID must not be an alias when a display name is set")
+		}
+		if test.name == "local reusable SAST workflow is resolved recursively" {
+			assert.NotContains(t, sourceNames, "Security / SAST gate / analyze", "reusable check context must not include workflow name")
+		}
+		if test.name == "recognizable remote reusable SAST workflow is detected" {
+			assert.NotContains(t, sourceNames, "Code scan", "unknown called jobs cannot be inferred from the caller name")
+		}
+	}
+}
 
-		assert.Equal(t, test.expectedResult, result, test.assertionMessage)
-		assert.Equal(t, test.expectedMessage, message, test.assertionMessage)
+func TestAssociateSastPolicies(t *testing.T) {
+	sources := []sastSource{
+		{name: "Semgrep", toolID: "semgrep", policyDocumented: true},
+		{name: "SAST", toolID: "semgrep", workflowAlias: true},
+		{name: "Security / SAST", toolID: "semgrep", workflowAlias: true},
+		{name: "CodeQL", toolID: "codeql"},
+		{name: "Analyze", toolID: "codeql", workflowAlias: true},
+		{name: "SonarQube", toolID: "sonar", policyDocumented: true},
+		{name: "SonarCloud", toolID: "sonar"},
 	}
 
+	associateSastPolicies(sources)
+
+	assert.True(t, sources[1].policyDocumented, "bare Semgrep job alias should inherit Semgrep policy")
+	assert.True(t, sources[2].policyDocumented, "composite Semgrep alias should inherit Semgrep policy")
+	assert.False(t, sources[3].policyDocumented, "CodeQL tool must not inherit unrelated Semgrep policy")
+	assert.False(t, sources[4].policyDocumented, "CodeQL job alias must not inherit unrelated Semgrep policy")
+	assert.False(t, sources[6].policyDocumented, "Insights entries must not inherit policy from a peer in the same tool family")
+}
+
+func TestDocumentedPolicyMatchesWorkflowCheckForSameTool(t *testing.T) {
+	tests := []struct {
+		name            string
+		insightsTool    si.SecurityTool
+		workflow        string
+		requiredContext string
+		expectedResult  gemara.Result
+	}{
+		{
+			name: "documented Semgrep policy backs the required Semgrep job",
+			insightsTool: si.SecurityTool{
+				Name:        "Semgrep",
+				Type:        "SAST",
+				Rulesets:    []string{"default"},
+				Integration: si.SecurityToolIntegration{Ci: true},
+			},
+			workflow:        semgrepRunWorkflow,
+			requiredContext: "sast",
+			expectedResult:  gemara.Passed,
+		},
+		{
+			name: "documented Semgrep policy does not back the required CodeQL job",
+			insightsTool: si.SecurityTool{
+				Name:        "Semgrep",
+				Type:        "SAST",
+				Rulesets:    []string{"default"},
+				Integration: si.SecurityToolIntegration{Ci: true},
+			},
+			workflow:        codeqlWorkflow,
+			requiredContext: "Analyze",
+			expectedResult:  gemara.NeedsReview,
+		},
+		{
+			name: "SonarQube policy backs a sonar-scanner workflow job",
+			insightsTool: si.SecurityTool{
+				Name:        "SonarQube",
+				Type:        "SAST",
+				Rulesets:    []string{"default"},
+				Integration: si.SecurityToolIntegration{Ci: true},
+			},
+			workflow: `name: Security
+on: [pull_request]
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sonar-scanner
+`,
+			requiredContext: "sonar",
+			expectedResult:  gemara.Passed,
+		},
+	}
+
+	for _, test := range tests {
+		insights := detectSastToolInInsights([]si.SecurityTool{test.insightsTool})
+		workflow := detectSastInWorkflows(
+			[]data.WorkflowFile{{Name: "sast.yml", Path: ".github/workflows/sast.yml", Content: test.workflow}},
+			"main",
+		)
+		detection := sastDetection{
+			sources:        append(insights.sources, workflow.sources...),
+			coverageProven: workflow.coverageProven,
+		}
+		associateSastPolicies(detection.sources)
+
+		result, _, _ := evaluateSastEnforcement(detection, []string{test.requiredContext}, true)
+		assert.Equal(t, test.expectedResult, result, test.name)
+	}
+}
+
+func TestDocumentedPolicyMatchesReusableWorkflowCheck(t *testing.T) {
+	insights := detectSastToolInInsights([]si.SecurityTool{{
+		Name:        "CodeQL",
+		Type:        "SAST",
+		Rulesets:    []string{"default"},
+		Integration: si.SecurityToolIntegration{Ci: true},
+	}})
+	workflow := detectSastInWorkflows([]data.WorkflowFile{
+		{Name: "caller.yml", Path: ".github/workflows/caller.yml", Content: reusableCallerWorkflow},
+		{Name: "reusable-sast.yml", Path: ".github/workflows/reusable-sast.yml", Content: reusableSastWorkflow},
+	}, "main")
+	detection := sastDetection{
+		sources:        append(insights.sources, workflow.sources...),
+		coverageProven: workflow.coverageProven,
+	}
+	associateSastPolicies(detection.sources)
+
+	result, _, _ := evaluateSastEnforcement(detection, []string{"SAST gate / analyze"}, true)
+	assert.Equal(t, gemara.Passed, result)
+}
+
+func TestMatchesGitHubGlob(t *testing.T) {
+	tests := []struct {
+		name          string
+		value         string
+		pattern       string
+		want          bool
+		wantSupported bool
+	}{
+		{name: "exact match", value: "main", pattern: "main", want: true, wantSupported: true},
+		{name: "single star stays within a path segment", value: "release-1", pattern: "release-*", want: true, wantSupported: true},
+		{name: "single star does not cross a slash", value: "feature/x", pattern: "feature*", want: false, wantSupported: true},
+		{name: "double star crosses slashes", value: "feature/x/y", pattern: "feature/**", want: true, wantSupported: true},
+		{name: "question mark is reported unsupported", value: "release-x", pattern: "release-?", want: false, wantSupported: false},
+		{name: "plus is reported unsupported", value: "release-x", pattern: "release-+", want: false, wantSupported: false},
+		{name: "character class is reported unsupported", value: "release-1", pattern: "release-[0-9]", want: false, wantSupported: false},
+	}
+
+	for _, test := range tests {
+		got, supported := matchesGitHubGlob(test.value, test.pattern)
+		assert.Equal(t, test.want, got, test.name)
+		assert.Equal(t, test.wantSupported, supported, test.name)
+	}
+}
+
+func TestMatchSastCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		runText string
+		want    string
+	}{
+		{name: "semgrep invocation is detected", runText: "semgrep ci", want: "semgrep"},
+		{name: "gosec with a path prefix is detected", runText: "/usr/bin/gosec ./...", want: "gosec"},
+		{name: "sudo wrapper is stripped", runText: "sudo bandit -r .", want: "bandit"},
+		{name: "env assignment prefix is stripped", runText: "FOO=bar sonar-scanner -Dsonar.foo=1", want: "sonar-scanner"},
+		{name: "snyk code is detected but plain snyk is not", runText: "snyk code test", want: "snyk code"},
+		{name: "plain snyk test is not SAST", runText: "snyk test", want: ""},
+		{name: "bearer scan is detected", runText: "bearer scan", want: "bearer"},
+		{name: "bearer auth header is not an invocation", runText: `curl -H "Authorization: Bearer $TOKEN" https://api`, want: ""},
+		{name: "echoed tool mention is not an invocation", runText: `echo "TODO wire up CodeQL"`, want: ""},
+		{name: "second command after && is detected", runText: "make build && gosec ./...", want: "gosec"},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.want, matchSastCommand(test.runText), test.name)
+	}
+}
+
+func TestBranchFilterUncertainty(t *testing.T) {
+	unsupportedIgnore := &actionlint.WebhookEventFilter{
+		Values: []*actionlint.String{{Value: "mai+n"}},
+	}
+	excluded, uncertain := branchFilterExcludes(unsupportedIgnore, "main")
+	assert.False(t, excluded, "an undecidable ignore pattern must not be reported as a definite exclude")
+	assert.True(t, uncertain, "an undecidable ignore pattern must be reported as uncertain")
+
+	supportedIgnore := &actionlint.WebhookEventFilter{
+		Values: []*actionlint.String{{Value: "release/**"}},
+	}
+	excluded, uncertain = branchFilterExcludes(supportedIgnore, "main")
+	assert.False(t, excluded)
+	assert.False(t, uncertain)
+
+	included, uncertain := branchFilterIncludes(unsupportedIgnore, "main")
+	assert.False(t, included)
+	assert.True(t, uncertain, "an undecidable include pattern must be reported as uncertain")
+}
+
+func TestRequiredCheckMatchesSast(t *testing.T) {
+	tests := []struct {
+		name             string
+		requiredContexts []string
+		sastSources      []sastSource
+		want             bool
+		wantWithPolicy   bool
+	}{
+		{
+			name:             "check context carrying a known SAST identifier matches",
+			requiredContexts: []string{"CodeQL"},
+			sastSources:      []sastSource{{name: "codeql", policyDocumented: true}},
+			want:             true,
+			wantWithPolicy:   true,
+		},
+		{
+			name:             "matched source without documented policy is not policy-backed",
+			requiredContexts: []string{"CodeQL"},
+			sastSources:      []sastSource{{name: "codeql"}},
+			want:             true,
+			wantWithPolicy:   false,
+		},
+		{
+			name:             "policy from an unmatched tool does not make the match policy-backed",
+			requiredContexts: []string{"CodeQL"},
+			sastSources:      []sastSource{{name: "codeql"}, {name: "semgrep", policyDocumented: true}},
+			want:             true,
+			wantWithPolicy:   false,
+		},
+		{
+			name:             "check merely containing a known SAST identifier does not match",
+			requiredContexts: []string{"Build CodeQL pack"},
+			sastSources:      []sastSource{{name: "codeql"}},
+			want:             false,
+		},
+		{
+			name:             "check context matching a SAST job name matches",
+			requiredContexts: []string{"Security / Analyze"},
+			sastSources:      []sastSource{{name: "codeql"}, {name: "Security / Analyze"}},
+			want:             true,
+		},
+		{
+			name:             "generic job component in another workflow does not match",
+			requiredContexts: []string{"Unit Tests / Analyze"},
+			sastSources:      []sastSource{{name: "codeql"}, {name: "Security / Analyze"}},
+			want:             false,
+		},
+		{
+			name:             "substring of a SAST job name does not match",
+			requiredContexts: []string{"Analyze results"},
+			sastSources:      []sastSource{{name: "Static Analyze"}},
+			want:             false,
+		},
+		{
+			name:             "unrelated required check does not match",
+			requiredContexts: []string{"build", "unit-tests"},
+			sastSources:      []sastSource{{name: "codeql"}, {name: "Analyze"}},
+			want:             false,
+		},
+		{
+			name:             "short generic source token does not produce a spurious match",
+			requiredContexts: []string{"lint"},
+			sastSources:      []sastSource{{name: "ci"}},
+			want:             false,
+		},
+		{
+			name:             "no required contexts cannot match",
+			requiredContexts: nil,
+			sastSources:      []sastSource{{name: "codeql"}},
+			want:             false,
+		},
+	}
+
+	for _, test := range tests {
+		got, gotWithPolicy := requiredCheckMatchesSast(test.requiredContexts, test.sastSources)
+		assert.Equal(t, test.want, got, test.name)
+		assert.Equal(t, test.wantWithPolicy, gotWithPolicy, test.name)
+	}
+}
+
+func TestEvaluateSastEnforcement(t *testing.T) {
+	tests := []struct {
+		name             string
+		detection        sastDetection
+		requiredContexts []string
+		adminObservable  bool
+		wantResult       gemara.Result
+	}{
+		{
+			name:             "SAST in CI enforced by a matching required check passes",
+			detection:        sastDetection{sources: []sastSource{{name: "codeql", policyDocumented: true}, {name: "Analyze", policyDocumented: true}}},
+			requiredContexts: []string{"Analyze"},
+			wantResult:       gemara.Passed,
+		},
+		{
+			name:             "enforced SAST without a documented policy needs review",
+			detection:        sastDetection{sources: []sastSource{{name: "codeql"}, {name: "Analyze"}}},
+			requiredContexts: []string{"Analyze"},
+			wantResult:       gemara.NeedsReview,
+		},
+		{
+			name:             "enforced tool without policy does not pass on an unmatched tool's policy",
+			detection:        sastDetection{sources: []sastSource{{name: "codeql"}, {name: "semgrep", policyDocumented: true}}},
+			requiredContexts: []string{"codeql"},
+			wantResult:       gemara.NeedsReview,
+		},
+		{
+			name:             "SAST in CI with required checks but no match needs review",
+			detection:        sastDetection{sources: []sastSource{{name: "codeql", policyDocumented: true}, {name: "Analyze", policyDocumented: true}}},
+			requiredContexts: []string{"build"},
+			wantResult:       gemara.NeedsReview,
+		},
+		{
+			name:            "SAST in CI with admin-observable absence of required checks fails",
+			detection:       sastDetection{sources: []sastSource{{name: "codeql", policyDocumented: true}}},
+			adminObservable: true,
+			wantResult:      gemara.Failed,
+		},
+		{
+			name:            "SAST in CI with unobservable branch protection needs review",
+			detection:       sastDetection{sources: []sastSource{{name: "codeql", policyDocumented: true}}},
+			adminObservable: false,
+			wantResult:      gemara.NeedsReview,
+		},
+		{
+			name:       "no SAST in CI fails",
+			detection:  sastDetection{},
+			wantResult: gemara.Failed,
+		},
+		{
+			name:       "no SAST evidence with incomplete inspection needs review",
+			detection:  sastDetection{inspectionBlocked: true},
+			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:             "Security Insights evidence cannot pass when workflow coverage is uninspectable",
+			detection:        sastDetection{sources: []sastSource{{name: "codeql", policyDocumented: true}}, inspectionBlocked: true},
+			requiredContexts: []string{"codeql"},
+			wantResult:       gemara.NeedsReview,
+		},
+		{
+			name:             "independently proven workflow coverage can pass despite an unrelated uninspectable workflow",
+			detection:        sastDetection{sources: []sastSource{{name: "codeql", policyDocumented: true}}, inspectionBlocked: true, coverageProven: true},
+			requiredContexts: []string{"codeql"},
+			wantResult:       gemara.Passed,
+		},
+	}
+
+	for _, test := range tests {
+		result, message, _ := evaluateSastEnforcement(test.detection, test.requiredContexts, test.adminObservable)
+		assert.Equal(t, test.wantResult, result, test.name)
+		assert.NotEmpty(t, message, test.name)
+	}
 }
 
 func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
