@@ -109,6 +109,90 @@ func matchSast(text string) string {
 	return ""
 }
 
+// commandSeparatorPattern splits a `run:` script into individual command
+// invocations so each command's leading token can be inspected in isolation.
+var commandSeparatorPattern = regexp.MustCompile("[\n;&|`]+")
+
+// commandWrapperTokens are prefixes that delegate to a following command whose
+// own leading token should still be inspected for a SAST invocation.
+var commandWrapperTokens = map[string]bool{
+	"sudo": true,
+	"npx":  true,
+	"time": true,
+	"env":  true,
+}
+
+// sastCommandIdentifiers map a SAST tool's shell invocation to the canonical
+// identifier used elsewhere. Unlike action references, these are matched only at
+// a command-token boundary so that ordinary text mentioning a tool name (for
+// example a bearer auth header) is not mistaken for running it.
+var sastCommandIdentifiers = []struct{ phrase, id string }{
+	{"codeql", "codeql"},
+	{"semgrep", "semgrep"},
+	{"opengrep", "opengrep"},
+	{"sonar-scanner", "sonar-scanner"},
+	{"bandit", "bandit"},
+	{"gosec", "gosec"},
+	{"brakeman", "brakeman"},
+	{"horusec", "horusec"},
+	{"deepsource", "deepsource"},
+	{"snyk code", "snyk code"},
+	{"bearer scan", "bearer"},
+	{"checkmarx", "checkmarx"},
+}
+
+// matchSastCommand returns the SAST identifier invoked by a `run:` script, or
+// the empty string. Each command segment is normalized to its leading
+// executable (dropping wrappers such as sudo/npx and env assignments, and any
+// directory prefix) and matched against a known invocation at a token boundary.
+func matchSastCommand(runText string) string {
+	for _, segment := range commandSeparatorPattern.Split(runText, -1) {
+		command := normalizeCommand(segment)
+		if command == "" {
+			continue
+		}
+		for _, candidate := range sastCommandIdentifiers {
+			if command == candidate.phrase || strings.HasPrefix(command, candidate.phrase+" ") {
+				return candidate.id
+			}
+		}
+	}
+	return ""
+}
+
+// normalizeCommand lowercases a command segment, strips leading env assignments
+// and wrapper commands, and reduces the executable to its basename so that, for
+// example, `/usr/bin/gosec ./...` normalizes to `gosec ./...`.
+func normalizeCommand(segment string) string {
+	command := strings.ToLower(strings.TrimSpace(segment))
+	for command != "" {
+		token, rest := splitFirstToken(command)
+		if strings.Contains(token, "=") || commandWrapperTokens[token] {
+			command = rest
+			continue
+		}
+		break
+	}
+	token, rest := splitFirstToken(command)
+	if idx := strings.LastIndexAny(token, "/\\"); idx >= 0 {
+		token = token[idx+1:]
+	}
+	if rest == "" {
+		return token
+	}
+	return token + " " + rest
+}
+
+// splitFirstToken returns the first whitespace-delimited token and the trimmed
+// remainder of s.
+func splitFirstToken(s string) (string, string) {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, " \t"); i >= 0 {
+		return s[:i], strings.TrimSpace(s[i+1:])
+	}
+	return s, ""
+}
+
 func canonicalSastToolID(id string) string {
 	if strings.HasPrefix(id, "sonar") {
 		return "sonar"
@@ -117,11 +201,12 @@ func canonicalSastToolID(id string) string {
 }
 
 // matchesGitHubGlob matches the branch-filter glob syntax needed here: * and **.
-// GitHub's ref-filter grammar treats ?, +, and character classes as quantifiers
-// or extended patterns whose semantics differ from ordinary globbing, so those
-// are conservatively treated as no match rather than risking a false coverage
-// claim for a branch GitHub would not actually match.
-func matchesGitHubGlob(value, pattern string) bool {
+// GitHub's ref-filter grammar also treats ?, +, and character classes as
+// quantifiers or extended patterns whose semantics differ from ordinary
+// globbing. Those are reported as unsupported (supported=false) so callers can
+// decide, per direction, whether an undecidable pattern means "not covered"
+// (include lists) or "possibly excluded" (ignore lists).
+func matchesGitHubGlob(value, pattern string) (matched bool, supported bool) {
 	var expression strings.Builder
 	expression.WriteByte('^')
 	for i := 0; i < len(pattern); i++ {
@@ -134,20 +219,19 @@ func matchesGitHubGlob(value, pattern string) bool {
 				expression.WriteString("[^/]*")
 			}
 		case '?', '+', '[', ']':
-			return false
+			return false, false
 		default:
 			expression.WriteString(regexp.QuoteMeta(pattern[i : i+1]))
 		}
 	}
 	expression.WriteByte('$')
-	return regexp.MustCompile(expression.String()).MatchString(value)
+	return regexp.MustCompile(expression.String()).MatchString(value), true
 }
 
-func branchFilterIncludes(filter *actionlint.WebhookEventFilter, branch string) bool {
+func branchFilterIncludes(filter *actionlint.WebhookEventFilter, branch string) (included bool, uncertain bool) {
 	if filter.IsEmpty() {
-		return true
+		return true, false
 	}
-	included := false
 	for _, pattern := range filter.Values {
 		if pattern == nil {
 			continue
@@ -155,23 +239,40 @@ func branchFilterIncludes(filter *actionlint.WebhookEventFilter, branch string) 
 		value := pattern.Value
 		negated := strings.HasPrefix(value, "!")
 		value = strings.TrimPrefix(value, "!")
-		if matchesGitHubGlob(branch, value) {
+		matched, supported := matchesGitHubGlob(branch, value)
+		if !supported {
+			// The pattern could admit or reject the branch; we cannot prove
+			// inclusion, so record uncertainty rather than guessing.
+			uncertain = true
+			continue
+		}
+		if matched {
 			included = !negated
 		}
 	}
-	return included
+	return included, uncertain
 }
 
-func branchFilterExcludes(filter *actionlint.WebhookEventFilter, branch string) bool {
+func branchFilterExcludes(filter *actionlint.WebhookEventFilter, branch string) (excluded bool, uncertain bool) {
 	if filter.IsEmpty() {
-		return false
+		return false, false
 	}
 	for _, pattern := range filter.Values {
-		if pattern != nil && matchesGitHubGlob(branch, pattern.Value) {
-			return true
+		if pattern == nil {
+			continue
+		}
+		matched, supported := matchesGitHubGlob(branch, pattern.Value)
+		if !supported {
+			// An undecidable ignore pattern may exclude the default branch, so
+			// coverage cannot be proven; treat it as uncertain.
+			uncertain = true
+			continue
+		}
+		if matched {
+			excluded = true
 		}
 	}
-	return false
+	return excluded, uncertain
 }
 
 // workflowCoversChanges reports whether a workflow runs for every pull request
@@ -215,10 +316,10 @@ func workflowCoversChanges(workflow *actionlint.Workflow, defaultBranch string) 
 		}
 
 		typesCoverChanges := len(types) == 0 || (types["opened"] && types["synchronize"])
-		branchCovered := defaultBranch != "" &&
-			branchFilterIncludes(webhook.Branches, defaultBranch) &&
-			!branchFilterExcludes(webhook.BranchesIgnore, defaultBranch)
-		if typesCoverChanges && !pathsFiltered && branchCovered {
+		included, includeUncertain := branchFilterIncludes(webhook.Branches, defaultBranch)
+		excluded, excludeUncertain := branchFilterExcludes(webhook.BranchesIgnore, defaultBranch)
+		branchCovered := defaultBranch != "" && included && !excluded
+		if typesCoverChanges && !pathsFiltered && branchCovered && !includeUncertain && !excludeUncertain {
 			return true, false
 		}
 		uncertain = true
@@ -330,10 +431,11 @@ func detectSastInWorkflows(files []data.WorkflowFile, defaultBranch string) sast
 			sources, callBlocked := inspectJob(calledJob, visiting)
 			blocked = blocked || callBlocked
 			if len(sources) > 0 {
+				// GitHub publishes a called job's check as its name, or its ID
+				// when unnamed, matching the caller-side preference below.
 				if calledJob.Name != nil && calledJob.Name.Value != "" {
 					sources = append(sources, calledJob.Name.Value)
-				}
-				if calledJob.ID != nil && calledJob.ID.Value != "" {
+				} else if calledJob.ID != nil && calledJob.ID.Value != "" {
 					sources = append(sources, calledJob.ID.Value)
 				}
 				return sources, blocked
@@ -420,7 +522,12 @@ func associateSastPolicies(sources []sastSource) {
 }
 
 // jobUsesSast returns the SAST identifier a job invokes via a step's `uses:`
-// action, `run:` command, or step name, or the empty string when none is found.
+// action reference or `run:` command, or the empty string when none is found. A
+// `uses:` reference names the tool directly, so a substring match is definite.
+// `run:` scripts are free text, so the identifier must appear as a command token
+// (see matchSastCommand); a mere mention such as an echoed TODO or an
+// Authorization: Bearer header is deliberately not treated as an invocation.
+// Step names are cosmetic and are intentionally not used as evidence.
 func jobUsesSast(job *actionlint.Job) string {
 	for _, step := range job.Steps {
 		if step == nil {
@@ -435,14 +542,9 @@ func jobUsesSast(job *actionlint.Job) string {
 			}
 		case *actionlint.ExecRun:
 			if exec.Run != nil {
-				if id := matchSast(exec.Run.Value); id != "" {
+				if id := matchSastCommand(exec.Run.Value); id != "" {
 					return id
 				}
-			}
-		}
-		if step.Name != nil {
-			if id := matchSast(step.Name.Value); id != "" {
-				return id
 			}
 		}
 	}
@@ -497,6 +599,12 @@ func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message 
 		detection.coverageProven = workflowDetection.coverageProven
 	}
 	associateSastPolicies(detection.sources)
+
+	// A Security Insights file that failed to parse may itself declare the SAST
+	// tool, so an absence of evidence here is inconclusive rather than a failure.
+	if payload.InsightsError {
+		detection.inspectionBlocked = true
+	}
 
 	// Union the status-check contexts required on the default branch from both
 	// sources the scanner can observe: classic branch protection (admin-only)

@@ -7,6 +7,7 @@ import (
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/ossf/si-tooling/v2/si"
+	"github.com/rhysd/actionlint"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -150,6 +151,36 @@ jobs:
       - run: make build
 `
 
+const mentionOnlyWorkflow = `name: Security
+on: [pull_request]
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TODO wire up CodeQL and semgrep"
+`
+
+const bearerHeaderWorkflow = `name: Publish
+on: [pull_request]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'curl -H "Authorization: Bearer $TOKEN" https://api.example.com'
+`
+
+const unsupportedBranchIgnoreWorkflow = `name: CodeQL
+on:
+  pull_request:
+    branches-ignore:
+      - mai+n
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/codeql-action/analyze@v3
+`
+
 const reusableCallerWorkflow = `name: Security
 on: [pull_request]
 jobs:
@@ -237,6 +268,22 @@ func TestDetectSastInWorkflows(t *testing.T) {
 			name:      "workflow without a SAST tool is not detected",
 			files:     []data.WorkflowFile{{Name: "build.yml", Path: ".github/workflows/build.yml", Content: nonSastWorkflow}},
 			wantEmpty: true,
+		},
+		{
+			name:      "a run step that only mentions a tool is not an invocation",
+			files:     []data.WorkflowFile{{Name: "sec.yml", Path: ".github/workflows/sec.yml", Content: mentionOnlyWorkflow}},
+			wantEmpty: true,
+		},
+		{
+			name:      "a bearer auth header is not a SAST invocation",
+			files:     []data.WorkflowFile{{Name: "pub.yml", Path: ".github/workflows/pub.yml", Content: bearerHeaderWorkflow}},
+			wantEmpty: true,
+		},
+		{
+			name:        "an undecidable branches-ignore pattern cannot prove coverage",
+			files:       []data.WorkflowFile{{Name: "codeql.yml", Path: ".github/workflows/codeql.yml", Content: unsupportedBranchIgnoreWorkflow}},
+			wantEmpty:   true,
+			wantBlocked: true,
 		},
 		{
 			name:        "truncated workflow records incomplete inspection",
@@ -421,23 +468,69 @@ func TestDocumentedPolicyMatchesReusableWorkflowCheck(t *testing.T) {
 
 func TestMatchesGitHubGlob(t *testing.T) {
 	tests := []struct {
-		name    string
-		value   string
-		pattern string
-		want    bool
+		name          string
+		value         string
+		pattern       string
+		want          bool
+		wantSupported bool
 	}{
-		{name: "exact match", value: "main", pattern: "main", want: true},
-		{name: "single star stays within a path segment", value: "release-1", pattern: "release-*", want: true},
-		{name: "single star does not cross a slash", value: "feature/x", pattern: "feature*", want: false},
-		{name: "double star crosses slashes", value: "feature/x/y", pattern: "feature/**", want: true},
-		{name: "question mark is treated conservatively as no match", value: "release-x", pattern: "release-?", want: false},
-		{name: "plus is treated conservatively as no match", value: "release-x", pattern: "release-+", want: false},
-		{name: "character class is treated conservatively as no match", value: "release-1", pattern: "release-[0-9]", want: false},
+		{name: "exact match", value: "main", pattern: "main", want: true, wantSupported: true},
+		{name: "single star stays within a path segment", value: "release-1", pattern: "release-*", want: true, wantSupported: true},
+		{name: "single star does not cross a slash", value: "feature/x", pattern: "feature*", want: false, wantSupported: true},
+		{name: "double star crosses slashes", value: "feature/x/y", pattern: "feature/**", want: true, wantSupported: true},
+		{name: "question mark is reported unsupported", value: "release-x", pattern: "release-?", want: false, wantSupported: false},
+		{name: "plus is reported unsupported", value: "release-x", pattern: "release-+", want: false, wantSupported: false},
+		{name: "character class is reported unsupported", value: "release-1", pattern: "release-[0-9]", want: false, wantSupported: false},
 	}
 
 	for _, test := range tests {
-		assert.Equal(t, test.want, matchesGitHubGlob(test.value, test.pattern), test.name)
+		got, supported := matchesGitHubGlob(test.value, test.pattern)
+		assert.Equal(t, test.want, got, test.name)
+		assert.Equal(t, test.wantSupported, supported, test.name)
 	}
+}
+
+func TestMatchSastCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		runText string
+		want    string
+	}{
+		{name: "semgrep invocation is detected", runText: "semgrep ci", want: "semgrep"},
+		{name: "gosec with a path prefix is detected", runText: "/usr/bin/gosec ./...", want: "gosec"},
+		{name: "sudo wrapper is stripped", runText: "sudo bandit -r .", want: "bandit"},
+		{name: "env assignment prefix is stripped", runText: "FOO=bar sonar-scanner -Dsonar.foo=1", want: "sonar-scanner"},
+		{name: "snyk code is detected but plain snyk is not", runText: "snyk code test", want: "snyk code"},
+		{name: "plain snyk test is not SAST", runText: "snyk test", want: ""},
+		{name: "bearer scan is detected", runText: "bearer scan", want: "bearer"},
+		{name: "bearer auth header is not an invocation", runText: `curl -H "Authorization: Bearer $TOKEN" https://api`, want: ""},
+		{name: "echoed tool mention is not an invocation", runText: `echo "TODO wire up CodeQL"`, want: ""},
+		{name: "second command after && is detected", runText: "make build && gosec ./...", want: "gosec"},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.want, matchSastCommand(test.runText), test.name)
+	}
+}
+
+func TestBranchFilterUncertainty(t *testing.T) {
+	unsupportedIgnore := &actionlint.WebhookEventFilter{
+		Values: []*actionlint.String{{Value: "mai+n"}},
+	}
+	excluded, uncertain := branchFilterExcludes(unsupportedIgnore, "main")
+	assert.False(t, excluded, "an undecidable ignore pattern must not be reported as a definite exclude")
+	assert.True(t, uncertain, "an undecidable ignore pattern must be reported as uncertain")
+
+	supportedIgnore := &actionlint.WebhookEventFilter{
+		Values: []*actionlint.String{{Value: "release/**"}},
+	}
+	excluded, uncertain = branchFilterExcludes(supportedIgnore, "main")
+	assert.False(t, excluded)
+	assert.False(t, uncertain)
+
+	included, uncertain := branchFilterIncludes(unsupportedIgnore, "main")
+	assert.False(t, included)
+	assert.True(t, uncertain, "an undecidable include pattern must be reported as uncertain")
 }
 
 func TestRequiredCheckMatchesSast(t *testing.T) {
