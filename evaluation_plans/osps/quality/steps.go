@@ -598,7 +598,9 @@ func isSignatureOrChecksumAsset(lower string) bool {
 		}
 	}
 	for _, token := range sbomTokens(lower) {
-		if token == "checksums" || token == "checksum" {
+		switch token {
+		case "checksums", "checksum",
+			"shasums", "sha1sums", "sha256sums", "sha512sums", "md5sums", "b2sums":
 			return true
 		}
 	}

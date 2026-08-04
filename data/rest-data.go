@@ -208,6 +208,7 @@ func (r *RestData) checkFileInSubdir(dir, filename string) string {
 	}
 	return ""
 }
+
 // dependency-update tools (Dependabot, Renovate). Their presence is direct
 // evidence a repository manages its dependencies, observable even when
 // security-insights.yml is absent.
@@ -501,10 +502,12 @@ func (r *RestData) getReleases() error {
 		endpoint := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d&page=%d", APIBase, r.owner, r.repo, perPage, page)
 		responseData, err := r.MakeApiCall(endpoint, true)
 		if err != nil {
+			r.Releases = nil
 			return fmt.Errorf("failed to fetch releases page %d: %w", page, err)
 		}
 		var releases []ReleaseData
 		if err := json.Unmarshal(responseData, &releases); err != nil {
+			r.Releases = nil
 			return fmt.Errorf("failed to decode releases page %d: %w", page, err)
 		}
 		r.Releases = append(r.Releases, releases...)
