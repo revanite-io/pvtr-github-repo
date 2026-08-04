@@ -603,3 +603,240 @@ func TestTestExecutionDocumentationEvidenceFetchError(t *testing.T) {
 		t.Fatal("expected an error when the README fetch fails, got nil")
 	}
 }
+
+func relWithAssets(tag string, assetNames ...string) data.ReleaseData {
+	assets := make([]data.ReleaseAsset, 0, len(assetNames))
+	for _, name := range assetNames {
+		assets = append(assets, data.ReleaseAsset{Name: name})
+	}
+	return data.ReleaseData{TagName: tag, Assets: assets}
+}
+
+func TestReleasesHaveSBOM(t *testing.T) {
+	tests := []struct {
+		name        string
+		releases    []data.ReleaseData
+		wantResult  gemara.Result
+		wantMsgPart string
+	}{
+		{
+			name:        "no releases",
+			releases:    nil,
+			wantResult:  gemara.NotApplicable,
+			wantMsgPart: "No published releases found",
+		},
+		{
+			name:        "release retrieval error needs review",
+			releases:    nil,
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "could not be retrieved",
+		},
+		{
+			name:        "draft release is ignored",
+			releases:    []data.ReleaseData{{TagName: "v-next", Draft: true, Assets: []data.ReleaseAsset{{Name: "app.exe"}}}},
+			wantResult:  gemara.NotApplicable,
+			wantMsgPart: "No published releases found",
+		},
+		{
+			name: "draft release does not contaminate published release",
+			releases: []data.ReleaseData{
+				{TagName: "v-next", Draft: true, Assets: []data.ReleaseAsset{{Name: "app.exe"}}},
+				relWithAssets("v1.0.0", "app.exe", "app.spdx.json"),
+			},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v1.0.0",
+		},
+		{
+			name:        "release with no assets",
+			releases:    []data.ReleaseData{{TagName: "v1.0.0"}},
+			wantResult:  gemara.NotApplicable,
+			wantMsgPart: "no attached assets",
+		},
+		{
+			name:        "compiled asset with spdx sbom passes",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "app-linux-amd64", "app.exe", "app.spdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v1.0.0",
+		},
+		{
+			name:        "compiled asset with cyclonedx sbom passes",
+			releases:    []data.ReleaseData{relWithAssets("v2.0.0", "lib.jar", "lib.cdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v2.0.0",
+		},
+		{
+			name:        "compiled asset with bom.json passes",
+			releases:    []data.ReleaseData{relWithAssets("v3.0.0", "tool.dll", "bom.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v3.0.0",
+		},
+		{
+			name:        "compiled asset without published sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.2.3", "app.exe", "app.exe.sha256")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "may be retained privately",
+		},
+		{
+			name: "one of several releases missing published sbom needs review and names it",
+			releases: []data.ReleaseData{
+				relWithAssets("v1.0.0", "app.exe", "app.spdx.json"),
+				relWithAssets("v1.1.0", "app.exe"),
+			},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "v1.1.0",
+		},
+		{
+			name:        "no compiled assets but sbom present passes",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "notes.txt", "app.spdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "No compiled or archived release assets",
+		},
+		{
+			name:        "no compiled assets and no sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "README.md", "notes.txt")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "No compiled or archived release assets were observed",
+		},
+		{
+			name:        "archived binary without sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "mytool_1.0_linux_amd64.tar.gz", "checksums.txt")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "may be retained privately",
+		},
+		{
+			name:        "archived binary with sbom passes",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "mytool-windows-x64.zip", "mytool.spdx.json")},
+			wantResult:  gemara.Passed,
+			wantMsgPart: "v1.0.0",
+		},
+		{
+			name:        "extensionless binary without sbom needs review",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "mytool_linux_amd64")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "may be retained privately",
+		},
+		{
+			name:        "extensionless docs only need review as no artifacts",
+			releases:    []data.ReleaseData{relWithAssets("v1.0.0", "LICENSE", "README")},
+			wantResult:  gemara.NeedsReview,
+			wantMsgPart: "No compiled or archived release assets were observed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			restData := &data.RestData{Releases: tt.releases}
+			if tt.name == "release retrieval error needs review" {
+				restData.ReleasesError = errors.New("GitHub API unavailable")
+			}
+			payload := data.Payload{RestData: restData}
+			gotResult, gotMsg, _ := ReleasesHaveSBOM(payload)
+			if gotResult != tt.wantResult {
+				t.Errorf("result = %v, want %v (msg: %q)", gotResult, tt.wantResult, gotMsg)
+			}
+			if tt.wantMsgPart != "" && !strings.Contains(gotMsg, tt.wantMsgPart) {
+				t.Errorf("message %q does not contain %q", gotMsg, tt.wantMsgPart)
+			}
+		})
+	}
+}
+
+func TestIsSBOMAsset(t *testing.T) {
+	cases := map[string]bool{
+		"app.spdx.json":        true,
+		"app.spdx":             true,
+		"sbom.xml":             true,
+		"my-sbom.json":         true,
+		"bom.json":             true,
+		"project.cdx.json":     true,
+		"cyclonedx-output.txt": true,
+		"APP.SPDX.JSON":        true,
+		"random-bomb.txt":      false,
+		"shabomb":              false,
+		"app.exe":              false,
+		"app.spdx.json.sig":    false,
+		"cyclonedx-cli.tar.gz": false,
+		"cyclonedx-cli.exe":    false,
+		"app.spdx.json.exe":    false,
+		"":                     false,
+	}
+	for name, want := range cases {
+		if got := isSBOMAsset(name); got != want {
+			t.Errorf("isSBOMAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestIsCompiledReleaseAsset(t *testing.T) {
+	cases := map[string]bool{
+		"app.exe":        true,
+		"lib.so":         true,
+		"lib.dylib":      true,
+		"tool.jar":       true,
+		"pkg.whl":        true,
+		"installer.msi":  true,
+		"app.spdx.json":  false,
+		"app.exe.sig":    false,
+		"app.exe.sha256": false,
+		"README.md":      false,
+		"source.tar.gz":  false,
+		"":               false,
+	}
+	for name, want := range cases {
+		if got := isCompiledReleaseAsset(name); got != want {
+			t.Errorf("isCompiledReleaseAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestIsAmbiguousBinaryAsset(t *testing.T) {
+	cases := map[string]bool{
+		"mytool_1.0_linux_amd64.tar.gz": true,
+		"mytool-windows-x64.zip":        true,
+		"blob.bin":                      true,
+		"mytool_linux_amd64":            true,
+		"mytool-v1.2-linux-amd64":       true,
+		"cyclonedx-cli-linux.tar.gz":    true,
+		"kubectl":                       true,
+		"LICENSE":                       false,
+		"README":                        false,
+		"Makefile":                      false,
+		"app.exe":                       false,
+		"notes.txt":                     false,
+		"app.spdx.json":                 false,
+		"checksums.txt":                 false,
+		"":                              false,
+	}
+	for name, want := range cases {
+		if got := isAmbiguousBinaryAsset(name); got != want {
+			t.Errorf("isAmbiguousBinaryAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestIsSignatureOrChecksumAsset(t *testing.T) {
+	// Callers pass an already-lowercased, trimmed name, so inputs are lowercase.
+	cases := map[string]bool{
+		"app.exe.sig":                true,
+		"app.tar.gz.asc":             true,
+		"app.sha256":                 true,
+		"app.md5":                    true,
+		"checksums.txt":              true,
+		"release.checksum":           true,
+		"sha256sums":                 true,
+		"md5sums":                    true,
+		"terraform_1.9.0_sha256sums": true,
+		"sha512sums":                 true,
+		"b2sums":                     true,
+		"app.exe":                    false,
+		"mytool_linux_amd64":         false,
+		"app.spdx.json":              false,
+		"notes.txt":                  false,
+		"":                           false,
+	}
+	for name, want := range cases {
+		if got := isSignatureOrChecksumAsset(name); got != want {
+			t.Errorf("isSignatureOrChecksumAsset(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

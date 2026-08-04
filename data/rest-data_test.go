@@ -2,6 +2,8 @@ package data
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -184,8 +186,8 @@ func TestHasBuildInstructions(t *testing.T) {
 			expected:    false,
 		},
 		{
-			name:     "BUILDING.md in docs",
-			toplevel: []*github.RepositoryContent{},
+			name:      "BUILDING.md in docs",
+			toplevel:  []*github.RepositoryContent{},
 			githubDir: dummyGithubDir,
 			docsDir: []*github.RepositoryContent{
 				{Type: github.Ptr("file"), Name: github.Ptr("BUILDING.md"), Path: github.Ptr("docs/BUILDING.md")},
@@ -426,4 +428,100 @@ func TestGetSubdirContentsCaching(t *testing.T) {
 		assert.Len(t, result.Content, 1)
 		assert.Equal(t, 1, *calls, "a directory the root listing confirms is fetched once")
 	})
+}
+
+func TestGetReleasesPaginatesAndDecodesDrafts(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	var requestedPages []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "100", r.URL.Query().Get("per_page"))
+		page := r.URL.Query().Get("page")
+		requestedPages = append(requestedPages, page)
+
+		var releases []ReleaseData
+		switch page {
+		case "1":
+			for i := 0; i < 100; i++ {
+				releases = append(releases, ReleaseData{
+					TagName: fmt.Sprintf("v1.%d", i),
+					Draft:   i == 0,
+				})
+			}
+		case "2":
+			releases = []ReleaseData{{TagName: "v2.0.0"}}
+		default:
+			t.Fatalf("unexpected release page %q", page)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(releases))
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	rest := &RestData{
+		owner:      "test-owner",
+		repo:       "test-repo",
+		HttpClient: server.Client(),
+	}
+	require.NoError(t, rest.getReleases())
+	require.Len(t, rest.Releases, 101)
+	assert.Equal(t, []string{"1", "2"}, requestedPages)
+	assert.True(t, rest.Releases[0].Draft)
+	assert.Equal(t, "v2.0.0", rest.Releases[100].TagName)
+}
+
+func TestGetReleasesReturnsDecodeError(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	rest := &RestData{
+		owner:      "test-owner",
+		repo:       "test-repo",
+		HttpClient: server.Client(),
+	}
+	err := rest.getReleases()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode releases page 1")
+	assert.Nil(t, rest.Releases, "Releases must be reset to nil on error")
+}
+
+func TestGetReleasesResetsPartialListOnLaterPageError(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		w.Header().Set("Content-Type", "application/json")
+		switch page {
+		case "1":
+			var releases []ReleaseData
+			for i := 0; i < 100; i++ {
+				releases = append(releases, ReleaseData{TagName: fmt.Sprintf("v1.%d", i)})
+			}
+			require.NoError(t, json.NewEncoder(w).Encode(releases))
+		default:
+			_, _ = w.Write([]byte("not-json"))
+		}
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	rest := &RestData{
+		owner:      "test-owner",
+		repo:       "test-repo",
+		HttpClient: server.Client(),
+	}
+	err := rest.getReleases()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode releases page 2")
+	assert.Nil(t, rest.Releases, "partial results from earlier pages must be discarded on error")
 }

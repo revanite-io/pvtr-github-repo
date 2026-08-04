@@ -150,7 +150,7 @@ var (
 			quality.VerifyDependencyManagement,
 		},
 		"OSPS-QA-02.02": {
-			reusable_steps.NotImplemented,
+			quality.ReleasesHaveSBOM,
 		},
 		"OSPS-QA-03.01": {
 			quality.StatusChecksAreRequiredByRulesets,

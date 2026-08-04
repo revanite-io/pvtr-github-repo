@@ -40,6 +40,7 @@ type RestData struct {
 	PrivateVulnReporting        PrivateVulnReporting
 	SecurityPolicy              SecurityPolicy
 	Releases                    []ReleaseData
+	ReleasesError               error `json:"-" yaml:"-"`
 	contents                    RepoContent
 	ghClient                    *github.Client `json:"-" yaml:"-"`
 	HttpClient                  HttpClient     `json:"-" yaml:"-"`
@@ -55,6 +56,7 @@ type ReleaseData struct {
 	Name    string         `json:"name"`
 	TagName string         `json:"tag_name"`
 	URL     string         `json:"url"`
+	Draft   bool           `json:"draft"`
 	Assets  []ReleaseAsset `json:"assets"`
 }
 
@@ -89,7 +91,7 @@ func (r *RestData) Setup() error {
 		_ = r.getWorkflowPermissions()
 	})
 	wg.Go(func() {
-		_ = r.getReleases()
+		r.ReleasesError = r.getReleases()
 	})
 	wg.Go(func() {
 		r.getPrivateVulnReporting()
@@ -206,6 +208,7 @@ func (r *RestData) checkFileInSubdir(dir, filename string) string {
 	}
 	return ""
 }
+
 // dependency-update tools (Dependabot, Renovate). Their presence is direct
 // evidence a repository manages its dependencies, observable even when
 // security-insights.yml is absent.
@@ -493,12 +496,25 @@ func (r *RestData) rootHasDir(name string) bool {
 }
 
 func (r *RestData) getReleases() error {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/releases", APIBase, r.owner, r.repo)
-	responseData, err := r.MakeApiCall(endpoint, true)
-	if err != nil {
-		return err
+	const perPage = 100
+	r.Releases = nil
+	for page := 1; ; page++ {
+		endpoint := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d&page=%d", APIBase, r.owner, r.repo, perPage, page)
+		responseData, err := r.MakeApiCall(endpoint, true)
+		if err != nil {
+			r.Releases = nil
+			return fmt.Errorf("failed to fetch releases page %d: %w", page, err)
+		}
+		var releases []ReleaseData
+		if err := json.Unmarshal(responseData, &releases); err != nil {
+			r.Releases = nil
+			return fmt.Errorf("failed to decode releases page %d: %w", page, err)
+		}
+		r.Releases = append(r.Releases, releases...)
+		if len(releases) < perPage {
+			return nil
+		}
 	}
-	return json.Unmarshal(responseData, &r.Releases)
 }
 
 func (r *RestData) getWorkflowPermissions() error {

@@ -299,6 +299,314 @@ func DocumentsTestMaintenancePolicy(payload data.Payload) (result gemara.Result,
 	return gemara.NeedsReview, "Review project documentation to ensure it contains a clear policy for maintaining tests", confidence
 }
 
+// ReleasesHaveSBOM assesses OSPS-QA-02.02: when the project has made a release,
+// all compiled released software assets MUST be delivered with a software bill
+// of materials (SBOM).
+//
+// Evidence comes from the assets attached to GitHub releases. Security Insights
+// has no SBOM field, so the published assets are the only observable evidence.
+// GitHub's auto-generated source archives are not part of the REST asset list,
+// so every asset seen here is a deliberately published artifact.
+//
+// Assets are classified into three buckets: SBOM documents, definitely-compiled
+// artifacts (by extension), and ambiguous artifacts that are plausibly compiled
+// (archives and extensionless files, which commonly bundle native binaries).
+// Because an SBOM may be retained privately or distributed elsewhere, a missing
+// SBOM is reported as NeedsReview rather than a definitive failure.
+func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if payload.RestData == nil {
+		return gemara.NeedsReview, "Release data is unavailable; review publisher evidence for released assets and SBOMs", gemara.Low
+	}
+	if payload.ReleasesError != nil {
+		return gemara.NeedsReview, fmt.Sprintf("Release data could not be retrieved: %v. Review publisher evidence for released assets and SBOMs", payload.ReleasesError), gemara.Low
+	}
+
+	// Draft releases are not published software releases and must not affect the
+	// assessment, even when an authenticated caller can observe them.
+	publishedReleases := 0
+	for _, release := range payload.Releases {
+		if !release.Draft {
+			publishedReleases++
+		}
+	}
+	if publishedReleases == 0 {
+		return gemara.NotApplicable, "No published releases found; the SBOM-for-releases requirement does not apply", gemara.High
+	}
+
+	var (
+		totalAssets              int
+		releasesWithArtifacts    []string
+		releasesMissingSBOM      []string
+		sawDefiniteCompiledAsset bool
+		sawSBOMWithoutArtifacts  bool
+	)
+
+	for _, release := range payload.Releases {
+		if release.Draft {
+			continue
+		}
+		hasSBOM := false
+		hasCompiled := false
+		hasAmbiguous := false
+		for _, asset := range release.Assets {
+			totalAssets++
+			name := asset.Name
+			if isSBOMAsset(name) {
+				hasSBOM = true
+				continue
+			}
+			if isSignatureOrChecksumAsset(strings.ToLower(strings.TrimSpace(name))) {
+				continue
+			}
+			if isCompiledReleaseAsset(name) {
+				hasCompiled = true
+			} else if isAmbiguousBinaryAsset(name) {
+				hasAmbiguous = true
+			}
+		}
+
+		label := releaseLabel(release)
+		if hasCompiled || hasAmbiguous {
+			releasesWithArtifacts = append(releasesWithArtifacts, label)
+			if hasCompiled {
+				sawDefiniteCompiledAsset = true
+			}
+			if !hasSBOM {
+				releasesMissingSBOM = append(releasesMissingSBOM, label)
+			}
+		} else if hasSBOM {
+			sawSBOMWithoutArtifacts = true
+		}
+	}
+
+	// Releases exist but publish nothing we can inspect: distribution and SBOM
+	// generation may happen outside GitHub releases, so this is unconfirmed.
+	if totalAssets == 0 {
+		return gemara.NotApplicable, "Releases exist but publish no attached assets to inspect for compiled software or SBOMs; distribution may occur outside GitHub releases", gemara.Low
+	}
+
+	// No compiled or archived assets were published, so the "compiled released
+	// software assets" precondition is not met by the observable evidence.
+	if len(releasesWithArtifacts) == 0 {
+		if sawSBOMWithoutArtifacts {
+			return gemara.Passed, "No compiled or archived release assets were found, and at least one release publishes an SBOM", gemara.Low
+		}
+		return gemara.NeedsReview, "No compiled or archived release assets were observed among published release assets; review the project to confirm whether any compiled artifacts are distributed and require an SBOM", gemara.Low
+	}
+
+	// Every release that publishes compiled or archived assets also publishes an
+	// SBOM. Confidence is higher when at least one artifact was unambiguously a
+	// compiled binary rather than an archive or extensionless file.
+	if len(releasesMissingSBOM) == 0 {
+		conf := gemara.Low
+		if sawDefiniteCompiledAsset {
+			conf = gemara.Medium
+		}
+		return gemara.Passed, fmt.Sprintf("All release(s) publishing compiled or archived assets also publish an SBOM: %s", strings.Join(releasesWithArtifacts, ", ")), conf
+	}
+
+	// An SBOM absent from GitHub release assets is not proof that one does not
+	// exist. Publishers may retain it as private compliance documentation or
+	// distribute it through another channel, so request manual evidence rather
+	// than reporting a definitive failure.
+	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled or archived software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
+}
+
+// releaseLabel returns a human-friendly identifier for a release, preferring the
+// tag name and falling back to the display name.
+func releaseLabel(release data.ReleaseData) string {
+	if release.TagName != "" {
+		return release.TagName
+	}
+	if release.Name != "" {
+		return release.Name
+	}
+	return "(unnamed release)"
+}
+
+// sbomExtensionSuffixes are filename suffixes that identify SBOM documents.
+var sbomExtensionSuffixes = []string{
+	".spdx", ".spdx.json", ".spdx.yaml", ".spdx.yml", ".spdx.rdf", ".spdx.xml",
+	".cdx.json", ".cdx.xml", ".cdx",
+}
+
+// isSBOMAsset reports whether a release asset name looks like a software bill of
+// materials. Matching is case-insensitive. The bare token "bom" and the
+// "cyclonedx"/"sbom" markers are guarded to avoid false positives on unrelated
+// names (e.g. "random-bomb.txt").
+func isSBOMAsset(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" || isSignatureOrChecksumAsset(lower) {
+		return false
+	}
+
+	for _, suffix := range sbomExtensionSuffixes {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+
+	// Archives may be tools or distributions whose product name contains an
+	// SBOM-format marker (for example cyclonedx-cli). Do not classify an archive
+	// as an SBOM based on a marker alone.
+	for _, suffix := range ambiguousArchiveExtensions {
+		if strings.HasSuffix(lower, suffix) {
+			return false
+		}
+	}
+
+	// A compiled artifact may also include an SBOM-format marker in its product
+	// name. Marker-only matching must not override a definite binary suffix.
+	for _, suffix := range compiledReleaseAssetExtensions {
+		if strings.HasSuffix(lower, suffix) {
+			return false
+		}
+	}
+
+	// Format markers that are unambiguous in non-archive document names.
+	if strings.Contains(lower, "cyclonedx") || strings.Contains(lower, ".spdx") || strings.Contains(lower, ".cdx") {
+		return true
+	}
+
+	// "sbom" and "bom" only count as whole, delimiter-bounded tokens so names
+	// like "random-bomb.txt" or "shabomb" are not misclassified.
+	for _, token := range sbomTokens(lower) {
+		if token == "sbom" || token == "bom" {
+			return true
+		}
+	}
+	return false
+}
+
+// sbomTokens splits a filename into lowercase tokens on common delimiters so the
+// SBOM matcher can test whole words rather than substrings.
+func sbomTokens(lower string) []string {
+	return strings.FieldsFunc(lower, func(r rune) bool {
+		switch r {
+		case '.', '-', '_', ' ', '/', '+':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+// compiledReleaseAssetExtensions are filename suffixes for compiled/binary
+// software artifacts that a project would distribute as release assets.
+var compiledReleaseAssetExtensions = []string{
+	".exe", ".dll", ".so", ".dylib", ".a", ".lib",
+	".jar", ".war", ".ear",
+	".apk", ".aar", ".aab",
+	".wasm", ".node", ".o", ".obj",
+	".deb", ".rpm", ".msi", ".dmg", ".pkg", ".appimage", ".snap", ".flatpak",
+	".whl",
+}
+
+// isCompiledReleaseAsset reports whether a release asset name looks like a
+// compiled software artifact. Matching is case-insensitive. SBOM, signature,
+// and checksum companion files are excluded so they are never counted as the
+// compiled artifact they accompany.
+func isCompiledReleaseAsset(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return false
+	}
+	if isSBOMAsset(lower) || isSignatureOrChecksumAsset(lower) {
+		return false
+	}
+	for _, ext := range compiledReleaseAssetExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// ambiguousArchiveExtensions are archive/compression suffixes that commonly
+// bundle compiled binaries (but may also contain source). Assets matching these
+// are treated as plausibly compiled and routed to manual review.
+var ambiguousArchiveExtensions = []string{
+	".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tbz", ".tar.xz", ".txz",
+	".tar.zst", ".tar.lz", ".tar.lzma", ".tar",
+	".zip", ".gz", ".bz2", ".xz", ".zst", ".7z", ".rar", ".bin",
+}
+
+// extensionlessNonBinaryNames are common extensionless files that are not
+// compiled artifacts, so an extensionless asset with one of these names is not
+// treated as plausibly compiled.
+var extensionlessNonBinaryNames = map[string]bool{
+	"license": true, "licence": true, "readme": true, "notice": true,
+	"authors": true, "copying": true, "changelog": true, "changes": true,
+	"install": true, "makefile": true, "dockerfile": true, "version": true,
+	"contributing": true, "codeowners": true, "manifest": true, "owners": true,
+	"maintainers": true, "security": true,
+}
+
+// knownNonBinaryExtensions identify common documentation and metadata files. An
+// unrecognized suffix remains ambiguous because versioned native binaries often
+// contain dots without having a file extension (for example tool-v1.2-linux).
+var knownNonBinaryExtensions = []string{
+	".txt", ".md", ".markdown", ".rst", ".adoc",
+	".json", ".yaml", ".yml", ".xml", ".toml", ".ini", ".cfg", ".conf",
+	".csv", ".html", ".htm", ".pdf",
+}
+
+// isAmbiguousBinaryAsset reports whether a release asset is plausibly a compiled
+// binary even though it is not identified by a definite compiled extension.
+// This covers archives (which frequently bundle native binaries) and
+// extensionless files (common for native executables), excluding well-known
+// extensionless documentation files. Matching is case-insensitive.
+func isAmbiguousBinaryAsset(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return false
+	}
+	if isSBOMAsset(lower) || isSignatureOrChecksumAsset(lower) || isCompiledReleaseAsset(lower) {
+		return false
+	}
+	for _, ext := range ambiguousArchiveExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	if extensionlessNonBinaryNames[lower] {
+		return false
+	}
+	for _, ext := range knownNonBinaryExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return false
+		}
+	}
+	// Unknown suffixes remain ambiguous: a dot may be part of a version rather
+	// than a true extension (for example "mytool-v1.2-linux-amd64").
+	return true
+}
+
+// signatureOrChecksumSuffixes identify signature, certificate, and checksum
+// companion files that accompany released artifacts.
+var signatureOrChecksumSuffixes = []string{
+	".sig", ".asc", ".pem", ".cert", ".crt", ".p7s", ".minisig",
+	".sha", ".sha1", ".sha224", ".sha256", ".sha384", ".sha512", ".md5",
+}
+
+// isSignatureOrChecksumAsset reports whether a release asset name is a signature
+// or checksum companion file rather than a compiled artifact.
+func isSignatureOrChecksumAsset(lower string) bool {
+	for _, suffix := range signatureOrChecksumSuffixes {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	for _, token := range sbomTokens(lower) {
+		switch token {
+		case "checksums", "checksum",
+			"shasums", "sha1sums", "sha256sums", "sha512sums", "md5sums", "b2sums":
+			return true
+		}
+	}
+	return false
+}
+
 // testExecutionDocumentationEvidence gathers README and CONTRIBUTING content
 // as AI input for OSPS-QA-06.02. Only these two files are included because the
 // control targets contributor-facing test guidance.
