@@ -753,7 +753,7 @@ func HasVexDocument(payload data.Payload) (result gemara.Result, message string,
 	// assert a scan that did not fully happen, so distinguish "could not
 	// observe" from "observed none" (mirrors the SecurityAdvisories.Known
 	// observed-vs-unknown pattern).
-	if payload.Binaries.Err != nil {
+	if payload.VexDocumentsErr != nil {
 		return gemara.NeedsReview, "Could not scan the repository tree for VEX documents; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document", gemara.Low
 	}
 

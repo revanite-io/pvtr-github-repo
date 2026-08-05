@@ -26,6 +26,7 @@ type Payload struct {
 	SecurityPosture           SecurityPosture
 	Binaries                  BinaryAnalysis
 	VexDocuments              []string
+	VexDocumentsErr           error
 	client                    *githubv4.Client
 	httpClient                *http.Client
 	cache                     *payloadCache
@@ -124,8 +125,9 @@ func Loader(config *config.Config) (payload any, err error) {
 
 	binaries := analyzeBinaries(tree, treeErr, httpClient, config, owner, repo, graphql.Repository.DefaultBranchRef.Name)
 
-	// Reuse the tree fetched for binary analysis (nil on treeErr) to look for VEX
-	// documents without spending another API call.
+	// Reuse the tree fetched for binary analysis to look for VEX documents
+	// without spending another API call. Preserve treeErr separately because
+	// BinaryAnalysis.Err may instead describe later binary-content analysis.
 	vexDocuments := detectVexDocuments(tree)
 
 	securityPosture, err := buildSecurityPosture(ghRepo, *rest)
@@ -146,6 +148,7 @@ func Loader(config *config.Config) (payload any, err error) {
 		SecurityPosture:          securityPosture,
 		Binaries:                 binaries,
 		VexDocuments:             vexDocuments,
+		VexDocumentsErr:          treeErr,
 		client:                   gqlClient,
 		cache:                    &payloadCache{},
 	}), nil
