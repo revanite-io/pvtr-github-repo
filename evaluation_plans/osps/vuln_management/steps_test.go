@@ -1,6 +1,7 @@
 package vuln_management
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -818,6 +819,7 @@ func TestHasVexDocument(t *testing.T) {
 	tests := []struct {
 		name            string
 		vexDocuments    []string
+		binariesErr     error
 		expectedResult  gemara.Result
 		expectedMessage string
 	}{
@@ -839,11 +841,21 @@ func TestHasVexDocument(t *testing.T) {
 			expectedResult:  gemara.NeedsReview,
 			expectedMessage: "No VEX document was found in the repository; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document",
 		},
+		{
+			name:            "Tree fetch error is reported as unobserved",
+			vexDocuments:    nil,
+			binariesErr:     errors.New("tree fetch failed"),
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "Could not scan the repository tree for VEX documents; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			payload := data.Payload{VexDocuments: test.vexDocuments}
+			payload := data.Payload{
+				VexDocuments: test.vexDocuments,
+				Binaries:     data.BinaryAnalysis{Err: test.binariesErr},
+			}
 
 			result, message, _ := HasVexDocument(payload)
 			assert.Equal(t, test.expectedResult, result)

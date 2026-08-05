@@ -748,5 +748,14 @@ func HasVexDocument(payload data.Payload) (result gemara.Result, message string,
 		return gemara.Passed, fmt.Sprintf("VEX document(s) found in the repository: %s", strings.Join(payload.VexDocuments, ", ")), gemara.Medium
 	}
 
+	// VEX detection reuses the repository tree fetched for binary analysis. If
+	// that fetch failed or returned partial data, "no VEX document found" would
+	// assert a scan that did not fully happen, so distinguish "could not
+	// observe" from "observed none" (mirrors the SecurityAdvisories.Known
+	// observed-vs-unknown pattern).
+	if payload.Binaries.Err != nil {
+		return gemara.NeedsReview, "Could not scan the repository tree for VEX documents; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document", gemara.Low
+	}
+
 	return gemara.NeedsReview, "No VEX document was found in the repository; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document", gemara.Low
 }
