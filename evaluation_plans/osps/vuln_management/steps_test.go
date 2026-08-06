@@ -1,6 +1,7 @@
 package vuln_management
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -740,6 +741,130 @@ func TestHasVulnerabilityDisclosurePolicy(t *testing.T) {
 			payload.Repository.IsSecurityPolicyEnabled = test.securityPolicyEnabled
 
 			result, message, _ := HasVulnerabilityDisclosurePolicy(payload)
+			assert.Equal(t, test.expectedResult, result)
+			assert.Equal(t, test.expectedMessage, message)
+		})
+	}
+}
+
+func TestPublishesVulnerabilityData(t *testing.T) {
+	tests := []struct {
+		name            string
+		advisories      data.SecurityAdvisories
+		policy          *si.URL
+		privateReport   bool
+		securityMd      bool
+		expectedResult  gemara.Result
+		expectedMessage string
+	}{
+		{
+			name:            "Published advisories pass",
+			advisories:      data.SecurityAdvisories{Count: 2, Known: true},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "2 published GitHub security advisory(ies) publicly document discovered vulnerabilities",
+		},
+		{
+			name:            "Full page reports count as a lower bound",
+			advisories:      data.SecurityAdvisories{Count: 100, Known: true, CountIsLowerBound: true},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "at least 100 published GitHub security advisory(ies) publicly document discovered vulnerabilities",
+		},
+		{
+			name:            "Advisory status unobservable warrants review",
+			advisories:      data.SecurityAdvisories{Known: false},
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "Published GitHub security advisories could not be observed; confirm manually whether the project publicly publishes data about discovered vulnerabilities",
+		},
+		{
+			name:            "No advisories but disclosure process exists warrants review",
+			advisories:      data.SecurityAdvisories{Count: 0, Known: true},
+			privateReport:   true,
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "No published GitHub security advisories were found, but a vulnerability disclosure process exists; confirm manually where discovered vulnerabilities are publicly published",
+		},
+		{
+			name:            "No advisories and no disclosure signal warrants review",
+			advisories:      data.SecurityAdvisories{Count: 0, Known: true},
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "No published GitHub security advisories were found; confirm manually whether the project publicly publishes data about discovered vulnerabilities",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload := data.Payload{
+				RestData: &data.RestData{
+					SecurityAdvisories: test.advisories,
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							VulnerabilityReporting: si.VulnerabilityReporting{
+								Policy: test.policy,
+							},
+						},
+					},
+					SecurityPolicy:       data.SecurityPolicy{Present: test.securityMd},
+					PrivateVulnReporting: data.PrivateVulnReporting{Enabled: test.privateReport, Known: test.privateReport},
+				},
+				GraphqlRepoData: &data.GraphqlRepoData{},
+			}
+
+			result, message, _ := PublishesVulnerabilityData(payload)
+			assert.Equal(t, test.expectedResult, result)
+			assert.Equal(t, test.expectedMessage, message)
+		})
+	}
+}
+
+func TestHasVexDocument(t *testing.T) {
+	tests := []struct {
+		name            string
+		vexDocuments    []string
+		binariesErr     error
+		vexDocumentsErr error
+		expectedResult  gemara.Result
+		expectedMessage string
+	}{
+		{
+			name:            "VEX document present passes",
+			vexDocuments:    []string{"product.vex.json"},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "VEX document(s) found in the repository: product.vex.json",
+		},
+		{
+			name:            "Multiple VEX documents listed",
+			vexDocuments:    []string{"a.vex.json", "b.openvex.json"},
+			expectedResult:  gemara.Passed,
+			expectedMessage: "VEX document(s) found in the repository: a.vex.json, b.openvex.json",
+		},
+		{
+			name:            "No VEX document warrants review",
+			vexDocuments:    nil,
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "No VEX document was found in the repository; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document",
+		},
+		{
+			name:            "Unrelated binary analysis error does not mask observed absence",
+			binariesErr:     errors.New("binary content fetch failed"),
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "No VEX document was found in the repository; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document",
+		},
+		{
+			name:            "Tree fetch error is reported as unobserved",
+			vexDocumentsErr: errors.New("tree fetch failed"),
+			expectedResult:  gemara.NeedsReview,
+			expectedMessage: "Could not scan the repository tree for VEX documents; confirm manually whether non-affecting vulnerabilities are accounted for in a VEX document",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload := data.Payload{
+				VexDocuments:    test.vexDocuments,
+				VexDocumentsErr: test.vexDocumentsErr,
+				Binaries:        data.BinaryAnalysis{Err: test.binariesErr},
+			}
+
+			result, message, _ := HasVexDocument(payload)
 			assert.Equal(t, test.expectedResult, result)
 			assert.Equal(t, test.expectedMessage, message)
 		})

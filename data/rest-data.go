@@ -38,6 +38,7 @@ type RestData struct {
 	Insights                    si.SecurityInsights
 	InsightsError               bool
 	PrivateVulnReporting        PrivateVulnReporting
+	SecurityAdvisories          SecurityAdvisories
 	SecurityPolicy              SecurityPolicy
 	Releases                    []ReleaseData
 	ReleasesError               error `json:"-" yaml:"-"`
@@ -95,6 +96,9 @@ func (r *RestData) Setup() error {
 	})
 	wg.Go(func() {
 		r.getPrivateVulnReporting()
+	})
+	wg.Go(func() {
+		r.getSecurityAdvisories()
 	})
 	wg.Wait()
 	return nil
