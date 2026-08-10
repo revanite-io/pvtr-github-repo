@@ -5,6 +5,7 @@ import (
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 )
 
 // DesignDocFiles are common file names for design/architecture documentation
@@ -71,6 +72,9 @@ var InterfaceDocFiles = []string{
 	"api.md",
 	"api.rst",
 	"api.txt",
+	"api.yaml",
+	"api.yml",
+	"api.json",
 	"apidocs.md",
 	"api-reference.md",
 	"api-reference.rst",
@@ -89,26 +93,17 @@ var InterfaceDocDirectories = []string{
 	"apis",
 	"apidocs",
 	"api-docs",
+	"documentation",
 	"reference",
 	"references",
 	"docs",
 	"doc",
-}
-
-// hasPublishedRelease reports whether the project has published at least one
-// non-draft release. observable is false when release data could not be seen,
-// so callers can degrade to manual review instead of a definitive result.
-func hasPublishedRelease(payload data.Payload) (released bool, observable bool) {
-	// Missing REST data or a fetch error means release state is unknown.
-	if payload.RestData == nil || payload.ReleasesError != nil {
-		return false, false
-	}
-	for _, release := range payload.Releases {
-		if !release.Draft {
-			return true, true
-		}
-	}
-	return false, true
+	"spec",
+	"specs",
+	"openapi",
+	"swagger",
+	"schema",
+	"proto",
 }
 
 // HasExternalInterfaceDocumentation assesses OSPS-SA-02.01: when the project has
@@ -116,7 +111,7 @@ func hasPublishedRelease(payload data.Payload) (released bool, observable bool) 
 // interfaces (APIs) of the released assets.
 func HasExternalInterfaceDocumentation(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	// The requirement only applies once a release exists.
-	released, observable := hasPublishedRelease(payload)
+	released, observable := reusable_steps.HasPublishedRelease(payload)
 	if !observable {
 		return gemara.NeedsReview, "Release data is unavailable; manually review whether the documentation describes all external software interfaces", gemara.Low
 	}
@@ -131,8 +126,9 @@ func HasExternalInterfaceDocumentation(payload data.Payload) (result gemara.Resu
 			if entry.Type == "blob" {
 				for _, docFile := range InterfaceDocFiles {
 					if strings.EqualFold(entry.Name, docFile) {
-						// A matching file proves interface docs exist, but not that
-						// they cover every external interface of the released assets.
+						// A matching root filename indicates interface docs likely
+						// exist, but does not prove they cover every external
+						// interface of the released assets.
 						return gemara.NeedsReview, "External interface documentation found (" + entry.Name + "), but coverage of all external interfaces requires manual review", gemara.Low
 					}
 				}
@@ -158,12 +154,14 @@ func HasExternalInterfaceDocumentation(payload data.Payload) (result gemara.Resu
 	// the interfaces, but this cannot be verified automatically.
 	if payload.RestData != nil && payload.Insights.Project != nil && payload.Insights.Project.Documentation != nil {
 		if payload.Insights.Project.Documentation.DetailedGuide != nil {
-			return gemara.NeedsReview, "No external interface documentation file found, but detailed guide specified in Security Insights - manual review needed to confirm all external interfaces are documented", gemara.Low
+			return gemara.NeedsReview, "No external interface documentation file or directory found, but detailed guide specified in Security Insights - manual review needed to confirm all external interfaces are documented", gemara.Low
 		}
 		if payload.Insights.Project.Documentation.QuickstartGuide != nil {
-			return gemara.NeedsReview, "No external interface documentation file found, but quickstart guide specified in Security Insights - manual review needed to confirm all external interfaces are documented", gemara.Low
+			return gemara.NeedsReview, "No external interface documentation file or directory found, but quickstart guide specified in Security Insights - manual review needed to confirm all external interfaces are documented", gemara.Low
 		}
 	}
 
-	return gemara.Failed, "Documentation describing the external software interfaces of released assets was NOT found", confidence
+	// No interface-doc file, API-doc directory, or Security Insights guide was
+	// found for a released project, so the MUST requirement is unmet.
+	return gemara.Failed, "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found", gemara.Medium
 }

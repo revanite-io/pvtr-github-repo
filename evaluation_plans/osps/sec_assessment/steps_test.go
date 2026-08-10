@@ -225,6 +225,8 @@ func Test_HasExternalInterfaceDocumentation(t *testing.T) {
 		payload    data.Payload
 		wantResult gemara.Result
 		wantMsg    string
+		wantConf   gemara.ConfidenceLevel
+		checkConf  bool
 	}{
 		{
 			name:       "no rest data - needs review",
@@ -341,7 +343,7 @@ func Test_HasExternalInterfaceDocumentation(t *testing.T) {
 				},
 			},
 			wantResult: gemara.NeedsReview,
-			wantMsg:    "No external interface documentation file found, but detailed guide specified in Security Insights - manual review needed to confirm all external interfaces are documented",
+			wantMsg:    "No external interface documentation file or directory found, but detailed guide specified in Security Insights - manual review needed to confirm all external interfaces are documented",
 		},
 		{
 			name: "no doc file but QuickstartGuide exists - needs review",
@@ -359,7 +361,7 @@ func Test_HasExternalInterfaceDocumentation(t *testing.T) {
 				},
 			},
 			wantResult: gemara.NeedsReview,
-			wantMsg:    "No external interface documentation file found, but quickstart guide specified in Security Insights - manual review needed to confirm all external interfaces are documented",
+			wantMsg:    "No external interface documentation file or directory found, but quickstart guide specified in Security Insights - manual review needed to confirm all external interfaces are documented",
 		},
 		{
 			name: "release exists but no interface documentation - failed",
@@ -375,7 +377,9 @@ func Test_HasExternalInterfaceDocumentation(t *testing.T) {
 				},
 			},
 			wantResult: gemara.Failed,
-			wantMsg:    "Documentation describing the external software interfaces of released assets was NOT found",
+			wantMsg:    "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found",
+			wantConf:   gemara.Medium,
+			checkConf:  true,
 		},
 		{
 			name: "release exists but no graphql tree data - failed",
@@ -384,7 +388,42 @@ func Test_HasExternalInterfaceDocumentation(t *testing.T) {
 				RestData:        &data.RestData{Releases: oneRelease},
 			},
 			wantResult: gemara.Failed,
-			wantMsg:    "Documentation describing the external software interfaces of released assets was NOT found",
+			wantMsg:    "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found",
+			wantConf:   gemara.Medium,
+			checkConf:  true,
+		},
+		{
+			name: "api.yaml spec file found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"api.yaml"}),
+				RestData:        &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "External interface documentation found (api.yaml), but coverage of all external interfaces requires manual review",
+		},
+		{
+			name: "documentation directory found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "documentation", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: documentation - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "proto directory found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "proto", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: proto - manual review needed to confirm all external interfaces are documented",
 		},
 		{
 			name: "directory named like api file should not match as needs review",
@@ -396,18 +435,21 @@ func Test_HasExternalInterfaceDocumentation(t *testing.T) {
 				RestData: &data.RestData{Releases: oneRelease},
 			},
 			wantResult: gemara.Failed,
-			wantMsg:    "Documentation describing the external software interfaces of released assets was NOT found",
+			wantMsg:    "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotResult, gotMsg, _ := HasExternalInterfaceDocumentation(tt.payload)
+			gotResult, gotMsg, gotConf := HasExternalInterfaceDocumentation(tt.payload)
 			if gotResult != tt.wantResult {
 				t.Errorf("HasExternalInterfaceDocumentation() result = %v, want %v", gotResult, tt.wantResult)
 			}
 			if tt.wantMsg != "" && gotMsg != tt.wantMsg {
 				t.Errorf("HasExternalInterfaceDocumentation() message = %q, want %q", gotMsg, tt.wantMsg)
+			}
+			if tt.checkConf && gotConf != tt.wantConf {
+				t.Errorf("HasExternalInterfaceDocumentation() confidence = %v, want %v", gotConf, tt.wantConf)
 			}
 		})
 	}
