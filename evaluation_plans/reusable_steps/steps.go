@@ -77,5 +77,5 @@ func AIFallback(payload data.Payload, controlID string, fallbackMessage string, 
 	if payload.Config != nil && payload.Config.Logger != nil {
 		payload.Config.Logger.Warn(controlID+": "+reason, "err", err)
 	}
-	return gemara.NeedsReview, fallbackMessage, 0
+	return gemara.NeedsReview, fallbackMessage, gemara.Low
 }
