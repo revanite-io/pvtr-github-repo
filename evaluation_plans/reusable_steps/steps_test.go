@@ -1,6 +1,7 @@
 package reusable_steps
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -75,6 +76,15 @@ func TestHasDependencyManagementPolicy(t *testing.T) {
 	}
 
 }
+
+func TestAIFallback(t *testing.T) {
+	result, message, confidence := AIFallback(data.Payload{}, "OSPS-TEST", "manual review required", "provider failed", errors.New("unavailable"))
+
+	assert.Equal(t, gemara.NeedsReview, result)
+	assert.Equal(t, "manual review required", message)
+	assert.Equal(t, gemara.Low, confidence)
+}
+
 func TestIsCodeRepo(t *testing.T) {
 	tests := []struct {
 		name             string
