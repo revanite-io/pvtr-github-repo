@@ -69,6 +69,22 @@ func IsCodeRepo(payload data.Payload) (result gemara.Result, message string, con
 	return gemara.Passed, "Repository contains code", confidence
 }
 
+// HasPublishedRelease reports whether the project has published at least one
+// non-draft release. observable is false when release data could not be seen,
+// so callers can degrade to manual review instead of a definitive result.
+func HasPublishedRelease(payload data.Payload) (released bool, observable bool) {
+	// Missing REST data or a fetch error means release state is unknown.
+	if payload.RestData == nil || payload.ReleasesError != nil {
+		return false, false
+	}
+	for _, release := range payload.Releases {
+		if !release.Draft {
+			return true, true
+		}
+	}
+	return false, true
+}
+
 // AIFallback logs why an AI-assisted assessment was abandoned and returns
 // NeedsReview with the supplied fallback message. Use this when an AI-assisted
 // step cannot complete (e.g. client construction failure, missing evidence,
