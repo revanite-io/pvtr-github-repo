@@ -1,6 +1,7 @@
 package sec_assessment
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -214,4 +215,581 @@ func buildGraphqlDataWithEntries(entries []fileEntry) *data.GraphqlRepoData {
 	}
 
 	return graphqlData
+}
+
+func Test_HasExternalInterfaceDocumentation(t *testing.T) {
+	oneRelease := []data.ReleaseData{{TagName: "v1.0.0"}}
+
+	tests := []struct {
+		name       string
+		payload    data.Payload
+		wantResult gemara.Result
+		wantMsg    string
+		wantConf   gemara.ConfidenceLevel
+		checkConf  bool
+	}{
+		{
+			name:       "no rest data - needs review",
+			payload:    data.Payload{RestData: nil},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Release data is unavailable; manually review whether the documentation describes all external software interfaces",
+		},
+		{
+			name: "release retrieval error - needs review",
+			payload: data.Payload{
+				RestData: &data.RestData{ReleasesError: fmt.Errorf("API unavailable")},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Release data is unavailable; manually review whether the documentation describes all external software interfaces",
+		},
+		{
+			name: "no published releases returns not applicable",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"api.md"}),
+				RestData:        &data.RestData{},
+			},
+			wantResult: gemara.NotApplicable,
+			wantMsg:    "No published releases found; the external interface documentation requirement does not apply",
+		},
+		{
+			name: "only draft release returns not applicable",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"api.md"}),
+				RestData:        &data.RestData{Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: true}}},
+			},
+			wantResult: gemara.NotApplicable,
+			wantMsg:    "No published releases found; the external interface documentation requirement does not apply",
+		},
+		{
+			name: "api doc file found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md", "api.md"}),
+				RestData:        &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "External interface documentation found (api.md), but coverage of all external interfaces requires manual review",
+		},
+		{
+			name: "openapi spec file found (case insensitive) - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"OpenAPI.yaml"}),
+				RestData:        &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "External interface documentation found (OpenAPI.yaml), but coverage of all external interfaces requires manual review",
+		},
+		{
+			name: "api directory found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "api", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: api - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "docs directory found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "docs", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: docs - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "multiple api directories found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "api", Type: "tree"},
+					{Name: "docs", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: api, docs - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "api file takes precedence over api directory - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "docs", Type: "tree"},
+					{Name: "openapi.json", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "External interface documentation found (openapi.json), but coverage of all external interfaces requires manual review",
+		},
+		{
+			name: "no doc file but DetailedGuide exists - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md"}),
+				RestData: &data.RestData{
+					Releases: oneRelease,
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{
+								DetailedGuide: ptrTo(si.URL("https://example.com/docs")),
+							},
+						},
+					},
+				},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file or directory found, but detailed guide specified in Security Insights - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "no doc file but QuickstartGuide exists - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md"}),
+				RestData: &data.RestData{
+					Releases: oneRelease,
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{
+								QuickstartGuide: ptrTo(si.URL("https://example.com/quickstart")),
+							},
+						},
+					},
+				},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file or directory found, but quickstart guide specified in Security Insights - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "release exists but no interface documentation - failed",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"README.md"}),
+				RestData: &data.RestData{
+					Releases: oneRelease,
+					Insights: si.SecurityInsights{
+						Project: &si.Project{
+							Documentation: &si.ProjectDocumentation{},
+						},
+					},
+				},
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found",
+			wantConf:   gemara.Medium,
+			checkConf:  true,
+		},
+		{
+			name: "release exists but no graphql tree data - failed",
+			payload: data.Payload{
+				GraphqlRepoData: nil,
+				RestData:        &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found",
+			wantConf:   gemara.Medium,
+			checkConf:  true,
+		},
+		{
+			name: "api.yaml spec file found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithFiles([]string{"api.yaml"}),
+				RestData:        &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "External interface documentation found (api.yaml), but coverage of all external interfaces requires manual review",
+		},
+		{
+			name: "documentation directory found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "documentation", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: documentation - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "proto directory found - needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "proto", Type: "tree"},
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "No external interface documentation file found in root, but found directories that may contain API documentation: proto - manual review needed to confirm all external interfaces are documented",
+		},
+		{
+			name: "directory named like api file should not match as needs review",
+			payload: data.Payload{
+				GraphqlRepoData: buildGraphqlDataWithEntries([]fileEntry{
+					{Name: "api.md", Type: "tree"}, // directory, not a file
+					{Name: "README.md", Type: "blob"},
+				}),
+				RestData: &data.RestData{Releases: oneRelease},
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "No documentation file, API-documentation directory, or Security Insights guide describing the external software interfaces of released assets was found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotResult, gotMsg, gotConf := HasExternalInterfaceDocumentation(tt.payload)
+			if gotResult != tt.wantResult {
+				t.Errorf("HasExternalInterfaceDocumentation() result = %v, want %v", gotResult, tt.wantResult)
+			}
+			if tt.wantMsg != "" && gotMsg != tt.wantMsg {
+				t.Errorf("HasExternalInterfaceDocumentation() message = %q, want %q", gotMsg, tt.wantMsg)
+			}
+			if tt.checkConf && gotConf != tt.wantConf {
+				t.Errorf("HasExternalInterfaceDocumentation() confidence = %v, want %v", gotConf, tt.wantConf)
+			}
+		})
+	}
+}
+
+// restDataWithReleaseAndAssessments builds RestData describing a project that has
+// (or has not) published a release, with an optional self assessment and any
+// number of third-party assessments.
+func restDataWithReleaseAndAssessments(published bool, self si.Assessment, thirdParty ...si.Assessment) *data.RestData {
+	rd := &data.RestData{
+		Insights: si.SecurityInsights{
+			Repository: &si.Repository{},
+		},
+	}
+	rd.Insights.Repository.SecurityPosture.Assessments.Self = self
+	rd.Insights.Repository.SecurityPosture.Assessments.ThirdPartyAssessment = thirdParty
+	if published {
+		rd.Releases = []data.ReleaseData{{TagName: "v1.0.0", Draft: false}}
+	}
+	return rd
+}
+
+func Test_HasSecurityAssessment(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    data.Payload
+		wantResult gemara.Result
+		wantMsg    string
+	}{
+		{
+			name:       "no rest data - needs review",
+			payload:    data.Payload{RestData: nil},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Release data is unavailable; manually review whether a security assessment was performed",
+		},
+		{
+			name: "release retrieval error - needs review",
+			payload: data.Payload{
+				RestData: &data.RestData{ReleasesError: fmt.Errorf("API unavailable")},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Release data is unavailable; manually review whether a security assessment was performed",
+		},
+		{
+			name: "no published releases - not applicable",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(false, si.Assessment{}),
+			},
+			wantResult: gemara.NotApplicable,
+			wantMsg:    "No published releases found; the security-assessment requirement does not apply",
+		},
+		{
+			name: "only draft release - not applicable",
+			payload: data.Payload{
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{Repository: &si.Repository{}},
+					Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: true}},
+				},
+			},
+			wantResult: gemara.NotApplicable,
+			wantMsg:    "No published releases found; the security-assessment requirement does not apply",
+		},
+		{
+			name: "released with self assessment comment - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "Reviewed the codebase"}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares a self security assessment, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "released with self assessment evidence only - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Evidence: ptrTo(si.URL("https://example.com/report"))}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares a self security assessment, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "released with third-party assessment - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{}, si.Assessment{Comment: "External audit"}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares 1 third-party security assessment(s), but their coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "released with multiple populated and empty third-party assessments - needs review with populated count",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(
+					true,
+					si.Assessment{},
+					si.Assessment{Comment: "External audit"},
+					si.Assessment{},
+					si.Assessment{Name: ptrTo("Independent review")},
+				),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares 2 third-party security assessment(s), but their coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "released with empty third-party assessment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{}, si.Assessment{}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no security assessment was found in Security Insights",
+		},
+		{
+			name: "released with whitespace-only assessment fields - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{
+					Comment:  " \t ",
+					Name:     ptrTo(" "),
+					Evidence: ptrTo(si.URL(" \n")),
+				}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no security assessment was found in Security Insights",
+		},
+		{
+			name: "released with negated self assessment comment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "A formal self-assessment has not yet been completed for this project."}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no security assessment was found in Security Insights",
+		},
+		{
+			name: "released with 'No self assessment completed' comment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "No self assessment completed"}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no security assessment was found in Security Insights",
+		},
+		{
+			name: "negated comment but populated name still declares - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{
+					Name:    ptrTo("2024 self assessment"),
+					Comment: "No further review has not been completed",
+				}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares a self security assessment, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "genuine declaration with incidental 'has not' is credited - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{
+					Comment: "Self assessment completed in 2024; scope has not changed since.",
+				}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares a self security assessment, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "unparseable security insights - needs review",
+			payload: data.Payload{
+				RestData: &data.RestData{
+					InsightsError: true,
+					Releases:      []data.ReleaseData{{TagName: "v1.0.0", Draft: false}},
+				},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights file could not be parsed; manually review whether a security assessment was performed",
+		},
+		{
+			name: "released with no assessment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no security assessment was found in Security Insights",
+		},
+		{
+			name: "released with nil insights repository - failed",
+			payload: data.Payload{
+				RestData: &data.RestData{
+					Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: false}},
+				},
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no security assessment was found in Security Insights",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotResult, gotMsg, _ := HasSecurityAssessment(tt.payload)
+			if gotResult != tt.wantResult {
+				t.Errorf("HasSecurityAssessment() result = %v, want %v", gotResult, tt.wantResult)
+			}
+			if gotMsg != tt.wantMsg {
+				t.Errorf("HasSecurityAssessment() message = %q, want %q", gotMsg, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func Test_HasThreatModelAnalysis(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    data.Payload
+		wantResult gemara.Result
+		wantMsg    string
+	}{
+		{
+			name:       "no rest data - needs review",
+			payload:    data.Payload{RestData: nil},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Release data is unavailable; manually review whether threat modeling and attack surface analysis were performed",
+		},
+		{
+			name: "release retrieval error - needs review",
+			payload: data.Payload{
+				RestData: &data.RestData{ReleasesError: fmt.Errorf("API unavailable")},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Release data is unavailable; manually review whether threat modeling and attack surface analysis were performed",
+		},
+		{
+			name: "no published releases - not applicable",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(false, si.Assessment{}),
+			},
+			wantResult: gemara.NotApplicable,
+			wantMsg:    "No published releases found; the threat-modeling requirement does not apply",
+		},
+		{
+			name: "only draft release - not applicable",
+			payload: data.Payload{
+				RestData: &data.RestData{
+					Insights: si.SecurityInsights{Repository: &si.Repository{}},
+					Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: true}},
+				},
+			},
+			wantResult: gemara.NotApplicable,
+			wantMsg:    "No published releases found; the threat-modeling requirement does not apply",
+		},
+		{
+			name: "self assessment mentions threat modeling - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "Performed threat modeling using STRIDE"}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares threat modeling or attack surface analysis, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "case-insensitive third-party assessment mentions attack surface - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{}, si.Assessment{Name: ptrTo("ATTACK SURFACE analysis")}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares threat modeling or attack surface analysis, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "threat modeling term only in evidence - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{
+					Comment:  "Security review performed",
+					Evidence: ptrTo(si.URL("https://example.com/threat-model.md")),
+				}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights declares threat modeling or attack surface analysis, but its coverage and sufficiency require manual or AI-assisted review",
+		},
+		{
+			name: "assessment present but no threat modeling terms - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "General security review"}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "A security assessment is declared but does not mention threat modeling or attack surface analysis - manual review needed",
+		},
+		{
+			name: "negated self assessment comment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "A formal self-assessment has not yet been completed for this project."}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no threat modeling or attack surface analysis was found in Security Insights",
+		},
+		{
+			name: "unparseable security insights - needs review",
+			payload: data.Payload{
+				RestData: &data.RestData{
+					InsightsError: true,
+					Releases:      []data.ReleaseData{{TagName: "v1.0.0", Draft: false}},
+				},
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "Security Insights file could not be parsed; manually review whether threat modeling and attack surface analysis were performed",
+		},
+		{
+			name: "empty third-party assessment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{}, si.Assessment{}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no threat modeling or attack surface analysis was found in Security Insights",
+		},
+		{
+			name: "whitespace-only assessment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: " \t ", Name: ptrTo(" ")}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no threat modeling or attack surface analysis was found in Security Insights",
+		},
+		{
+			name: "released with no assessment - failed",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{}),
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no threat modeling or attack surface analysis was found in Security Insights",
+		},
+		{
+			name: "released with nil insights repository - failed",
+			payload: data.Payload{
+				RestData: &data.RestData{
+					Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: false}},
+				},
+			},
+			wantResult: gemara.Failed,
+			wantMsg:    "Project has published releases but no threat modeling or attack surface analysis was found in Security Insights",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotResult, gotMsg, _ := HasThreatModelAnalysis(tt.payload)
+			if gotResult != tt.wantResult {
+				t.Errorf("HasThreatModelAnalysis() result = %v, want %v", gotResult, tt.wantResult)
+			}
+			if gotMsg != tt.wantMsg {
+				t.Errorf("HasThreatModelAnalysis() message = %q, want %q", gotMsg, tt.wantMsg)
+			}
+		})
+	}
 }

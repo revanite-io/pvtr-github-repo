@@ -25,6 +25,8 @@ type Payload struct {
 	IsCodeRepo                bool
 	SecurityPosture           SecurityPosture
 	Binaries                  BinaryAnalysis
+	VexDocuments              []string
+	VexDocumentsErr           error
 	client                    *githubv4.Client
 	httpClient                *http.Client
 	cache                     *payloadCache
@@ -51,7 +53,10 @@ type BinaryAnalysis struct {
 type payloadCache struct {
 	workflows []WorkflowFile
 	// set once workflows have been fetched, so an empty result is not refetched
-	workflowsLoaded bool
+	workflowsLoaded     bool
+	documentation       []DocumentationFile
+	documentationErr    error
+	documentationLoaded bool
 }
 
 // AddEvidence, GetEvidence, and ClearEvidence implement gemara.HasEvidence.
@@ -123,6 +128,11 @@ func Loader(config *config.Config) (payload any, err error) {
 
 	binaries := analyzeBinaries(tree, treeErr, httpClient, config, owner, repo, graphql.Repository.DefaultBranchRef.Name)
 
+	// Reuse the tree fetched for binary analysis to look for VEX documents
+	// without spending another API call. Preserve treeErr separately because
+	// BinaryAnalysis.Err may instead describe later binary-content analysis.
+	vexDocuments := detectVexDocuments(tree)
+
 	securityPosture, err := buildSecurityPosture(ghRepo, *rest)
 	if err != nil {
 		return nil, err
@@ -140,6 +150,8 @@ func Loader(config *config.Config) (payload any, err error) {
 		APICallCounter:           callCounter,
 		SecurityPosture:          securityPosture,
 		Binaries:                 binaries,
+		VexDocuments:             vexDocuments,
+		VexDocumentsErr:          treeErr,
 		client:                   gqlClient,
 		cache:                    &payloadCache{},
 	}), nil
@@ -222,6 +234,7 @@ func (p *Payload) GetWorkflowFiles() ([]WorkflowFile, error) {
 	if p.GraphqlRepoData == nil || p.Config == nil || p.cache == nil {
 		return nil, fmt.Errorf("payload missing required repository data")
 	}
+
 	if p.cache.workflowsLoaded {
 		return p.cache.workflows, nil
 	}
@@ -232,4 +245,24 @@ func (p *Payload) GetWorkflowFiles() ([]WorkflowFile, error) {
 	p.cache.workflows = files
 	p.cache.workflowsLoaded = true
 	return files, nil
+}
+
+// GetDocumentationFiles returns repository documentation once per payload.
+// VM-05 has three controls that inspect the same documents, so caching avoids
+// repeating a potentially large sequence of GitHub content requests. Unlike
+// GetWorkflowFiles, errors are cached deliberately: the walk is expensive and
+// returns whatever partial files it gathered alongside the error, so all three
+// controls observe the same partial evidence rather than re-running the walk.
+func (p *Payload) GetDocumentationFiles() ([]DocumentationFile, error) {
+	if p.RestData == nil || p.cache == nil {
+		return nil, fmt.Errorf("payload missing required repository data")
+	}
+	if p.cache.documentationLoaded {
+		return p.cache.documentation, p.cache.documentationErr
+	}
+	files, err := p.RestData.GetDocumentationFiles()
+	p.cache.documentation = files
+	p.cache.documentationErr = err
+	p.cache.documentationLoaded = true
+	return files, err
 }

@@ -1,6 +1,7 @@
 package reusable_steps
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/gemaraproj/go-gemara"
@@ -213,5 +214,53 @@ func TestIsActive(t *testing.T) {
 		result, message, _ := IsActive(tt.payload)
 		assert.Equal(t, tt.expectedResult, result, tt.assertionMessage)
 		assert.Equal(t, tt.expectedMessage, message, tt.assertionMessage)
+	}
+}
+
+func Test_HasPublishedRelease(t *testing.T) {
+	tests := []struct {
+		name           string
+		payload        data.Payload
+		wantReleased   bool
+		wantObservable bool
+	}{
+		{
+			name:           "nil rest data is unobservable",
+			payload:        data.Payload{RestData: nil},
+			wantReleased:   false,
+			wantObservable: false,
+		},
+		{
+			name:           "releases error is unobservable",
+			payload:        data.Payload{RestData: &data.RestData{ReleasesError: fmt.Errorf("boom")}},
+			wantReleased:   false,
+			wantObservable: false,
+		},
+		{
+			name:           "no releases is observable but unreleased",
+			payload:        data.Payload{RestData: &data.RestData{}},
+			wantReleased:   false,
+			wantObservable: true,
+		},
+		{
+			name:           "only draft releases is observable but unreleased",
+			payload:        data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: true}}}},
+			wantReleased:   false,
+			wantObservable: true,
+		},
+		{
+			name:           "a published release is observable and released",
+			payload:        data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{{TagName: "v1.0.0", Draft: false}}}},
+			wantReleased:   true,
+			wantObservable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotReleased, gotObservable := HasPublishedRelease(tt.payload)
+			assert.Equal(t, tt.wantReleased, gotReleased, "released")
+			assert.Equal(t, tt.wantObservable, gotObservable, "observable")
+		})
 	}
 }

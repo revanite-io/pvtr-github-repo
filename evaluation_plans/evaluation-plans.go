@@ -39,6 +39,9 @@ var (
 		"OSPS-BR-01.01": {
 			build_release.CicdSanitizedInputParameters,
 		},
+		"OSPS-BR-01.03": {
+			build_release.CicdUntrustedCodeIsolation,
+		},
 		"OSPS-BR-02.01": {
 			build_release.ReleaseHasUniqueIdentifier,
 		},
@@ -147,7 +150,7 @@ var (
 			quality.VerifyDependencyManagement,
 		},
 		"OSPS-QA-02.02": {
-			reusable_steps.NotImplemented,
+			quality.ReleasesHaveSBOM,
 		},
 		"OSPS-QA-03.01": {
 			quality.StatusChecksAreRequiredByRulesets,
@@ -186,13 +189,13 @@ var (
 			sec_assessment.HasDesignDocumentation,
 		},
 		"OSPS-SA-02.01": {
-			reusable_steps.NotImplemented,
+			sec_assessment.HasExternalInterfaceDocumentation,
 		},
 		"OSPS-SA-03.01": {
-			reusable_steps.NotImplemented,
+			sec_assessment.HasSecurityAssessment,
 		},
 		"OSPS-SA-03.02": {
-			reusable_steps.NotImplemented,
+			sec_assessment.HasThreatModelAnalysis,
 		},
 		"OSPS-VM-01.01": {
 			reusable_steps.IsActive,
@@ -207,27 +210,31 @@ var (
 			vuln_management.HasPrivateVulnerabilityReporting,
 		},
 		"OSPS-VM-04.01": {
-			reusable_steps.NotImplemented,
+			reusable_steps.IsActive,
+			vuln_management.PublishesVulnerabilityData,
 		},
 		"OSPS-VM-04.02": {
-			reusable_steps.NotImplemented,
+			reusable_steps.IsActive,
+			vuln_management.HasVexDocument,
 		},
 		"OSPS-VM-05.01": {
-			reusable_steps.NotImplemented,
+			reusable_steps.IsActive,
+			vuln_management.HasSCARemediationThresholdPolicy,
 		},
 		"OSPS-VM-05.03": {
-			reusable_steps.NotImplemented,
+			reusable_steps.IsActive,
+			vuln_management.EnforcesSCAOnChanges,
 		},
 		"OSPS-VM-05.02": {
-			reusable_steps.NotImplemented,
+			reusable_steps.IsActive,
+			vuln_management.HasSCAReleasePolicy,
 		},
 		"OSPS-VM-06.01": {
 			reusable_steps.HasDependencyManagementPolicy,
 		},
 		"OSPS-VM-06.02": {
 			reusable_steps.IsCodeRepo,
-			reusable_steps.HasSecurityInsightsFile,
-			vuln_management.SastToolDefined,
+			vuln_management.SastEnforcedOnChanges,
 		},
 	}
 )
