@@ -2,6 +2,7 @@ package sec_assessment
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gemaraproj/go-gemara"
@@ -170,18 +171,22 @@ func HasExternalInterfaceDocumentation(payload data.Payload) (result gemara.Resu
 
 // threatModelingIndicators are lowercase phrases that signal a security
 // assessment covered threat modeling or attack surface analysis rather than a
-// generic review. They are matched against the assessment name and comment.
+// generic review. They are matched against the assessment name and comment as
+// substrings so compound usages ("threat modeling", "attack surfaces") still
+// count.
 var threatModelingIndicators = []string{
 	"threat model",
 	"threat-model",
 	"threatmodel",
 	"attack surface",
 	"attack-surface",
-	"stride",
-	"pasta",
-	"dread",
 	"attack tree",
 }
+
+// threatModelingAcronyms matches methodology acronyms as whole words so
+// incidental substrings like "restrided", "antipasta", or "dreadful" are not
+// counted as threat-modeling mentions.
+var threatModelingAcronyms = regexp.MustCompile(`\b(stride|pasta|dread)\b`)
 
 // assessmentDenials are lowercase phrases that indicate a comment is declaring
 // the *absence* of an assessment rather than one that was performed. Comment is
@@ -256,7 +261,7 @@ func mentionsThreatModeling(assessment si.Assessment) bool {
 			return true
 		}
 	}
-	return false
+	return threatModelingAcronyms.MatchString(text)
 }
 
 // securityAssessments returns the repository's declared security assessments,
