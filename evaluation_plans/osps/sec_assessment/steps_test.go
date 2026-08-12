@@ -727,6 +727,14 @@ func Test_HasThreatModelAnalysis(t *testing.T) {
 			wantMsg:    "A security assessment is declared but does not mention threat modeling or attack surface analysis - manual review needed",
 		},
 		{
+			name: "incidental acronym substrings do not count as threat modeling terms - needs review",
+			payload: data.Payload{
+				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "The dreadful backlog was restrided over antipasta"}),
+			},
+			wantResult: gemara.NeedsReview,
+			wantMsg:    "A security assessment is declared but does not mention threat modeling or attack surface analysis - manual review needed",
+		},
+		{
 			name: "negated self assessment comment - failed",
 			payload: data.Payload{
 				RestData: restDataWithReleaseAndAssessments(true, si.Assessment{Comment: "A formal self-assessment has not yet been completed for this project."}),
@@ -789,6 +797,31 @@ func Test_HasThreatModelAnalysis(t *testing.T) {
 			}
 			if gotMsg != tt.wantMsg {
 				t.Errorf("HasThreatModelAnalysis() message = %q, want %q", gotMsg, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func Test_mentionsThreatModeling(t *testing.T) {
+	tests := []struct {
+		name       string
+		assessment si.Assessment
+		want       bool
+	}{
+		{name: "phrase indicator", assessment: si.Assessment{Comment: "We performed threat modeling on the API"}, want: true},
+		{name: "acronym as whole word", assessment: si.Assessment{Comment: "Analyzed with STRIDE"}, want: true},
+		{name: "acronym with hyphen suffix", assessment: si.Assessment{Comment: "STRIDE-based review of trust boundaries"}, want: true},
+		{name: "acronym with punctuation", assessment: si.Assessment{Comment: "Methodologies used: PASTA, DREAD."}, want: true},
+		{name: "dreadful is not DREAD", assessment: si.Assessment{Comment: "The dreadful state of the docs was reviewed"}, want: false},
+		{name: "antipasta is not PASTA", assessment: si.Assessment{Comment: "Team lunch featured antipasta"}, want: false},
+		{name: "restrided is not STRIDE", assessment: si.Assessment{Comment: "We restrided the migration plan"}, want: false},
+		{name: "no indicators", assessment: si.Assessment{Comment: "General security review"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mentionsThreatModeling(tt.assessment); got != tt.want {
+				t.Errorf("mentionsThreatModeling(%q) = %v, want = %v", tt.assessment.Comment, got, tt.want)
 			}
 		})
 	}
