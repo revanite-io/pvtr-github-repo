@@ -525,3 +525,57 @@ func TestGetReleasesResetsPartialListOnLaterPageError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to decode releases page 2")
 	assert.Nil(t, rest.Releases, "partial results from earlier pages must be discarded on error")
 }
+
+func TestGetWorkflowPermissionsUsesDocumentedEndpoints(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	var requestedPaths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPaths = append(requestedPaths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/test-owner/test-repo/actions/permissions":
+			_, _ = w.Write([]byte(`{"enabled": true, "allowed_actions": "all"}`))
+		case "/repos/test-owner/test-repo/actions/permissions/workflow":
+			_, _ = w.Write([]byte(`{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false}`))
+		default:
+			http.Error(w, `{"message": "Not Found"}`, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	rest := &RestData{
+		owner:      "test-owner",
+		repo:       "test-repo",
+		HttpClient: server.Client(),
+	}
+	require.NoError(t, rest.getWorkflowPermissions())
+	assert.Equal(t, []string{
+		"/repos/test-owner/test-repo/actions/permissions",
+		"/repos/test-owner/test-repo/actions/permissions/workflow",
+	}, requestedPaths)
+	assert.True(t, rest.WorkflowsEnabled)
+	assert.Equal(t, "read", rest.WorkflowPermissions.DefaultPermissions)
+	assert.True(t, rest.WorkflowPermissionsObserved)
+}
+
+func TestGetWorkflowPermissionsInaccessibleLeavesUnobserved(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"message": "Resource not accessible by integration"}`, http.StatusForbidden)
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	rest := &RestData{
+		owner:      "test-owner",
+		repo:       "test-repo",
+		HttpClient: server.Client(),
+	}
+	require.Error(t, rest.getWorkflowPermissions())
+	assert.False(t, rest.WorkflowPermissionsObserved, "insufficient token permissions must leave the observed flag false so the workflow-file heuristic applies")
+}
