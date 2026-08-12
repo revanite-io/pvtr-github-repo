@@ -8,6 +8,7 @@ import (
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/ossf/si-tooling/v2/si"
+	sdkai "github.com/privateerproj/privateer-sdk/ai"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -77,12 +78,45 @@ func TestHasDependencyManagementPolicy(t *testing.T) {
 
 }
 
-func TestAIFallback(t *testing.T) {
+func TestAIFallbackReturnsLowConfidence(t *testing.T) {
 	result, message, confidence := AIFallback(data.Payload{}, "OSPS-TEST", "manual review required", "provider failed", errors.New("unavailable"))
 
 	assert.Equal(t, gemara.NeedsReview, result)
 	assert.Equal(t, "manual review required", message)
 	assert.Equal(t, gemara.Low, confidence)
+}
+
+func TestValidateAIResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		response sdkai.Response
+		wantErr  string
+	}{
+		{
+			name: "valid",
+			response: sdkai.Response{
+				Result:      "pass",
+				Confidence:  "high",
+				Message:     "The grant is justified.",
+				Explanation: "The release step requires contents write.",
+			},
+		},
+		{name: "invalid result", response: sdkai.Response{Result: "unknown"}, wantErr: "result is invalid"},
+		{name: "invalid confidence", response: sdkai.Response{Result: "pass"}, wantErr: "confidence is invalid"},
+		{name: "missing message", response: sdkai.Response{Result: "pass", Confidence: "high", Explanation: "Explanation"}, wantErr: "message is required"},
+		{name: "missing explanation", response: sdkai.Response{Result: "pass", Confidence: "high", Message: "Message"}, wantErr: "explanation is required"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateAIResponse(test.response)
+			if test.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, test.wantErr)
+		})
+	}
 }
 
 func TestIsCodeRepo(t *testing.T) {
