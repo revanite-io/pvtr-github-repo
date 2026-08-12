@@ -898,3 +898,165 @@ func DependenciesUseStandardizedTooling(payload data.Payload) (result gemara.Res
 	}
 	return gemara.NeedsReview, "No dependency manifests found in the GitHub dependency graph. Review the project to confirm that any dependencies ingested by the build and release pipeline use standardized tooling.", confidence
 }
+
+// CicdSanitizesCollaboratorInput implements OSPS-BR-01.04: CI/CD pipelines
+// which accept trusted collaborator input MUST sanitize and validate that
+// input prior to use in the pipeline.
+//
+// "Trusted collaborator input" here is workflow_dispatch inputs: values a
+// collaborator with write access types in when manually triggering a
+// workflow. Unlike OSPS-BR-01.01's fixed list of GitHub-controlled untrusted
+// metadata, workflow_dispatch input names are workflow-specific, so this
+// check derives the sensitive expressions from each workflow's own declared
+// inputs, then flags any of them interpolated directly into a run: step's
+// script body. An input assigned to a step-level env: var and referenced as
+// a shell variable is not flagged, matching the same convention used by
+// CicdSanitizedInputParameters (OSPS-BR-01.01): that indirection is the
+// recommended mitigation, not the vulnerability.
+//
+//   - Failed: a declared workflow_dispatch input is interpolated directly
+//     into a run: step's script body.
+//   - NeedsReview: one or more workflow files could not be read (truncated
+//     by the API or unparseable), so an unsanitized input could be hiding
+//     there.
+//   - Passed: every declared workflow_dispatch input is either unused in
+//     run: steps or only referenced via a safer indirection.
+//   - NotApplicable: no workflow declares workflow_dispatch inputs, so there
+//     is no trusted collaborator input for a CI/CD pipeline to sanitize.
+func CicdSanitizesCollaboratorInput(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
+	var confidence gemara.ConfidenceLevel
+
+	workflows, err := payload.GetWorkflowFiles()
+	if len(workflows) == 0 {
+		message := "No workflows found in .github/workflows directory"
+		if err != nil {
+			message = err.Error()
+		}
+		return gemara.NotApplicable, message, confidence
+	}
+
+	result, message := evaluateCollaboratorInputSanitization(workflows)
+	return result, message, confidence
+}
+
+// evaluateCollaboratorInputSanitization decodes each workflow file, collects
+// its declared workflow_dispatch input names, and checks run: steps for
+// direct interpolation of those inputs. Separated from payload retrieval so
+// the classification logic is unit-testable without a payload fixture,
+// mirroring evaluateUntrustedCodeIsolation.
+func evaluateCollaboratorInputSanitization(workflows []data.WorkflowFile) (gemara.Result, string) {
+	var violations []string
+	var uninspected []string
+	hasDispatchInputs := false
+
+	for _, file := range workflows {
+		if !strings.HasSuffix(file.Name, ".yml") && !strings.HasSuffix(file.Name, ".yaml") {
+			continue
+		}
+		if file.Truncated {
+			uninspected = append(uninspected, fmt.Sprintf("%s (too large to retrieve)", file.Path))
+			continue
+		}
+		workflow, parseErr := actionlint.Parse([]byte(file.Content))
+		if parseErr != nil {
+			uninspected = append(uninspected, fmt.Sprintf("%s (%v)", file.Path, parseErr))
+			continue
+		}
+
+		inputNames := workflowDispatchInputNames(workflow)
+		if len(inputNames) == 0 {
+			continue
+		}
+		hasDispatchInputs = true
+
+		pattern := unsanitizedDispatchInputPattern(inputNames)
+		violations = append(violations, checkWorkflowFileForUnsanitizedDispatchInputs(file.Name, workflow, pattern)...)
+	}
+
+	if len(violations) > 0 {
+		return gemara.Failed,
+			"CI/CD pipelines use workflow_dispatch inputs without sanitization: " + strings.Join(violations, "; ")
+	}
+
+	if len(uninspected) > 0 {
+		return gemara.NeedsReview, fmt.Sprintf(
+			"Unable to evaluate %d of %d workflow files, manual review required: %s",
+			len(uninspected), len(workflows), strings.Join(uninspected, "; "))
+	}
+
+	if !hasDispatchInputs {
+		return gemara.NotApplicable,
+			"No workflow declares workflow_dispatch inputs; there is no trusted collaborator input for a CI/CD pipeline to sanitize"
+	}
+
+	return gemara.Passed,
+		"All workflow_dispatch inputs are either unused in run: steps or safely indirected (e.g. via env:) rather than interpolated directly"
+}
+
+// workflowDispatchInputNames returns the workflow_dispatch input names
+// declared by a workflow. Names are already lower-cased by actionlint since
+// GitHub Actions input names are case-insensitive.
+func workflowDispatchInputNames(workflow *actionlint.Workflow) []string {
+	var names []string
+	for _, event := range workflow.On {
+		dispatch, ok := event.(*actionlint.WorkflowDispatchEvent)
+		if !ok {
+			continue
+		}
+		for name := range dispatch.Inputs {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// unsanitizedDispatchInputPattern builds a regex matching either the
+// `inputs.<name>` or `github.event.inputs.<name>` context expression for any
+// of the given input names, anchored so e.g. "inputs.tag" does not also match
+// "inputs.tag2".
+func unsanitizedDispatchInputPattern(inputNames []string) *regexp.Regexp {
+	quoted := make([]string, len(inputNames))
+	for i, name := range inputNames {
+		quoted[i] = regexp.QuoteMeta(name)
+	}
+	return regexp.MustCompile(`(?i)^(github\.event\.)?inputs\.(` + strings.Join(quoted, "|") + `)$`)
+}
+
+// checkWorkflowFileForUnsanitizedDispatchInputs reports every run: step that
+// interpolates one of pattern's matched workflow_dispatch inputs directly
+// into its script body, naming the job so maintainers can find every
+// offending step in one pass rather than stopping at the first.
+func checkWorkflowFileForUnsanitizedDispatchInputs(fileName string, workflow *actionlint.Workflow, pattern *regexp.Regexp) []string {
+	var violations []string
+
+	for _, job := range workflow.Jobs {
+		if job == nil {
+			continue
+		}
+		jobID := "unknown"
+		if job.ID != nil && job.ID.Value != "" {
+			jobID = job.ID.Value
+		}
+
+		for _, step := range job.Steps {
+			if step == nil {
+				continue
+			}
+
+			run, ok := step.Exec.(*actionlint.ExecRun)
+			if !ok || run.Run == nil {
+				continue
+			}
+
+			for _, expr := range pullVariablesFromScript(run.Run.Value) {
+				if pattern.MatchString(strings.TrimSpace(expr)) {
+					violations = append(violations, fmt.Sprintf(
+						"%s workflow job %q uses unsanitized workflow_dispatch input (%s) directly in a run step",
+						fileName, jobID, expr))
+				}
+			}
+		}
+	}
+
+	return violations
+}

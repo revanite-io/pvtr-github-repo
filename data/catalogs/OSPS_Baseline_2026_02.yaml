@@ -551,6 +551,17 @@ controls:
           CI/CD pipelines should isolate untrusted code snapshots from privileged credentials and assets.
           In particular, projects should be careful to ensure that workflows which build or execute code
           prior to review by a collaborator do not have access to CI/CD credentials.
+      - id: OSPS-BR-01.04
+        text: |
+          CI/CD pipelines which accept trusted collaborator input MUST sanitize and
+          validate that input prior to use in the pipeline.
+        applicability:
+          - Maturity Level 3
+        recommendation: |
+          CI/CD pipelines should sanitize (quote, escape or exit on expected values) all
+          collaborator inputs on explicit workflow executions. While collaborators are
+          generally trusted, manual inputs to a workflow cannot be reviewed and could be
+          abused by an account takeover or insider threat.
 
   - id: OSPS-BR-02
     title: |

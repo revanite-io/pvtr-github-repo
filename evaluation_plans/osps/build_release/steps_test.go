@@ -1436,3 +1436,347 @@ func TestEnsureLatestReleaseHasChangelog(t *testing.T) {
 		})
 	}
 }
+
+// --- OSPS-BR-01.04 tests ---
+
+// A workflow_dispatch input interpolated directly into a run: step via the
+// modern `inputs.<name>` context.
+var dispatchInputDirectUseWorkflow = `name: Direct input use
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target }}
+`
+
+// Same vulnerability via the older `github.event.inputs.<name>` context.
+var dispatchInputGithubEventUseWorkflow = `name: Direct input use via github.event
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ github.event.inputs.target }}
+`
+
+// The recommended mitigation: the input is assigned to a step-level env: var
+// and read as a shell variable rather than interpolated into the script body.
+var dispatchInputSafeEnvIndirectionWorkflow = `name: Safe env indirection
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        env:
+          TARGET: ${{ inputs.target }}
+        run: ./deploy.sh "$TARGET"
+`
+
+// A declared input that is never referenced in any run: step at all.
+var dispatchInputUnusedWorkflow = `name: Unused input
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh
+`
+
+// A workflow with no workflow_dispatch trigger at all; not applicable to this
+// control regardless of what its run: steps do.
+var noDispatchTriggerWorkflow = `name: No dispatch trigger
+on:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: make build
+`
+
+// workflow_dispatch declared with no inputs at all.
+var dispatchNoInputsWorkflow = `name: Dispatch with no inputs
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: make build
+`
+
+// A declared input name that happens to prefix another string in the script;
+// the match must be anchored so "inputs.target" does not also match a step
+// that merely mentions "inputs.target2" or similar unrelated text.
+var dispatchInputNamePrefixWorkflow = `name: Prefix collision
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target2 }}
+`
+
+func TestWorkflowDispatchInputNames(t *testing.T) {
+	tests := []struct {
+		name         string
+		workflowFile string
+		want         []string
+	}{
+		{
+			name:         "declared inputs are returned",
+			workflowFile: dispatchInputDirectUseWorkflow,
+			want:         []string{"target"},
+		},
+		{
+			name:         "workflow_dispatch with no inputs returns none",
+			workflowFile: dispatchNoInputsWorkflow,
+			want:         nil,
+		},
+		{
+			name:         "no workflow_dispatch trigger returns none",
+			workflowFile: noDispatchTriggerWorkflow,
+			want:         nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, parseErrors := actionlint.Parse([]byte(tt.workflowFile))
+			require.Empty(t, parseErrors)
+			require.NotNil(t, workflow)
+			got := workflowDispatchInputNames(workflow)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+func TestUnsanitizedDispatchInputPattern(t *testing.T) {
+	pattern := unsanitizedDispatchInputPattern([]string{"target", "release-tag"})
+
+	assert.True(t, pattern.MatchString("inputs.target"), "inputs.<name> should match")
+	assert.True(t, pattern.MatchString("github.event.inputs.target"), "github.event.inputs.<name> should match")
+	assert.True(t, pattern.MatchString("Inputs.Target"), "matching should be case-insensitive")
+	assert.True(t, pattern.MatchString("inputs.release-tag"), "hyphenated input names should match")
+
+	assert.False(t, pattern.MatchString("inputs.target2"), "a longer name must not match a prefix collision")
+	assert.False(t, pattern.MatchString("inputs.other"), "an undeclared input name must not match")
+	assert.False(t, pattern.MatchString("github.event.inputs"), "the bare inputs object must not match")
+	assert.False(t, pattern.MatchString("secrets.TOKEN"), "unrelated context expressions must not match")
+}
+
+func TestCheckWorkflowFileForUnsanitizedDispatchInputs(t *testing.T) {
+	tests := []struct {
+		name           string
+		workflowFile   string
+		expectedResult bool // true == no violations
+		assertionMsg   string
+	}{
+		{
+			name:           "direct use via inputs.<name> is flagged",
+			workflowFile:   dispatchInputDirectUseWorkflow,
+			expectedResult: false,
+			assertionMsg:   "direct interpolation of a declared input should be flagged",
+		},
+		{
+			name:           "direct use via github.event.inputs.<name> is flagged",
+			workflowFile:   dispatchInputGithubEventUseWorkflow,
+			expectedResult: false,
+			assertionMsg:   "the older github.event.inputs form should also be flagged",
+		},
+		{
+			name:           "env: indirection is safe",
+			workflowFile:   dispatchInputSafeEnvIndirectionWorkflow,
+			expectedResult: true,
+			assertionMsg:   "assigning the input to env: and reading a shell variable should not be flagged",
+		},
+		{
+			name:           "an unused declared input is safe",
+			workflowFile:   dispatchInputUnusedWorkflow,
+			expectedResult: true,
+			assertionMsg:   "a declared input never referenced in a run: step should not be flagged",
+		},
+		{
+			name:           "a name-prefix collision is not flagged",
+			workflowFile:   dispatchInputNamePrefixWorkflow,
+			expectedResult: true,
+			assertionMsg:   "inputs.target2 must not be treated as a use of the declared 'target' input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, parseErrors := actionlint.Parse([]byte(tt.workflowFile))
+			require.Empty(t, parseErrors)
+			require.NotNil(t, workflow)
+
+			inputNames := workflowDispatchInputNames(workflow)
+			pattern := unsanitizedDispatchInputPattern(inputNames)
+			violations := checkWorkflowFileForUnsanitizedDispatchInputs("wf.yml", workflow, pattern)
+			t.Log(strings.Join(violations, "\n"))
+			assert.Equal(t, tt.expectedResult, len(violations) == 0, tt.assertionMsg)
+		})
+	}
+}
+
+// TestUnsanitizedDispatchInputsReportsEveryOffendingStep ensures the check
+// does not stop at the first offending step: every unsanitized use across all
+// jobs must be surfaced so maintainers can fix them in one pass.
+func TestUnsanitizedDispatchInputsReportsEveryOffendingStep(t *testing.T) {
+	multiOffenderWorkflow := `name: Multiple unsanitized uses
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build for target
+        run: ./build.sh ${{ inputs.target }}
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to target
+        run: ./deploy.sh ${{ github.event.inputs.target }}
+`
+	workflow, parseErrors := actionlint.Parse([]byte(multiOffenderWorkflow))
+	require.Empty(t, parseErrors)
+	require.NotNil(t, workflow)
+
+	inputNames := workflowDispatchInputNames(workflow)
+	pattern := unsanitizedDispatchInputPattern(inputNames)
+	violations := checkWorkflowFileForUnsanitizedDispatchInputs("wf.yml", workflow, pattern)
+	message := strings.Join(violations, "\n")
+	t.Log(message)
+
+	assert.Len(t, violations, 2, "both offending steps across both jobs should be reported")
+	assert.Contains(t, message, `job "build"`)
+	assert.Contains(t, message, `job "deploy"`)
+}
+
+func TestEvaluateCollaboratorInputSanitization(t *testing.T) {
+	tests := []struct {
+		name         string
+		workflows    []data.WorkflowFile
+		wantResult   gemara.Result
+		wantContains string
+	}{
+		{
+			name:         "direct use of a declared input fails",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputDirectUseWorkflow}},
+			wantResult:   gemara.Failed,
+			wantContains: "without sanitization",
+		},
+		{
+			name:         "safe env indirection passes",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputSafeEnvIndirectionWorkflow}},
+			wantResult:   gemara.Passed,
+			wantContains: "safely indirected",
+		},
+		{
+			name:         "no workflow_dispatch inputs anywhere is not applicable",
+			workflows:    []data.WorkflowFile{{Name: "push.yml", Path: "p/push.yml", Content: noDispatchTriggerWorkflow}},
+			wantResult:   gemara.NotApplicable,
+			wantContains: "no trusted collaborator input",
+		},
+		{
+			name:         "workflow_dispatch declared with no inputs is not applicable",
+			workflows:    []data.WorkflowFile{{Name: "dispatch.yml", Path: "p/dispatch.yml", Content: dispatchNoInputsWorkflow}},
+			wantResult:   gemara.NotApplicable,
+			wantContains: "no trusted collaborator input",
+		},
+		{
+			// A parse failure must not assert a control violation on a file we
+			// never understood; it degrades to NeedsReview, matching the
+			// convention established for OSPS-BR-01.03.
+			name:         "an unparseable file needs review rather than failing",
+			workflows:    []data.WorkflowFile{{Name: "broken.yml", Path: "p/broken.yml", Content: "this is not a workflow"}},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			name:         "a truncated file needs review rather than passing silently",
+			workflows:    []data.WorkflowFile{{Name: "huge.yml", Path: "p/huge.yml", Truncated: true}},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			// A real violation must not be masked by an unreadable sibling,
+			// regardless of file ordering.
+			name: "a real violation outranks an unreadable sibling listed first",
+			workflows: []data.WorkflowFile{
+				{Name: "broken.yml", Path: "p/broken.yml", Content: "not a workflow"},
+				{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputDirectUseWorkflow},
+			},
+			wantResult:   gemara.Failed,
+			wantContains: "without sanitization",
+		},
+		{
+			name:         "non-workflow extensions are ignored, not flagged",
+			workflows:    []data.WorkflowFile{{Name: "README.md", Path: "p/README.md", Content: "not a workflow"}},
+			wantResult:   gemara.NotApplicable,
+			wantContains: "no trusted collaborator input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message := evaluateCollaboratorInputSanitization(tt.workflows)
+			t.Log(message)
+			assert.Equal(t, tt.wantResult, result)
+			assert.Contains(t, message, tt.wantContains)
+		})
+	}
+}
+
+// A Payload with no repository data configured surfaces GetWorkflowFiles'
+// own error rather than claiming "no workflows found", since we could not
+// actually check.
+func TestCicdSanitizesCollaboratorInputNoWorkflows(t *testing.T) {
+	result, message, _ := CicdSanitizesCollaboratorInput(data.Payload{})
+	assert.Equal(t, gemara.NotApplicable, result)
+	assert.Contains(t, message, "missing required repository data")
+}
