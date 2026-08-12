@@ -55,7 +55,8 @@ func splitSpdxExpression(expression string) (spdx_ids []string) {
 			if idx := strings.Index(token, " WITH "); idx != -1 {
 				token = token[:idx]
 			}
-			// Strip deprecated "+" (or-later) suffix so "GPL-2.0+" resolves to "GPL-2.0".
+			// Strip the "+" (or-later) operator so any "id+" form (e.g. "Apache-2.0+")
+			// resolves to its base license ID.
 			token = strings.TrimSuffix(token, "+")
 			spdx_ids = append(spdx_ids, token)
 		}
