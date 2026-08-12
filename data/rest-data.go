@@ -524,7 +524,7 @@ func (r *RestData) getReleases() error {
 }
 
 func (r *RestData) getWorkflowPermissions() error {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions", APIBase, r.owner, r.repo)
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/permissions", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
 		return err
