@@ -825,6 +825,30 @@ func TestTestExecutionDocumentationEvidenceFetchError(t *testing.T) {
 	}
 }
 
+// TestTestExecutionDocumentationEvidenceOversized verifies that documentation
+// exceeding maxDocumentationEvidenceBytes is refused with an error rather than
+// truncated. Callers route this to AIFallback (NeedsReview), so the model never
+// judges on partial evidence and cannot return a confidently wrong verdict from
+// content it did not fully see.
+func TestTestExecutionDocumentationEvidenceOversized(t *testing.T) {
+	payload := data.Payload{GraphqlRepoData: &data.GraphqlRepoData{}}
+	payload.Repository.ContributingGuidelines.Body = strings.Repeat("a", maxDocumentationEvidenceBytes+1)
+
+	material, _, err := testExecutionDocumentationEvidence(payload)
+	if err == nil {
+		t.Fatal("expected an error when documentation exceeds the size cap, got nil")
+	}
+	if material != "" {
+		t.Fatalf("expected empty material on oversize, got %d bytes", len(material))
+	}
+
+	// A document exactly at the cap is still assessed, not deferred.
+	payload.Repository.ContributingGuidelines.Body = strings.Repeat("a", maxDocumentationEvidenceBytes-len("CONTRIBUTING\n"))
+	if _, _, err := testExecutionDocumentationEvidence(payload); err != nil {
+		t.Fatalf("content at the cap should be accepted, got error: %v", err)
+	}
+}
+
 func relWithAssets(tag string, assetNames ...string) data.ReleaseData {
 	assets := make([]data.ReleaseAsset, 0, len(assetNames))
 	for _, name := range assetNames {

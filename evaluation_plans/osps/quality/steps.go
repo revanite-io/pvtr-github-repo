@@ -15,6 +15,12 @@ const testExecutionDocumentationFallbackMessage = "Review project documentation 
 
 const documentsTestMaintenancePolicyFallbackMessage = "Review project documentation to ensure it contains a clear policy for maintaining tests"
 
+// maxDocumentationEvidenceBytes caps the combined README and CONTRIBUTING
+// material forwarded to the AI provider. Beyond this size we defer to manual
+// review rather than truncate: truncation could drop the very policy text the
+// verdict depends on and yield a confidently wrong result.
+const maxDocumentationEvidenceBytes = 64 * 1024
+
 // Both vars are seams for tests to stub the AI client and evidence loader.
 var newAIClientFromConfig = sdkai.NewClient
 var loadTestExecutionDocumentationEvidence = testExecutionDocumentationEvidence
@@ -678,7 +684,12 @@ func testExecutionDocumentationEvidence(payload data.Payload) (material string, 
 		return "", nil, fmt.Errorf("no README or CONTRIBUTING content available")
 	}
 
-	return strings.Join(parts, "\n\n"), sources, nil
+	material = strings.Join(parts, "\n\n")
+	if len(material) > maxDocumentationEvidenceBytes {
+		return "", nil, fmt.Errorf("README/CONTRIBUTING content is %d bytes, exceeding the %d-byte limit for reliable AI assessment; deferring to manual review", len(material), maxDocumentationEvidenceBytes)
+	}
+
+	return material, sources, nil
 }
 
 func testExecutionDocumentationEvidenceSource(payload data.Payload, path string) string {
