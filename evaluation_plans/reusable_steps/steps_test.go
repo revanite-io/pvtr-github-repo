@@ -19,6 +19,14 @@ type testingData struct {
 	assertionMessage string
 }
 
+func TestAIFallback(t *testing.T) {
+	result, message, confidence := AIFallback(data.Payload{}, "OSPS-QA-06.03", "manual review required", "provider failed", assert.AnError)
+
+	assert.Equal(t, gemara.NeedsReview, result)
+	assert.Equal(t, "manual review required", message)
+	assert.Equal(t, gemara.Low, confidence)
+}
+
 func TestHasDependencyManagementPolicy(t *testing.T) {
 
 	testData := []testingData{
