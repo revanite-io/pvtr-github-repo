@@ -1436,3 +1436,637 @@ func TestEnsureLatestReleaseHasChangelog(t *testing.T) {
 		})
 	}
 }
+
+// --- OSPS-BR-01.04 tests ---
+
+// A workflow_dispatch input interpolated directly into a run: step via the
+// modern `inputs.<name>` context.
+var dispatchInputDirectUseWorkflow = `name: Direct input use
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target }}
+`
+
+// Same vulnerability via the older `github.event.inputs.<name>` context.
+var dispatchInputGithubEventUseWorkflow = `name: Direct input use via github.event
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ github.event.inputs.target }}
+`
+
+// The recommended mitigation: the input is assigned to a step-level env: var
+// and read as a shell variable rather than interpolated into the script body.
+var dispatchInputSafeEnvIndirectionWorkflow = `name: Safe env indirection
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        env:
+          TARGET: ${{ inputs.target }}
+        run: ./deploy.sh "$TARGET"
+`
+
+// A declared input that is never referenced in any run: step at all.
+var dispatchInputUnusedWorkflow = `name: Unused input
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh
+`
+
+// A workflow with no workflow_dispatch trigger at all; not applicable to this
+// control regardless of what its run: steps do.
+var noDispatchTriggerWorkflow = `name: No dispatch trigger
+on:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: make build
+`
+
+// workflow_dispatch declared with no inputs at all.
+var dispatchNoInputsWorkflow = `name: Dispatch with no inputs
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: make build
+`
+
+// A declared input name that happens to prefix another string in the script;
+// the match must be anchored so "inputs.target" does not also match a step
+// that merely mentions "inputs.target2" or similar unrelated text.
+var dispatchInputNamePrefixWorkflow = `name: Prefix collision
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target2 }}
+`
+
+// A declared input used inside a compound expression rather than as the
+// entire ${{ }} body - the "|| default" idiom is the most common real-world
+// workflow_dispatch pattern and must not slip past an anchor that only
+// matches the bare form.
+var dispatchInputOrDefaultWorkflow = `name: Or-default idiom
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: false
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target || 'default' }}
+`
+
+// A declared input passed as an argument to a built-in expression function.
+var dispatchInputFormatWorkflow = `name: format() idiom
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ format('--target={0}', inputs.target) }}
+`
+
+// A declared input used on both sides of a ternary-style expression.
+var dispatchInputTernaryWorkflow = `name: Ternary idiom
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: false
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target != '' && inputs.target || 'x' }}
+`
+
+// The entire inputs object dumped into a script via toJSON(), rather than a
+// single named field - a distinct attack surface from namedDispatchInputPattern.
+var dispatchInputToJSONWorkflow = `name: toJSON whole-object dump
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: echo '${{ toJSON(github.event.inputs) }}' | ./deploy.sh
+`
+
+// A Boolean input used directly. GitHub itself only allows true/false at
+// dispatch time, so this is not a sanitization gap.
+var dispatchInputBooleanWorkflow = `name: Boolean input
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Confirm deploy
+        required: true
+        type: boolean
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh --confirm=${{ inputs.confirm }}
+`
+
+// A Choice input with a declared option list, used directly. GitHub rejects
+// any dispatch value outside the declared options with a 422, so this is
+// already the "exit on expected values" sanitization the requirement asks
+// for.
+var dispatchInputChoiceWithOptionsWorkflow = `name: Choice input with options
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh --env=${{ inputs.environment }}
+`
+
+// A Choice input declared with no option list is a validation escape hatch:
+// GitHub has nothing to constrain the dispatch value against, so it is free
+// text like a String input and must still be flagged.
+var dispatchInputChoiceWithoutOptionsWorkflow = `name: Choice input without options
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: ./deploy.sh --env=${{ inputs.environment }}
+`
+
+// A workflow mixing an exempt Boolean input with a non-exempt String input,
+// both used directly, to prove only the String one is flagged.
+var dispatchInputMixedTypesWorkflow = `name: Mixed input types
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Confirm deploy
+        required: true
+        type: boolean
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm
+        run: echo confirmed=${{ inputs.confirm }}
+      - name: Deploy
+        run: ./deploy.sh ${{ inputs.target }}
+`
+
+func TestWorkflowDispatchInputNames(t *testing.T) {
+	tests := []struct {
+		name         string
+		workflowFile string
+		want         []string
+	}{
+		{
+			name:         "declared inputs are returned",
+			workflowFile: dispatchInputDirectUseWorkflow,
+			want:         []string{"target"},
+		},
+		{
+			name:         "workflow_dispatch with no inputs returns none",
+			workflowFile: dispatchNoInputsWorkflow,
+			want:         nil,
+		},
+		{
+			name:         "no workflow_dispatch trigger returns none",
+			workflowFile: noDispatchTriggerWorkflow,
+			want:         nil,
+		},
+		{
+			name:         "Boolean and Choice inputs are still returned by the unfiltered name list",
+			workflowFile: dispatchInputMixedTypesWorkflow,
+			want:         []string{"confirm", "target"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, parseErrors := actionlint.Parse([]byte(tt.workflowFile))
+			require.Empty(t, parseErrors)
+			require.NotNil(t, workflow)
+			got := workflowDispatchInputNames(workflow)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+func TestRequiresSanitizationCheck(t *testing.T) {
+	optionsInput := func(inputType actionlint.WorkflowDispatchEventInputType, withOptions bool) *actionlint.DispatchInput {
+		input := &actionlint.DispatchInput{Type: inputType}
+		if withOptions {
+			input.Options = []*actionlint.String{{Value: "staging"}, {Value: "production"}}
+		}
+		return input
+	}
+
+	tests := []struct {
+		name  string
+		input *actionlint.DispatchInput
+		want  bool
+	}{
+		{"nil input defaults to requiring sanitization", nil, true},
+		{"untyped input requires sanitization", &actionlint.DispatchInput{}, true},
+		{"String input requires sanitization", optionsInput(actionlint.WorkflowDispatchEventInputTypeString, false), true},
+		{"Number input requires sanitization", optionsInput(actionlint.WorkflowDispatchEventInputTypeNumber, false), true},
+		{"Environment input requires sanitization", optionsInput(actionlint.WorkflowDispatchEventInputTypeEnvironment, false), true},
+		{"Boolean input is platform-validated", optionsInput(actionlint.WorkflowDispatchEventInputTypeBoolean, false), false},
+		{"Choice input with declared options is platform-validated", optionsInput(actionlint.WorkflowDispatchEventInputTypeChoice, true), false},
+		{"Choice input without declared options requires sanitization", optionsInput(actionlint.WorkflowDispatchEventInputTypeChoice, false), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, requiresSanitizationCheck(tt.input))
+		})
+	}
+}
+
+func TestNamedDispatchInputPattern(t *testing.T) {
+	pattern := namedDispatchInputPattern([]string{"target", "release-tag"})
+
+	assert.True(t, pattern.MatchString("inputs.target"), "inputs.<name> should match")
+	assert.True(t, pattern.MatchString("github.event.inputs.target"), "github.event.inputs.<name> should match")
+	assert.True(t, pattern.MatchString("Inputs.Target"), "matching should be case-insensitive")
+	assert.True(t, pattern.MatchString("inputs.release-tag"), "hyphenated input names should match")
+	assert.True(t, pattern.MatchString("inputs.target || 'default'"), "a reference inside a compound expression should match")
+	assert.True(t, pattern.MatchString("format('--target={0}', inputs.target)"), "a reference as a function argument should match")
+	assert.True(t, pattern.MatchString("inputs.target != '' && inputs.target || 'x'"), "a reference repeated in a ternary-style expression should match")
+
+	assert.False(t, pattern.MatchString("inputs.target2"), "a longer name must not match a prefix collision")
+	assert.False(t, pattern.MatchString("inputs.other"), "an undeclared input name must not match")
+	assert.False(t, pattern.MatchString("github.event.inputs"), "the bare inputs object must not match the named pattern")
+	assert.False(t, pattern.MatchString("secrets.TOKEN"), "unrelated context expressions must not match")
+}
+
+func TestWholeDispatchInputsObjectPattern(t *testing.T) {
+	assert.True(t, wholeDispatchInputsObjectPattern.MatchString("toJSON(github.event.inputs)"), "a toJSON dump of the whole object should match")
+	assert.True(t, wholeDispatchInputsObjectPattern.MatchString("inputs"), "a bare reference to the whole object should match")
+	assert.True(t, wholeDispatchInputsObjectPattern.MatchString("fromJSON(inputs).target"), "the object reference inside a larger expression should match")
+
+	assert.False(t, wholeDispatchInputsObjectPattern.MatchString("inputs.target"), "a specific named field must not match the whole-object pattern")
+	assert.False(t, wholeDispatchInputsObjectPattern.MatchString("github.event.inputs.target"), "a specific named field via github.event must not match either")
+	assert.False(t, wholeDispatchInputsObjectPattern.MatchString("myinputsvar"), "an unrelated identifier containing 'inputs' must not match")
+}
+
+func TestCheckWorkflowFileForUnsanitizedDispatchInputs(t *testing.T) {
+	tests := []struct {
+		name           string
+		workflowFile   string
+		expectedResult bool // true == no violations
+		assertionMsg   string
+	}{
+		{
+			name:           "direct use via inputs.<name> is flagged",
+			workflowFile:   dispatchInputDirectUseWorkflow,
+			expectedResult: false,
+			assertionMsg:   "direct interpolation of a declared input should be flagged",
+		},
+		{
+			name:           "direct use via github.event.inputs.<name> is flagged",
+			workflowFile:   dispatchInputGithubEventUseWorkflow,
+			expectedResult: false,
+			assertionMsg:   "the older github.event.inputs form should also be flagged",
+		},
+		{
+			name:           "env: indirection is safe",
+			workflowFile:   dispatchInputSafeEnvIndirectionWorkflow,
+			expectedResult: true,
+			assertionMsg:   "assigning the input to env: and reading a shell variable should not be flagged",
+		},
+		{
+			name:           "an unused declared input is safe",
+			workflowFile:   dispatchInputUnusedWorkflow,
+			expectedResult: true,
+			assertionMsg:   "a declared input never referenced in a run: step should not be flagged",
+		},
+		{
+			name:           "a name-prefix collision is not flagged",
+			workflowFile:   dispatchInputNamePrefixWorkflow,
+			expectedResult: true,
+			assertionMsg:   "inputs.target2 must not be treated as a use of the declared 'target' input",
+		},
+		{
+			name:           "the || default idiom is flagged",
+			workflowFile:   dispatchInputOrDefaultWorkflow,
+			expectedResult: false,
+			assertionMsg:   "inputs.target || 'default' still splices unsanitized input into the script",
+		},
+		{
+			name:           "the format() idiom is flagged",
+			workflowFile:   dispatchInputFormatWorkflow,
+			expectedResult: false,
+			assertionMsg:   "format('--target={0}', inputs.target) still splices unsanitized input into the script",
+		},
+		{
+			name:           "the ternary idiom is flagged",
+			workflowFile:   dispatchInputTernaryWorkflow,
+			expectedResult: false,
+			assertionMsg:   "a ternary-style expression referencing the input twice is still a splice",
+		},
+		{
+			name:           "a toJSON whole-object dump is flagged",
+			workflowFile:   dispatchInputToJSONWorkflow,
+			expectedResult: false,
+			assertionMsg:   "dumping the entire inputs object bypasses the named-field pattern and must be caught separately",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, parseErrors := actionlint.Parse([]byte(tt.workflowFile))
+			require.Empty(t, parseErrors)
+			require.NotNil(t, workflow)
+
+			inputs := workflowDispatchInputs(workflow)
+			var sanitizable []string
+			for name, input := range inputs {
+				if requiresSanitizationCheck(input) {
+					sanitizable = append(sanitizable, name)
+				}
+			}
+			pattern := namedDispatchInputPattern(sanitizable)
+			violations := checkWorkflowFileForUnsanitizedDispatchInputs("wf.yml", workflow, pattern, len(sanitizable) > 0)
+			t.Log(strings.Join(violations, "\n"))
+			assert.Equal(t, tt.expectedResult, len(violations) == 0, tt.assertionMsg)
+		})
+	}
+}
+
+// TestUnsanitizedDispatchInputsReportsEveryOffendingStep ensures the check
+// does not stop at the first offending step: every unsanitized use across all
+// jobs must be surfaced so maintainers can fix them in one pass.
+func TestUnsanitizedDispatchInputsReportsEveryOffendingStep(t *testing.T) {
+	multiOffenderWorkflow := `name: Multiple unsanitized uses
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build for target
+        run: ./build.sh ${{ inputs.target }}
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to target
+        run: ./deploy.sh ${{ github.event.inputs.target }}
+`
+	workflow, parseErrors := actionlint.Parse([]byte(multiOffenderWorkflow))
+	require.Empty(t, parseErrors)
+	require.NotNil(t, workflow)
+
+	pattern := namedDispatchInputPattern([]string{"target"})
+	violations := checkWorkflowFileForUnsanitizedDispatchInputs("wf.yml", workflow, pattern, true)
+	message := strings.Join(violations, "\n")
+	t.Log(message)
+
+	assert.Len(t, violations, 2, "both offending steps across both jobs should be reported")
+	assert.Contains(t, message, `job "build"`)
+	assert.Contains(t, message, `job "deploy"`)
+}
+
+// TestUnsanitizedDispatchInputsOnlyFlagsNonExemptFields proves the
+// Boolean/Choice-with-options exemption is applied per input, not per
+// workflow: a workflow mixing an exempt and a non-exempt input must flag only
+// the non-exempt one.
+func TestUnsanitizedDispatchInputsOnlyFlagsNonExemptFields(t *testing.T) {
+	workflow, parseErrors := actionlint.Parse([]byte(dispatchInputMixedTypesWorkflow))
+	require.Empty(t, parseErrors)
+	require.NotNil(t, workflow)
+
+	inputs := workflowDispatchInputs(workflow)
+	var sanitizable []string
+	for name, input := range inputs {
+		if requiresSanitizationCheck(input) {
+			sanitizable = append(sanitizable, name)
+		}
+	}
+	require.ElementsMatch(t, []string{"target"}, sanitizable, "the Boolean 'confirm' input must be excluded")
+
+	pattern := namedDispatchInputPattern(sanitizable)
+	violations := checkWorkflowFileForUnsanitizedDispatchInputs("wf.yml", workflow, pattern, true)
+	message := strings.Join(violations, "\n")
+	t.Log(message)
+
+	assert.Len(t, violations, 1, "only the non-exempt 'target' input should be flagged")
+	assert.Contains(t, message, "target")
+	assert.NotContains(t, message, "confirm")
+}
+
+func TestEvaluateCollaboratorInputSanitization(t *testing.T) {
+	tests := []struct {
+		name         string
+		workflows    []data.WorkflowFile
+		wantResult   gemara.Result
+		wantContains string
+	}{
+		{
+			name:         "direct use of a declared input fails",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputDirectUseWorkflow}},
+			wantResult:   gemara.Failed,
+			wantContains: "without sanitization",
+		},
+		{
+			name:         "safe env indirection passes",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputSafeEnvIndirectionWorkflow}},
+			wantResult:   gemara.Passed,
+			wantContains: "No unsanitized workflow_dispatch input",
+		},
+		{
+			name:         "a toJSON whole-object dump fails",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputToJSONWorkflow}},
+			wantResult:   gemara.Failed,
+			wantContains: "without sanitization",
+		},
+		{
+			name:         "a Boolean input used directly passes",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputBooleanWorkflow}},
+			wantResult:   gemara.Passed,
+			wantContains: "No unsanitized workflow_dispatch input",
+		},
+		{
+			name:         "a Choice input with declared options used directly passes",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputChoiceWithOptionsWorkflow}},
+			wantResult:   gemara.Passed,
+			wantContains: "No unsanitized workflow_dispatch input",
+		},
+		{
+			name:         "a Choice input without declared options used directly fails",
+			workflows:    []data.WorkflowFile{{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputChoiceWithoutOptionsWorkflow}},
+			wantResult:   gemara.Failed,
+			wantContains: "without sanitization",
+		},
+		{
+			name:         "no workflow_dispatch inputs anywhere is not applicable",
+			workflows:    []data.WorkflowFile{{Name: "push.yml", Path: "p/push.yml", Content: noDispatchTriggerWorkflow}},
+			wantResult:   gemara.NotApplicable,
+			wantContains: "no trusted collaborator input",
+		},
+		{
+			name:         "workflow_dispatch declared with no inputs is not applicable",
+			workflows:    []data.WorkflowFile{{Name: "dispatch.yml", Path: "p/dispatch.yml", Content: dispatchNoInputsWorkflow}},
+			wantResult:   gemara.NotApplicable,
+			wantContains: "no trusted collaborator input",
+		},
+		{
+			// A parse failure must not assert a control violation on a file we
+			// never understood; it degrades to NeedsReview, matching the
+			// convention established for OSPS-BR-01.03.
+			name:         "an unparseable file needs review rather than failing",
+			workflows:    []data.WorkflowFile{{Name: "broken.yml", Path: "p/broken.yml", Content: "this is not a workflow"}},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			name:         "a truncated file needs review rather than passing silently",
+			workflows:    []data.WorkflowFile{{Name: "huge.yml", Path: "p/huge.yml", Truncated: true}},
+			wantResult:   gemara.NeedsReview,
+			wantContains: "manual review required",
+		},
+		{
+			// A real violation must not be masked by an unreadable sibling,
+			// regardless of file ordering.
+			name: "a real violation outranks an unreadable sibling listed first",
+			workflows: []data.WorkflowFile{
+				{Name: "broken.yml", Path: "p/broken.yml", Content: "not a workflow"},
+				{Name: "deploy.yml", Path: "p/deploy.yml", Content: dispatchInputDirectUseWorkflow},
+			},
+			wantResult:   gemara.Failed,
+			wantContains: "without sanitization",
+		},
+		{
+			name:         "non-workflow extensions are ignored, not flagged",
+			workflows:    []data.WorkflowFile{{Name: "README.md", Path: "p/README.md", Content: "not a workflow"}},
+			wantResult:   gemara.NotApplicable,
+			wantContains: "no trusted collaborator input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message := evaluateCollaboratorInputSanitization(tt.workflows)
+			t.Log(message)
+			assert.Equal(t, tt.wantResult, result)
+			assert.Contains(t, message, tt.wantContains)
+		})
+	}
+}
+
+// A Payload with no repository data configured returns NotApplicable today,
+// using GetWorkflowFiles' own error as the message. This is inherited from
+// the same retrieval path used by every sibling step (BR-01.01, BR-01.03):
+// none of them distinguish "we could not check" from "this genuinely does
+// not apply" on a retrieval failure. Whether that should instead be
+// NeedsReview is a question shared by all of them and is better addressed as
+// a repo-wide follow-up than diverged on here.
+func TestCicdSanitizesCollaboratorInputNoWorkflows(t *testing.T) {
+	result, message, _ := CicdSanitizesCollaboratorInput(data.Payload{})
+	assert.Equal(t, gemara.NotApplicable, result)
+	assert.Contains(t, message, "missing required repository data")
+}

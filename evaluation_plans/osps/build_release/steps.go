@@ -898,3 +898,265 @@ func DependenciesUseStandardizedTooling(payload data.Payload) (result gemara.Res
 	}
 	return gemara.NeedsReview, "No dependency manifests found in the GitHub dependency graph. Review the project to confirm that any dependencies ingested by the build and release pipeline use standardized tooling.", confidence
 }
+
+// CicdSanitizesCollaboratorInput implements OSPS-BR-01.04: CI/CD pipelines
+// which accept trusted collaborator input MUST sanitize and validate that
+// input prior to use in the pipeline.
+//
+// "Trusted collaborator input" here is workflow_dispatch inputs: values a
+// collaborator with write access types in when manually triggering a
+// workflow. Unlike OSPS-BR-01.01's fixed list of GitHub-controlled untrusted
+// metadata, workflow_dispatch input names are workflow-specific, so this
+// check derives the sensitive expressions from each workflow's own declared
+// inputs, then flags any of them interpolated directly into a run: step's
+// script body - both a single named field (inputs.<name> or
+// github.event.inputs.<name>, anywhere in the expression, not just as its
+// entire body) and a dump of the whole inputs object (e.g.
+// toJSON(github.event.inputs)).
+//
+// Two exemptions are deliberate, not gaps:
+//
+//   - Boolean inputs, and Choice inputs with a declared option list, are not
+//     flagged even when used directly: GitHub itself rejects a dispatch
+//     value outside true/false or the declared options with a 422, which is
+//     the "exit on expected values" sanitization this control's
+//     recommendation describes. A Choice input with no declared options is a
+//     validation escape hatch and is still flagged.
+//
+//   - An input assigned to a step-level env: var and referenced as a shell
+//     variable (e.g. "$TARGET") is not flagged, matching the convention used
+//     by CicdSanitizedInputParameters (OSPS-BR-01.01): that indirection is
+//     the recommended mitigation. This is a static, syntactic boundary
+//     rather than a dataflow proof - re-interpolating the env context back
+//     into a run: script (${{ env.TARGET }}) reintroduces the same
+//     injection one hop later and is NOT analyzed by this check. Closing
+//     that gap needs tracking an env: assignment back to its input source
+//     across steps, which is follow-up territory beyond a per-expression
+//     static check.
+//
+//   - Failed: a workflow_dispatch input that requires sanitization is
+//     interpolated directly into a run: step's script body, either by name
+//     or as part of a whole-object dump.
+//
+//   - NeedsReview: one or more workflow files could not be read (truncated
+//     by the API or unparseable), so an unsanitized input could be hiding
+//     there.
+//
+//   - Passed: every declared workflow_dispatch input either requires no
+//     sanitization (Boolean, or Choice with declared options), is unused in
+//     run: steps, or is only referenced via the env: indirection above.
+//
+//   - NotApplicable: no workflow declares workflow_dispatch inputs, so there
+//     is no trusted collaborator input for a CI/CD pipeline to sanitize.
+func CicdSanitizesCollaboratorInput(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
+	var confidence gemara.ConfidenceLevel
+
+	workflows, err := payload.GetWorkflowFiles()
+	if len(workflows) == 0 {
+		message := "No workflows found in .github/workflows directory"
+		if err != nil {
+			message = err.Error()
+		}
+		return gemara.NotApplicable, message, confidence
+	}
+
+	result, message := evaluateCollaboratorInputSanitization(workflows)
+	return result, message, confidence
+}
+
+// evaluateCollaboratorInputSanitization decodes each workflow file, collects
+// its declared workflow_dispatch inputs, and checks run: steps for direct
+// interpolation of the ones that require sanitization (see
+// requiresSanitizationCheck). Separated from payload retrieval so the
+// classification logic is unit-testable without a payload fixture, mirroring
+// evaluateUntrustedCodeIsolation.
+func evaluateCollaboratorInputSanitization(workflows []data.WorkflowFile) (gemara.Result, string) {
+	var violations []string
+	var uninspected []string
+	hasDispatchInputs := false
+
+	for _, file := range workflows {
+		if !strings.HasSuffix(file.Name, ".yml") && !strings.HasSuffix(file.Name, ".yaml") {
+			continue
+		}
+		if file.Truncated {
+			uninspected = append(uninspected, fmt.Sprintf("%s (too large to retrieve)", file.Path))
+			continue
+		}
+		workflow, parseErr := actionlint.Parse([]byte(file.Content))
+		if parseErr != nil {
+			uninspected = append(uninspected, fmt.Sprintf("%s (%v)", file.Path, parseErr))
+			continue
+		}
+
+		inputs := workflowDispatchInputs(workflow)
+		if len(inputs) == 0 {
+			continue
+		}
+		hasDispatchInputs = true
+
+		var sanitizable []string
+		for name, input := range inputs {
+			if requiresSanitizationCheck(input) {
+				sanitizable = append(sanitizable, name)
+			}
+		}
+		if len(sanitizable) == 0 {
+			continue
+		}
+
+		namedPattern := namedDispatchInputPattern(sanitizable)
+		violations = append(violations, checkWorkflowFileForUnsanitizedDispatchInputs(file.Name, workflow, namedPattern, true)...)
+	}
+
+	if len(violations) > 0 {
+		return gemara.Failed,
+			"CI/CD pipelines use workflow_dispatch inputs without sanitization: " + strings.Join(violations, "; ")
+	}
+
+	if len(uninspected) > 0 {
+		return gemara.NeedsReview, fmt.Sprintf(
+			"Unable to evaluate %d of %d workflow files, manual review required: %s",
+			len(uninspected), len(workflows), strings.Join(uninspected, "; "))
+	}
+
+	if !hasDispatchInputs {
+		return gemara.NotApplicable,
+			"No workflow declares workflow_dispatch inputs; there is no trusted collaborator input for a CI/CD pipeline to sanitize"
+	}
+
+	return gemara.Passed,
+		"No unsanitized workflow_dispatch input was found interpolated directly in a run: step; inputs that GitHub " +
+			"itself validates (Boolean, option-constrained Choice) are exempt, and assignment to env: is treated as " +
+			"the mitigation boundary - this check does not trace env.* re-interpolation back into a script body"
+}
+
+// workflowDispatchInputs returns the DispatchInput values declared by a
+// workflow's workflow_dispatch trigger, keyed by input name. Keys are
+// already lower-cased by actionlint since GitHub Actions input names are
+// case-insensitive.
+func workflowDispatchInputs(workflow *actionlint.Workflow) map[string]*actionlint.DispatchInput {
+	inputs := map[string]*actionlint.DispatchInput{}
+	for _, event := range workflow.On {
+		dispatch, ok := event.(*actionlint.WorkflowDispatchEvent)
+		if !ok {
+			continue
+		}
+		for name, input := range dispatch.Inputs {
+			inputs[name] = input
+		}
+	}
+	return inputs
+}
+
+// workflowDispatchInputNames returns every workflow_dispatch input name
+// declared by a workflow, regardless of type. Used to detect whether the
+// control applies to a workflow at all; the subset that actually requires
+// sanitization is narrower, see requiresSanitizationCheck.
+func workflowDispatchInputNames(workflow *actionlint.Workflow) []string {
+	inputs := workflowDispatchInputs(workflow)
+	names := make([]string, 0, len(inputs))
+	for name := range inputs {
+		names = append(names, name)
+	}
+	return names
+}
+
+// requiresSanitizationCheck reports whether a workflow_dispatch input's value
+// is free text a workflow author must sanitize, as opposed to a value GitHub
+// itself constrains at dispatch time. Boolean inputs and Choice inputs with a
+// declared option list are excluded: the dispatch UI restricts the choices
+// offered and the REST API rejects any other value with a 422, which is the
+// "exit on expected values" sanitization this control's recommendation
+// describes - flagging them would be a false positive, not defense in depth.
+// A Choice input with no declared Options is a validation escape hatch and
+// still requires sanitization, as do String, Number, Environment, and
+// untyped inputs.
+func requiresSanitizationCheck(input *actionlint.DispatchInput) bool {
+	if input == nil {
+		return true
+	}
+	switch input.Type {
+	case actionlint.WorkflowDispatchEventInputTypeBoolean:
+		return false
+	case actionlint.WorkflowDispatchEventInputTypeChoice:
+		return len(input.Options) == 0
+	default:
+		return true
+	}
+}
+
+// namedDispatchInputPattern builds a regex matching either the
+// `inputs.<name>` or `github.event.inputs.<name>` context expression for any
+// of the given input names, anywhere within an expression rather than
+// anchored to its entire body. pullVariablesFromScript returns the whole
+// ${{ }} expression, so an ^...$ anchor only catches the bare form and misses
+// any compound expression that embeds the same reference, e.g.
+// inputs.target || 'default', format('--target={0}', inputs.target), or
+// inputs.target != ” && inputs.target || 'x'. The boundary guards
+// ((^|[^\w.-]) ... ($|[^-\w])) preserve the prefix-collision protection
+// (inputs.target must not match inputs.target2, including hyphenated names
+// like release-tag) without requiring an exact whole-expression match.
+func namedDispatchInputPattern(inputNames []string) *regexp.Regexp {
+	quoted := make([]string, len(inputNames))
+	for i, name := range inputNames {
+		quoted[i] = regexp.QuoteMeta(name)
+	}
+	return regexp.MustCompile(`(?i)(^|[^\w.-])(github\.event\.)?inputs\.(` + strings.Join(quoted, "|") + `)($|[^-\w])`)
+}
+
+// wholeDispatchInputsObjectPattern matches a direct reference to the entire
+// workflow_dispatch inputs object - e.g. toJSON(github.event.inputs) or a
+// bare ${{ inputs }} interpolation - rather than a single named field. A bulk
+// dump sidesteps the per-field exemption in requiresSanitizationCheck (it is
+// not constrained the way a single Boolean or option-list Choice field is),
+// so it is checked separately from namedDispatchInputPattern, which only
+// matches a specific `.field` accessor and deliberately does not match this
+// pattern (the tail guard excludes '.').
+var wholeDispatchInputsObjectPattern = regexp.MustCompile(`(?i)(^|[^\w.-])(github\.event\.)?inputs($|[^-\w.])`)
+
+// checkWorkflowFileForUnsanitizedDispatchInputs reports every run: step that
+// interpolates one of namedPattern's matched workflow_dispatch inputs, or (if
+// checkWholeObject) dumps the entire inputs object, directly into its script
+// body. Naming the job lets every offending step be found in one pass rather
+// than stopping at the first.
+func checkWorkflowFileForUnsanitizedDispatchInputs(fileName string, workflow *actionlint.Workflow, namedPattern *regexp.Regexp, checkWholeObject bool) []string {
+	var violations []string
+
+	for _, job := range workflow.Jobs {
+		if job == nil {
+			continue
+		}
+		jobID := "unknown"
+		if job.ID != nil && job.ID.Value != "" {
+			jobID = job.ID.Value
+		}
+
+		for _, step := range job.Steps {
+			if step == nil {
+				continue
+			}
+
+			run, ok := step.Exec.(*actionlint.ExecRun)
+			if !ok || run.Run == nil {
+				continue
+			}
+
+			for _, expr := range pullVariablesFromScript(run.Run.Value) {
+				trimmed := strings.TrimSpace(expr)
+				switch {
+				case namedPattern.MatchString(trimmed):
+					violations = append(violations, fmt.Sprintf(
+						"%s workflow job %q uses unsanitized workflow_dispatch input (%s) directly in a run step",
+						fileName, jobID, expr))
+				case checkWholeObject && wholeDispatchInputsObjectPattern.MatchString(trimmed):
+					violations = append(violations, fmt.Sprintf(
+						"%s workflow job %q dumps the entire workflow_dispatch inputs object (%s) directly in a run step",
+						fileName, jobID, expr))
+				}
+			}
+		}
+	}
+
+	return violations
+}
