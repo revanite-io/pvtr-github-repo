@@ -2070,3 +2070,222 @@ func TestCicdSanitizesCollaboratorInputNoWorkflows(t *testing.T) {
 	assert.Equal(t, gemara.NotApplicable, result)
 	assert.Contains(t, message, "missing required repository data")
 }
+
+// assetRelease builds a published release with the given tag, name, and assets.
+func assetRelease(tag, name string, assetNames ...string) data.ReleaseData {
+	assets := make([]data.ReleaseAsset, 0, len(assetNames))
+	for _, assetName := range assetNames {
+		assets = append(assets, data.ReleaseAsset{Name: assetName})
+	}
+	return data.ReleaseData{TagName: tag, Name: name, Assets: assets}
+}
+
+func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
+	tests := []struct {
+		name           string
+		payload        data.Payload
+		wantResult     gemara.Result
+		wantMsgPart    string
+		wantConfidence gemara.ConfidenceLevel
+	}{
+		{
+			name:           "nil rest data is unobservable",
+			payload:        data.Payload{},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "Release data is unavailable",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "release fetch error is unobservable",
+			payload: data.Payload{RestData: &data.RestData{
+				ReleasesError: assert.AnError,
+			}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "Release data is unavailable",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "no releases",
+			payload:        data.Payload{RestData: &data.RestData{}},
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "No published releases",
+			wantConfidence: gemara.High,
+		},
+		{
+			name: "draft-only releases do not apply",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				{TagName: "v-next", Draft: true, Assets: []data.ReleaseAsset{{Name: "app.zip"}}},
+			}}},
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "No published releases",
+			wantConfidence: gemara.High,
+		},
+		{
+			name: "releases without assets do not apply",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.0.0", ""),
+			}}},
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "no attached assets",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "assets embedding the tag pass",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.2.3", "", "mytool_v1.2.3_linux_amd64.tar.gz", "mytool_v1.2.3_windows.zip"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All release assets embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "assets embedding the tag without the v prefix pass",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.2.3", "", "mytool-1.2.3-linux.tar.gz"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All release assets embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "assets embedding the release name pass",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("", "2024.06", "mytool-2024.06.tgz"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All release assets embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "matching is case-insensitive",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("V1.2.3", "", "MyTool_v1.2.3_Linux.TAR.GZ"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All release assets embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "companion files are exempt",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.2.3", "",
+					"mytool_1.2.3_linux.tar.gz",
+					"mytool_1.2.3_linux.tar.gz.sha256",
+					"mytool_1.2.3_linux.tar.gz.sig",
+					"checksums.txt",
+					"LICENSE",
+					"app.spdx.json"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All release assets embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "unassociated asset needs review and is named",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.2.3", "", "mytool_1.2.3_linux.tar.gz", "mytool-latest-windows.zip"),
+			}}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "mytool-latest-windows.zip (release v1.2.3)",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "unassociated assets across releases are aggregated",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.0.0", "", "tool-nightly.zip"),
+				assetRelease("v2.0.0", "", "tool-2.0.0.zip", "tool-latest.zip"),
+			}}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "2 release asset(s) do not embed a release identifier",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "listing caps at five with an overflow note",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v9", "",
+					"a.zip", "b.zip", "c.zip", "d.zip", "e.zip", "f.zip", "g.zip"),
+			}}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "and 2 more",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "single-digit tag suffix does not overmatch",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1", "", "tool-build-7781.zip"),
+			}}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "do not embed a release identifier",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "companion-only releases need review",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.2.3", "", "checksums.txt", "app.spdx.json"),
+			}}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "only companion files",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "draft assets do not contaminate published releases",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				{TagName: "v-next", Draft: true, Assets: []data.ReleaseAsset{{Name: "unversioned.zip"}}},
+				assetRelease("v1.2.3", "", "mytool_1.2.3.zip"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All release assets embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, message, confidence := ReleaseAssetsAssociatedWithRelease(testCase.payload)
+			assert.Equal(t, testCase.wantResult, result, testCase.name)
+			assert.Contains(t, message, testCase.wantMsgPart, testCase.name)
+			assert.Equal(t, testCase.wantConfidence, confidence, testCase.name)
+		})
+	}
+}
+
+func TestReleaseIdentifierCandidates(t *testing.T) {
+	tests := []struct {
+		name    string
+		release data.ReleaseData
+		want    []string
+	}{
+		{"tag with v prefix", data.ReleaseData{TagName: "v1.2.3"}, []string{"v1.2.3", "1.2.3"}},
+		{"tag without v prefix", data.ReleaseData{TagName: "2024.06"}, []string{"2024.06"}},
+		{"short v tag keeps only the tag", data.ReleaseData{TagName: "v1"}, []string{"v1"}},
+		{"spaced release name is skipped", data.ReleaseData{Name: "Release 1.2.3"}, nil},
+		{"unspaced release name is kept", data.ReleaseData{TagName: "v1.2.3", Name: "1.2.3-hotfix"}, []string{"v1.2.3", "1.2.3", "1.2.3-hotfix"}},
+		{"empty release", data.ReleaseData{}, nil},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			assert.Equal(t, testCase.want, releaseIdentifierCandidates(testCase.release), testCase.name)
+		})
+	}
+}
+
+func TestIsReleaseAssetCompanion(t *testing.T) {
+	cases := map[string]bool{
+		"app.tar.gz.sha256":       true,
+		"app.tar.gz.sig":          true,
+		"app.tar.gz.asc":          true,
+		"provenance.intoto.jsonl": true,
+		"app.spdx.json":           true,
+		"app.cdx.json":            true,
+		"checksums.txt":           true,
+		"sha256sums":              true,
+		"license":                 true,
+		"readme.md":               true,
+		"app.tar.gz":              false,
+		"mytool-1.2.3.zip":        false,
+		"notes.txt":               false,
+	}
+	for name, want := range cases {
+		assert.Equal(t, want, isReleaseAssetCompanion(name), name)
+	}
+}
