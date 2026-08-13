@@ -2,9 +2,11 @@ package reusable_steps
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
+	sdkai "github.com/privateerproj/privateer-sdk/ai"
 )
 
 func NotImplemented(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
@@ -94,4 +96,28 @@ func AIFallback(payload data.Payload, controlID string, fallbackMessage string, 
 		payload.Config.Logger.Warn(controlID+": "+reason, "err", err)
 	}
 	return gemara.NeedsReview, fallbackMessage, gemara.Low
+}
+
+// ValidateAIResponse rejects responses that do not conform to the SDK's
+// assessment schema before a plugin records or acts on them.
+func ValidateAIResponse(response sdkai.Response) error {
+	switch response.Result {
+	case "pass", "fail", "needs_review":
+	default:
+		return fmt.Errorf("AI response result is invalid")
+	}
+
+	switch response.Confidence {
+	case "low", "medium", "high":
+	default:
+		return fmt.Errorf("AI response confidence is invalid")
+	}
+
+	if strings.TrimSpace(response.Message) == "" {
+		return fmt.Errorf("AI response message is required")
+	}
+	if strings.TrimSpace(response.Explanation) == "" {
+		return fmt.Errorf("AI response explanation is required")
+	}
+	return nil
 }
