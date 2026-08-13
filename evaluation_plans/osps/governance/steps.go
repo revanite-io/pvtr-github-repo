@@ -1,6 +1,7 @@
 package governance
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/gemaraproj/go-gemara"
@@ -145,4 +146,138 @@ func HasContributionReviewPolicy(payload data.Payload) (result gemara.Result, me
 	}
 
 	return gemara.Failed, "No contributor guide documenting requirements for acceptable contributions found in Security Insights data or repository files", gemara.Medium
+}
+
+// Vocabulary for OSPS-GV-04.01. All patterns are word-boundary anchored so
+// unrelated words cannot match as substrings.
+var (
+	// escalationVocabPattern recognizes text about collaborator roles and the
+	// permissions those roles carry.
+	escalationVocabPattern = regexp.MustCompile(`(?i)\b(?:maintainer|committer|collaborator|commit access|write access|push access|merge rights|admin(?:istrator)?\s+(?:role|rights|access)|elevated\s+(?:permissions?|privileges?|access)|escalated\s+permissions?|owner\s+role)\b`)
+
+	// reviewVocabPattern recognizes text about a person being reviewed,
+	// approved, nominated, or vetted.
+	reviewVocabPattern = regexp.MustCompile(`(?i)\b(?:review(?:ed)?|approv(?:e|ed|al)|nominat(?:e|ed|ion)|vote(?:d)?|consensus|sponsor(?:ed)?|vett(?:ed|ing))\b`)
+
+	// escalationObligationPattern recognizes language that makes the review a
+	// requirement rather than a description.
+	escalationObligationPattern = regexp.MustCompile(`(?i)\b(?:must|shall|required?|requires|only\s+(?:after|by|through|via)|needs?\s+to\s+be\s+approved)\b`)
+
+	// escalationNegationPattern recognizes language that disclaims or weakens
+	// the requirement within the same section, so contradictory prose is not
+	// credited as a definitive policy (the lesson from the VM-05 prose checks).
+	escalationNegationPattern = regexp.MustCompile(`(?i)\b(?:not\s+required|no\s+(?:formal\s+)?review|optional|informal(?:ly)?|do(?:es)?\s+not\s+require|without\s+(?:a\s+)?review)\b`)
+
+	// fencedCodeBlockPattern strips fenced code blocks before prose analysis so
+	// example snippets cannot satisfy or negate the policy vocabulary.
+	fencedCodeBlockPattern = regexp.MustCompile("(?s)```.*?```")
+)
+
+// escalationPolicySections splits a documentation file into markdown-heading
+// sections with fenced code blocks removed, so vocabulary co-occurrence is
+// judged within one topical section rather than across an entire file.
+func escalationPolicySections(content string) []string {
+	cleaned := fencedCodeBlockPattern.ReplaceAllString(content, "")
+	var sections []string
+	var current []string
+	flush := func() {
+		if len(current) > 0 {
+			sections = append(sections, strings.Join(current, "\n"))
+			current = nil
+		}
+	}
+	for _, line := range strings.Split(cleaned, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			flush()
+		}
+		current = append(current, line)
+	}
+	flush()
+	return sections
+}
+
+// classifyEscalationSection reports whether a section mentions collaborator
+// escalation together with review (mention), and whether it additionally states
+// the review as an uncontradicted requirement (policy).
+func classifyEscalationSection(section string) (mention bool, policy bool) {
+	if !escalationVocabPattern.MatchString(section) || !reviewVocabPattern.MatchString(section) {
+		return false, false
+	}
+	if !escalationObligationPattern.MatchString(section) {
+		return true, false
+	}
+	if escalationNegationPattern.MatchString(section) {
+		return true, false
+	}
+	return true, true
+}
+
+// HasEscalatedPermissionsReviewPolicy implements OSPS-GV-04.01: while active,
+// the project documentation MUST have a policy that code collaborators are
+// reviewed prior to granting escalated permissions to sensitive resources.
+//
+// This is distinct from GV-03.02 (requirements for acceptable contributions):
+// the subject here is the person receiving elevated access, not the change
+// being merged. Security Insights has no escalation-policy field, so evidence
+// is layered: repository documentation prose is scanned for a section that
+// pairs escalation vocabulary with review vocabulary; an uncontradicted
+// requirement Passes at Medium (heuristic prose match), a weaker pairing or a
+// declared Security Insights governance URL or a governance file needs human
+// review, and an observed absence of every signal Fails, mirroring GV-03.02's
+// terminal. Unreadable documentation is never reported as a violation.
+func HasEscalatedPermissionsReviewPolicy(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if !payload.IsCodeRepo {
+		return gemara.NotApplicable, "Repository contains no code - skipping escalated-permissions policy check", gemara.High
+	}
+
+	files, docsErr := payload.GetDocumentationFiles()
+	policyFile := ""
+	mentionFile := ""
+	for _, file := range files {
+		for _, section := range escalationPolicySections(file.Content) {
+			mention, policy := classifyEscalationSection(section)
+			if policy && policyFile == "" {
+				policyFile = file.Path
+			}
+			if mention && mentionFile == "" {
+				mentionFile = file.Path
+			}
+		}
+	}
+
+	if policyFile != "" {
+		return gemara.Passed, "Documentation requires code collaborators to be reviewed before receiving escalated permissions (" + policyFile + ")", gemara.Medium
+	}
+	if mentionFile != "" {
+		return gemara.NeedsReview, "Documentation discusses collaborator roles and review (" + mentionFile + ") but does not state an uncontradicted requirement that collaborators are reviewed before escalated permissions are granted; manual review required", gemara.Medium
+	}
+	if payload.RestData != nil && payload.Insights.Repository != nil &&
+		payload.Insights.Repository.Documentation != nil &&
+		payload.Insights.Repository.Documentation.Governance != nil {
+		return gemara.NeedsReview, "Governance documentation is declared in Security Insights; confirm it requires review of code collaborators before escalated permissions are granted", gemara.Medium
+	}
+	if file := governanceFilePresent(files); file != "" {
+		return gemara.NeedsReview, "A governance document (" + file + ") is present but no escalation-review policy language was recognized; manual review required", gemara.Low
+	}
+	if docsErr != nil {
+		return gemara.NeedsReview, "Repository documentation could not be fully read; manually review whether a collaborator escalation-review policy is documented", gemara.Low
+	}
+
+	return gemara.Failed, "No policy requiring review of code collaborators before granting escalated permissions was found in repository documentation or Security Insights data", gemara.Medium
+}
+
+// governanceFilePresent returns the path of a conventional governance or
+// maintainers document among the fetched documentation files, or "".
+func governanceFilePresent(files []data.DocumentationFile) string {
+	for _, file := range files {
+		base := strings.ToLower(file.Path)
+		if slash := strings.LastIndex(base, "/"); slash >= 0 {
+			base = base[slash+1:]
+		}
+		switch base {
+		case "governance.md", "governance", "maintainers.md", "maintainers":
+			return file.Path
+		}
+	}
+	return ""
 }
