@@ -150,23 +150,65 @@ func NoUnreviewableBinariesInRepo(payload data.Payload) (result gemara.Result, m
 	return gemara.Failed, fmt.Sprintf("Unreviewable binary artifacts found in the repository: %s", strings.Join(unreviewableBinaries, ", ")), confidence
 }
 
+// RequiresNonAuthorApproval implements OSPS-QA-07.01: the version control
+// system must require at least one non-author human approval of changes before
+// merging into the primary branch. GitHub natively forbids authors approving
+// their own pull requests, so a required approving review count of one or more
+// satisfies the non-author requirement.
+//
+// Evidence is drawn from two sources with different visibility. Repository
+// rulesets are publicly readable and are aggregated across every pull_request
+// rule that applies (GitHub enforces the union, so trusting the first rule
+// would make the verdict order-dependent). Classic branch protection is only
+// visible to admin tokens: for anyone else the GraphQL objects come back as
+// zero values indistinguishable from no protection, so an unobserved absence
+// is reported as NeedsReview rather than Failed (see issue #440, where both a
+// READ-token scan of docker/cli and a MAINTAIN-token scan of this repository
+// produced false Failed verdicts).
+//
+// When a review requirement exists but neither last-push approval nor
+// stale-review dismissal is enabled, commits pushed after an approval can merge
+// unreviewed. The catalog text only requires one non-author approval, so that
+// gap surfaces as NeedsReview rather than the previous hard Failed.
 func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	protection := payload.Repository.DefaultBranchRef.BranchProtectionRule
-
-	if !protection.RequiresApprovingReviews {
-		return gemara.Failed, "Branch protection rule does not require reviews", confidence
+	var ruleset data.PullRequestReviewRules
+	adminObservable := false
+	if payload.RepositoryMetadata != nil {
+		ruleset = payload.RepositoryMetadata.DefaultBranchPullRequestReviewRules()
+		adminObservable = payload.RepositoryMetadata.ViewerCanAdminister()
 	}
 
-	reviewCount := payload.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
-	if reviewCount < 1 {
-		return gemara.Failed, "Branch protection rule requires 0 approving reviews", confidence
+	classicRequires := false
+	classicCount := 0
+	classicLastPush := false
+	if payload.GraphqlRepoData != nil {
+		protection := payload.Repository.DefaultBranchRef.BranchProtectionRule
+		classicRequires = protection.RequiresApprovingReviews
+		classicCount = payload.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
+		classicLastPush = protection.RequireLastPushApproval
 	}
 
-	if !protection.RequireLastPushApproval {
-		return gemara.Failed, "Branch protection does not require re-approval after new commits", confidence
+	if ruleset.RequiredApprovals >= 1 || (classicRequires && classicCount >= 1) {
+		approvals := ruleset.RequiredApprovals
+		if classicCount > approvals {
+			approvals = classicCount
+		}
+		staleGapClosed := ruleset.RequireLastPushApproval || ruleset.DismissStaleReviews || classicLastPush
+		if staleGapClosed {
+			return gemara.Passed, fmt.Sprintf("The default branch requires %d non-author approving review(s), and approvals cannot carry commits pushed after the review to merge", approvals), gemara.High
+		}
+		return gemara.NeedsReview, fmt.Sprintf("The default branch requires %d non-author approving review(s), but neither last-push approval nor stale-review dismissal is enabled, so commits pushed after an approval can merge unreviewed; confirm the review process covers this gap", approvals), gemara.Medium
 	}
 
-	return gemara.Passed, fmt.Sprintf("Branch protection requires %d approving reviews and re-approval after new commits", reviewCount), confidence
+	// No review requirement was observed anywhere. Classic branch protection is
+	// invisible to non-admin tokens, so absence cannot be asserted without admin.
+	if !adminObservable {
+		return gemara.NeedsReview, "No required-review rule was observed, but classic branch protection is only visible to admin tokens; manually confirm whether the default branch requires a non-author approving review", gemara.Low
+	}
+	if !ruleset.Observed {
+		return gemara.NeedsReview, "Repository rulesets could not be observed; manually confirm whether the default branch requires a non-author approving review", gemara.Low
+	}
+	return gemara.Failed, "Neither repository rulesets nor classic branch protection requires an approving review before merging to the default branch", gemara.High
 }
 
 func HasOneOrMoreStatusChecks(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
