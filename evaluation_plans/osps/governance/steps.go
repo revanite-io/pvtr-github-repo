@@ -148,31 +148,136 @@ func HasContributionReviewPolicy(payload data.Payload) (result gemara.Result, me
 	return gemara.Failed, "No contributor guide documenting requirements for acceptable contributions found in Security Insights data or repository files", gemara.Medium
 }
 
-// Vocabulary for detecting an escalated-permissions review policy. All
-// patterns are word-boundary anchored so unrelated words cannot match as
-// substrings.
+// fencedCodeBlockPattern strips fenced code blocks before prose analysis so
+// example snippets cannot satisfy or negate the policy vocabulary.
+var fencedCodeBlockPattern = regexp.MustCompile("(?s)```.*?```")
+
+// escalationTokens lowercases prose and strips punctuation. No stemming is
+// attempted: vocabulary entries are written as stems and compared by prefix,
+// which handles inflection by construction rather than by guessing suffixes.
+func escalationTokens(text string) []string {
+	fields := strings.Fields(text)
+	tokens := make([]string, 0, len(fields))
+	for _, field := range fields {
+		token := strings.ToLower(strings.Trim(field, ".,;:!?()[]{}\"'`"))
+		if token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
+// escalationTokenMatches compares one prose token against one vocabulary token.
+// A vocabulary entry of four or more characters is treated as a stem, so
+// "approv" covers approve/approved/approval/approves/approving and "maintainer"
+// covers the plural, without enumerating forms. Short entries such as "to" must
+// match exactly, so they cannot match inside unrelated words.
+func escalationTokenMatches(token, vocabToken string) bool {
+	if len(vocabToken) >= 4 {
+		return strings.HasPrefix(token, vocabToken)
+	}
+	return token == vocabToken
+}
+
+// escalationVocabulary is a set of phrases, each one or more consecutive
+// normalized tokens. Extending a vocabulary means adding a string.
+type escalationVocabulary struct {
+	name    string
+	phrases [][]string
+}
+
+func newEscalationVocabulary(name string, entries ...string) escalationVocabulary {
+	vocabulary := escalationVocabulary{name: name}
+	for _, entry := range entries {
+		vocabulary.phrases = append(vocabulary.phrases, escalationTokens(entry))
+	}
+	return vocabulary
+}
+
+// find returns the index of the earliest matching phrase, or -1. It returns a
+// position rather than a bool because the control requires review *prior to*
+// escalation, and an ordering relation cannot be expressed with a bool.
+func (v escalationVocabulary) find(tokens []string) int {
+	earliest := -1
+	for _, phrase := range v.phrases {
+		if len(phrase) == 0 {
+			continue
+		}
+		for i := 0; i+len(phrase) <= len(tokens); i++ {
+			matched := true
+			for j, want := range phrase {
+				if !escalationTokenMatches(tokens[i+j], want) {
+					matched = false
+					break
+				}
+			}
+			if matched && (earliest == -1 || i < earliest) {
+				earliest = i
+			}
+		}
+	}
+	return earliest
+}
+
+func (v escalationVocabulary) has(tokens []string) bool { return v.find(tokens) >= 0 }
+
+// Vocabulary for the escalated-permissions review policy. Note the distinction
+// a single pattern cannot draw: a role noun ("maintainer") is not itself
+// evidence of escalation, while an access object ("write access") or a granting
+// verb applied to a role is. That separation is what keeps prose about
+// reviewing *changes* from being read as a policy about vetting *people*.
 var (
-	// escalationVocabPattern recognizes text about collaborator roles and the
-	// permissions those roles carry.
-	escalationVocabPattern = regexp.MustCompile(`(?i)\b(?:maintainer|committer|collaborator|commit access|write access|push access|merge rights|admin(?:istrator)?\s+(?:role|rights|access)|elevated\s+(?:permissions?|privileges?|access)|escalated\s+permissions?|owner\s+role)\b`)
+	escalationAccessVocab = newEscalationVocabulary("access",
+		"write access", "commit access", "push access", "merge right",
+		"elevated permission", "elevated privilege", "elevated access",
+		"escalated permission", "admin access", "admin right",
+		"owner role", "maintainer role", "committer role", "triage right",
+	)
 
-	// reviewVocabPattern recognizes text about a person being reviewed,
-	// approved, nominated, or vetted.
-	reviewVocabPattern = regexp.MustCompile(`(?i)\b(?:review(?:ed)?|approv(?:e|ed|al)|nominat(?:e|ed|ion)|vote(?:d)?|consensus|sponsor(?:ed)?|vett(?:ed|ing))\b`)
+	escalationGrantVocab = newEscalationVocabulary("grant",
+		"grant", "receiv", "promot", "added as", "becom", "onboard",
+		"elevated to",
+	)
 
-	// escalationObligationPattern recognizes language that makes the review a
-	// requirement rather than a description.
-	escalationObligationPattern = regexp.MustCompile(`(?i)\b(?:must|shall|required?|requires|only\s+(?:after|by|through|via)|needs?\s+to\s+be\s+approved)\b`)
+	escalationRoleVocab = newEscalationVocabulary("role",
+		"maintainer", "committer", "collaborator", "approver", "owner",
+	)
 
-	// escalationNegationPattern recognizes language that disclaims or weakens
-	// the requirement within the same section, so contradictory prose is not
-	// credited as a definitive policy (the lesson from the SCA policy prose
-	// checks in vuln_management).
-	escalationNegationPattern = regexp.MustCompile(`(?i)\b(?:not\s+required|no\s+(?:formal\s+)?review|optional|informal(?:ly)?|do(?:es)?\s+not\s+require|without\s+(?:a\s+)?review)\b`)
+	escalationReviewVocab = newEscalationVocabulary("review",
+		"review", "approv", "nominat", "vote", "consensus", "vett",
+		"sponsor", "endors",
+	)
 
-	// fencedCodeBlockPattern strips fenced code blocks before prose analysis so
-	// example snippets cannot satisfy or negate the policy vocabulary.
-	fencedCodeBlockPattern = regexp.MustCompile("(?s)```.*?```")
+	escalationObligationVocab = newEscalationVocabulary("obligation",
+		"must", "shall", "requir", "only after", "only by", "only through",
+		"only via", "need to be approv", "may not", "cannot",
+	)
+
+	// An explicit ordering cue is itself a statement of required sequence, so
+	// it also satisfies the obligation gate for declaratively-phrased policies
+	// that carry no modal verb.
+	escalationOrderingVocab = newEscalationVocabulary("ordering",
+		"before", "prior to", "only after", "until", "preced",
+	)
+
+	// Language that disclaims or weakens the requirement, so contradictory
+	// prose is not credited as a definitive policy (the lesson from the SCA
+	// policy prose checks in vuln_management). Evaluated per sentence rather
+	// than per section, so an unrelated "optional" elsewhere cannot suppress a
+	// real policy.
+	escalationNegationVocab = newEscalationVocabulary("negation",
+		"not requir", "no formal review", "no review", "optional",
+		"informal", "does not requir", "do not requir", "without review",
+		"without a review", "at their discretion",
+	)
+
+	// A heading such as "Becoming a Maintainer" establishes that the whole
+	// section concerns conferring a role, which lets sentences inside it omit
+	// the access object without losing the subject.
+	escalationHeadingVocab = newEscalationVocabulary("heading",
+		"becom", "adding", "onboard", "promotion", "nominat", "joining",
+		"new maintainer", "new committer",
+	)
 )
 
 // escalationPolicySections splits a documentation file into markdown-heading
@@ -198,20 +303,79 @@ func escalationPolicySections(content string) []string {
 	return sections
 }
 
+// escalationSentences splits a section into sentences. Judging co-occurrence
+// per sentence rather than per section is what ties the review verb to the
+// escalation it governs.
+func escalationSentences(section string) []string {
+	var sentences []string
+	var current strings.Builder
+	flush := func() {
+		if sentence := strings.TrimSpace(current.String()); sentence != "" {
+			sentences = append(sentences, sentence)
+		}
+		current.Reset()
+	}
+	for _, r := range section {
+		current.WriteRune(r)
+		if r == '.' || r == ';' || r == '!' || r == '\n' {
+			flush()
+		}
+	}
+	flush()
+	return sentences
+}
+
 // classifyEscalationSection reports whether a section mentions collaborator
 // escalation together with review (mention), and whether it additionally states
 // the review as an uncontradicted requirement (policy).
+//
+// A section carries its own heading as its first line, so heading context is
+// available without changing the caller.
 func classifyEscalationSection(section string) (mention bool, policy bool) {
-	if !escalationVocabPattern.MatchString(section) || !reviewVocabPattern.MatchString(section) {
-		return false, false
+	heading, _, _ := strings.Cut(section, "\n")
+	headingTokens := escalationTokens(heading)
+	headingConfersRole := escalationHeadingVocab.has(headingTokens) &&
+		escalationRoleVocab.has(headingTokens)
+
+	for _, sentence := range escalationSentences(section) {
+		tokens := escalationTokens(sentence)
+
+		reviewAt := escalationReviewVocab.find(tokens)
+		if reviewAt < 0 {
+			continue
+		}
+
+		// The escalation subject must be an access object, or a granting verb
+		// applied to a role -- not a bare role noun. This is what stops
+		// "requires approval from a maintainer", which is about reviewing a
+		// change, from counting as evidence about granting access to a person.
+		escalationAt := escalationAccessVocab.find(tokens)
+		if escalationAt < 0 && escalationGrantVocab.has(tokens) && escalationRoleVocab.has(tokens) {
+			escalationAt = escalationGrantVocab.find(tokens)
+		}
+		if escalationAt < 0 && !headingConfersRole {
+			continue
+		}
+
+		mention = true
+
+		explicitOrder := escalationOrderingVocab.has(tokens)
+		if !escalationObligationVocab.has(tokens) && !explicitOrder {
+			continue
+		}
+		if escalationNegationVocab.has(tokens) {
+			continue
+		}
+		// Reviewed prior to granting: an explicit cue is strongest, otherwise
+		// the review term appearing ahead of the escalation term is weaker
+		// positional evidence of the same ordering.
+		if !explicitOrder && escalationAt >= 0 && reviewAt > escalationAt {
+			continue
+		}
+		policy = true
 	}
-	if !escalationObligationPattern.MatchString(section) {
-		return true, false
-	}
-	if escalationNegationPattern.MatchString(section) {
-		return true, false
-	}
-	return true, true
+
+	return mention, policy
 }
 
 // HasEscalatedPermissionsReviewPolicy checks that the project documentation
@@ -261,8 +425,8 @@ func HasEscalatedPermissionsReviewPolicy(payload data.Payload) (result gemara.Re
 	if file := governanceFilePresent(files); file != "" {
 		return gemara.NeedsReview, "A governance document (" + file + ") is present but no escalation-review policy language was recognized; manual review required", gemara.Low
 	}
-	if docsErr != nil {
-		return gemara.NeedsReview, "Repository documentation could not be fully read; manually review whether a collaborator escalation-review policy is documented", gemara.Low
+	if docsErr != nil || (payload.RestData != nil && payload.InsightsError) {
+		return gemara.NeedsReview, "Repository documentation or Security Insights could not be completely inspected; manually review whether a collaborator escalation-review policy is documented", gemara.Low
 	}
 
 	return gemara.Failed, "No policy requiring review of code collaborators before granting escalated permissions was found in repository documentation or Security Insights data", gemara.Medium

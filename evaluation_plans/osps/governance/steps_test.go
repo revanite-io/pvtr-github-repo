@@ -377,6 +377,8 @@ func TestHasEscalatedPermissionsReviewPolicy(t *testing.T) {
 	const mentionOnly = "# Roles\n\nNew maintainers typically get write access after a review by the core team.\n"
 	const splitSections = "# Roles\n\nMaintainers hold write access.\n\n# Reviews\n\nAll pull requests must be reviewed and approved.\n"
 	const fencedOnly = "# Setup\n\n```\nNew maintainers must be approved before receiving write access.\n```\n"
+	const pluralOnlyPolicy = "# Becoming a maintainer\n\nNew maintainers must be nominated and approved by a vote of existing maintainers.\n"
+	const reviewOfChangesOnly = "# Contributing\n\nEvery pull request requires approval from a maintainer listed in CODEOWNERS.\n"
 
 	tests := []struct {
 		name           string
@@ -438,7 +440,32 @@ func TestHasEscalatedPermissionsReviewPolicy(t *testing.T) {
 			name:           "unreadable documentation needs review",
 			payload:        data.Payload{IsCodeRepo: true},
 			wantResult:     gemara.NeedsReview,
-			wantMsgPart:    "could not be fully read",
+			wantMsgPart:    "could not be completely inspected",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "plural role nouns without an access phrase still pass",
+			payload:        escalationDocsPayload("GOVERNANCE.md", pluralOnlyPolicy),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "GOVERNANCE.md",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "review of changes is not a policy about vetting people",
+			payload:        escalationDocsPayload("CONTRIBUTING.md", reviewOfChangesOnly),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "unparseable security insights needs review instead of failing",
+			payload: func() data.Payload {
+				payload := escalationDocsPayload("README.md", "# Hello\n\nA library.\n")
+				payload.InsightsError = true
+				return payload
+			}(),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "could not be completely inspected",
 			wantConfidence: gemara.Low,
 		},
 		{
