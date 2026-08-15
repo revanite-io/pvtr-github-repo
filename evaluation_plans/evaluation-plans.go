@@ -124,7 +124,7 @@ var (
 			governance.HasContributionReviewPolicy,
 		},
 		"OSPS-GV-04.01": {
-			reusable_steps.NotImplemented,
+			governance.HasEscalatedPermissionsReviewPolicy,
 		},
 		"OSPS-LE-01.01": {
 			reusable_steps.GithubTermsOfService,

@@ -355,3 +355,202 @@ func TestHasRolesAndResponsibilities(t *testing.T) {
 		})
 	}
 }
+
+// escalationDocsPayload builds a code-repo payload whose root contains a single
+// documentation file with the given content.
+func escalationDocsPayload(fileName, content string) data.Payload {
+	return data.NewPayloadWithRepoContents(
+		data.Payload{IsCodeRepo: true},
+		[]*github.RepositoryContent{{
+			Type:    github.Ptr("file"),
+			Name:    github.Ptr(fileName),
+			Path:    github.Ptr(fileName),
+			Content: github.Ptr(content),
+		}},
+		map[string][]*github.RepositoryContent{},
+	)
+}
+
+func TestHasEscalatedPermissionsReviewPolicy(t *testing.T) {
+	const clearPolicy = "# Becoming a maintainer\n\nNew maintainers must be approved by two existing maintainers before receiving write access.\n"
+	const negatedPolicy = "# Becoming a maintainer\n\nMaintainers must have write access, though a formal review is optional for long-time contributors.\n"
+	const mentionOnly = "# Roles\n\nNew maintainers typically get write access after a review by the core team.\n"
+	const splitSections = "# Roles\n\nMaintainers hold write access.\n\n# Reviews\n\nAll pull requests must be reviewed and approved.\n"
+	const fencedOnly = "# Setup\n\n```\nNew maintainers must be approved before receiving write access.\n```\n"
+	const pluralOnlyPolicy = "# Becoming a maintainer\n\nNew maintainers must be nominated and approved by a vote of existing maintainers.\n"
+	const reviewOfChangesOnly = "# Contributing\n\nEvery pull request requires approval from a maintainer listed in CODEOWNERS.\n"
+	const unterminatedFence = "# Setup\n\n```\nNew maintainers must be approved before receiving write access.\n"
+	const tildeFence = "# Setup\n\n~~~\nNew maintainers must be approved before receiving write access.\n~~~\n"
+	const quotedRequirement = "# Compliance\n\n> While active, the project documentation MUST have a policy that code contributors are reviewed prior to granting escalated permissions to sensitive resources.\n"
+	const calloutPolicy = "# Governance\n\n> Note: New maintainers must be approved before receiving write access.\n"
+
+	tests := []struct {
+		name           string
+		payload        data.Payload
+		wantResult     gemara.Result
+		wantMsgPart    string
+		wantConfidence gemara.ConfidenceLevel
+	}{
+		{
+			name:           "non-code repository is not applicable",
+			payload:        data.Payload{},
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "no code",
+			wantConfidence: gemara.High,
+		},
+		{
+			name:           "uncontradicted requirement passes",
+			payload:        escalationDocsPayload("GOVERNANCE.md", clearPolicy),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "GOVERNANCE.md",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "negated requirement needs review",
+			payload:        escalationDocsPayload("GOVERNANCE.md", negatedPolicy),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "does not state an uncontradicted requirement",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "mention without obligation needs review",
+			payload:        escalationDocsPayload("README.md", mentionOnly),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "does not state an uncontradicted requirement",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "vocabulary split across sections is not a mention",
+			payload:        escalationDocsPayload("README.md", splitSections),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "policy text inside a code fence is not credited",
+			payload:        escalationDocsPayload("README.md", fencedOnly),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "governance file without policy language needs review",
+			payload:        escalationDocsPayload("GOVERNANCE.md", "# Governance\n\nTBD.\n"),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "governance document (GOVERNANCE.md)",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "unreadable documentation needs review",
+			payload:        data.Payload{IsCodeRepo: true},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "could not be completely inspected",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "policy inside an unterminated code fence is not credited",
+			payload:        escalationDocsPayload("README.md", unterminatedFence),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "policy inside a tilde code fence is not credited",
+			payload:        escalationDocsPayload("README.md", tildeFence),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "blockquoted requirement text is not credited as a policy",
+			payload:        escalationDocsPayload("README.md", quotedRequirement),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "policy stated only in a blockquote defers to governance-file review",
+			payload:        escalationDocsPayload("GOVERNANCE.md", calloutPolicy),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "governance document (GOVERNANCE.md)",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "plural role nouns without an access phrase still pass",
+			payload:        escalationDocsPayload("GOVERNANCE.md", pluralOnlyPolicy),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "GOVERNANCE.md",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "review of changes is not a policy about vetting people",
+			payload:        escalationDocsPayload("CONTRIBUTING.md", reviewOfChangesOnly),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "unparseable security insights needs review instead of failing",
+			payload: func() data.Payload {
+				payload := escalationDocsPayload("README.md", "# Hello\n\nA library.\n")
+				payload.InsightsError = true
+				return payload
+			}(),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "could not be completely inspected",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "no signals fails",
+			payload:        escalationDocsPayload("README.md", "# Hello\n\nA library.\n"),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, message, confidence := HasEscalatedPermissionsReviewPolicy(testCase.payload)
+			assert.Equal(t, testCase.wantResult, result, testCase.name)
+			assert.Contains(t, message, testCase.wantMsgPart, testCase.name)
+			assert.Equal(t, testCase.wantConfidence, confidence, testCase.name)
+		})
+	}
+}
+
+func TestHasEscalatedPermissionsReviewPolicySecurityInsightsFallback(t *testing.T) {
+	payload := escalationDocsPayload("README.md", "# Hello\n\nA library.\n")
+	payload.Insights.Repository = &si.Repository{
+		Documentation: &si.RepositoryDocumentation{Governance: stubURL("https://example.com/governance")},
+	}
+
+	result, message, confidence := HasEscalatedPermissionsReviewPolicy(payload)
+	assert.Equal(t, gemara.NeedsReview, result)
+	assert.Contains(t, message, "declared in Security Insights")
+	assert.Equal(t, gemara.Medium, confidence)
+}
+
+func TestClassifyEscalationSection(t *testing.T) {
+	tests := []struct {
+		name        string
+		section     string
+		wantMention bool
+		wantPolicy  bool
+	}{
+		{"requirement", "new maintainers must be approved before write access", true, true},
+		{"only after", "write access is granted only after review by the tsc", true, true},
+		{"negated", "maintainers must be reviewed, but approval is not required for write access", true, false},
+		{"no obligation", "maintainers were reviewed when they got write access", true, false},
+		{"escalation only", "maintainers hold write access", false, false},
+		{"review only", "all changes must be reviewed and approved", false, false},
+		{"empty", "", false, false},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			mention, policy := classifyEscalationSection(testCase.section)
+			assert.Equal(t, testCase.wantMention, mention, "mention: "+testCase.name)
+			assert.Equal(t, testCase.wantPolicy, policy, "policy: "+testCase.name)
+		})
+	}
+}
