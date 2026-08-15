@@ -379,6 +379,10 @@ func TestHasEscalatedPermissionsReviewPolicy(t *testing.T) {
 	const fencedOnly = "# Setup\n\n```\nNew maintainers must be approved before receiving write access.\n```\n"
 	const pluralOnlyPolicy = "# Becoming a maintainer\n\nNew maintainers must be nominated and approved by a vote of existing maintainers.\n"
 	const reviewOfChangesOnly = "# Contributing\n\nEvery pull request requires approval from a maintainer listed in CODEOWNERS.\n"
+	const unterminatedFence = "# Setup\n\n```\nNew maintainers must be approved before receiving write access.\n"
+	const tildeFence = "# Setup\n\n~~~\nNew maintainers must be approved before receiving write access.\n~~~\n"
+	const quotedRequirement = "# Compliance\n\n> While active, the project documentation MUST have a policy that code contributors are reviewed prior to granting escalated permissions to sensitive resources.\n"
+	const calloutPolicy = "# Governance\n\n> Note: New maintainers must be approved before receiving write access.\n"
 
 	tests := []struct {
 		name           string
@@ -441,6 +445,34 @@ func TestHasEscalatedPermissionsReviewPolicy(t *testing.T) {
 			payload:        data.Payload{IsCodeRepo: true},
 			wantResult:     gemara.NeedsReview,
 			wantMsgPart:    "could not be completely inspected",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "policy inside an unterminated code fence is not credited",
+			payload:        escalationDocsPayload("README.md", unterminatedFence),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "policy inside a tilde code fence is not credited",
+			payload:        escalationDocsPayload("README.md", tildeFence),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "blockquoted requirement text is not credited as a policy",
+			payload:        escalationDocsPayload("README.md", quotedRequirement),
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "No policy requiring review",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "policy stated only in a blockquote defers to governance-file review",
+			payload:        escalationDocsPayload("GOVERNANCE.md", calloutPolicy),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "governance document (GOVERNANCE.md)",
 			wantConfidence: gemara.Low,
 		},
 		{

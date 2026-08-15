@@ -1,7 +1,6 @@
 package governance
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/gemaraproj/go-gemara"
@@ -148,10 +147,6 @@ func HasContributionReviewPolicy(payload data.Payload) (result gemara.Result, me
 	return gemara.Failed, "No contributor guide documenting requirements for acceptable contributions found in Security Insights data or repository files", gemara.Medium
 }
 
-// fencedCodeBlockPattern strips fenced code blocks before prose analysis so
-// example snippets cannot satisfy or negate the policy vocabulary.
-var fencedCodeBlockPattern = regexp.MustCompile("(?s)```.*?```")
-
 // escalationTokens lowercases prose and strips punctuation. No stemming is
 // attempted: vocabulary entries are written as stems and compared by prefix,
 // which handles inflection by construction rather than by guessing suffixes.
@@ -284,17 +279,38 @@ var (
 // sections with fenced code blocks removed, so vocabulary co-occurrence is
 // judged within one topical section rather than across an entire file.
 func escalationPolicySections(content string) []string {
-	cleaned := fencedCodeBlockPattern.ReplaceAllString(content, "")
-	var sections []string
-	var current []string
+	var (
+		sections []string
+		current  []string
+		inFence  bool
+	)
 	flush := func() {
 		if len(current) > 0 {
 			sections = append(sections, strings.Join(current, "\n"))
 			current = nil
 		}
 	}
-	for _, line := range strings.Split(cleaned, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Tracking fence state as we scan, rather than matching balanced pairs,
+		// means an unterminated fence swallows the rest of the file instead of
+		// leaving its contents to be read as prose. It also covers ~~~ fences.
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		// Blockquotes are skipped, matching the vuln_management scanner: the
+		// common governance blockquote quotes the requirement being satisfied,
+		// which contains exactly the vocabulary that would earn an unearned
+		// Pass. A policy stated only inside a callout degrades to the
+		// governance-file NeedsReview branch rather than being credited.
+		if strings.HasPrefix(trimmed, ">") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
 			flush()
 		}
 		current = append(current, line)
