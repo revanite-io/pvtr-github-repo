@@ -570,9 +570,9 @@ func releaseAssetLabel(release data.ReleaseData) string {
 	return "(unnamed)"
 }
 
-// ReleaseAssetsAssociatedWithRelease implements OSPS-BR-02.02: when an official
-// release is created, all assets within that release MUST be clearly associated
-// with the release identifier or another unique identifier for the asset.
+// ReleaseAssetsAssociatedWithRelease checks that when an official release is
+// created, all assets within that release are clearly associated with the
+// release identifier or another unique identifier for the asset.
 //
 // GitHub structurally attaches every asset to its release, so the observable
 // question is whether each asset's name also carries the release identifier
