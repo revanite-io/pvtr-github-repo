@@ -150,9 +150,9 @@ func NoUnreviewableBinariesInRepo(payload data.Payload) (result gemara.Result, m
 	return gemara.Failed, fmt.Sprintf("Unreviewable binary artifacts found in the repository: %s", strings.Join(unreviewableBinaries, ", ")), confidence
 }
 
-// RequiresNonAuthorApproval implements OSPS-QA-07.01: the version control
-// system must require at least one non-author human approval of changes before
-// merging into the primary branch. GitHub natively forbids authors approving
+// RequiresNonAuthorApproval checks that the version control system requires
+// at least one non-author human approval of changes before merging into the
+// primary branch. GitHub natively forbids authors approving
 // their own pull requests, so a required approving review count of one or more
 // satisfies the non-author requirement.
 //
