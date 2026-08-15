@@ -148,8 +148,9 @@ func HasContributionReviewPolicy(payload data.Payload) (result gemara.Result, me
 	return gemara.Failed, "No contributor guide documenting requirements for acceptable contributions found in Security Insights data or repository files", gemara.Medium
 }
 
-// Vocabulary for OSPS-GV-04.01. All patterns are word-boundary anchored so
-// unrelated words cannot match as substrings.
+// Vocabulary for detecting an escalated-permissions review policy. All
+// patterns are word-boundary anchored so unrelated words cannot match as
+// substrings.
 var (
 	// escalationVocabPattern recognizes text about collaborator roles and the
 	// permissions those roles carry.
@@ -165,7 +166,8 @@ var (
 
 	// escalationNegationPattern recognizes language that disclaims or weakens
 	// the requirement within the same section, so contradictory prose is not
-	// credited as a definitive policy (the lesson from the VM-05 prose checks).
+	// credited as a definitive policy (the lesson from the SCA policy prose
+	// checks in vuln_management).
 	escalationNegationPattern = regexp.MustCompile(`(?i)\b(?:not\s+required|no\s+(?:formal\s+)?review|optional|informal(?:ly)?|do(?:es)?\s+not\s+require|without\s+(?:a\s+)?review)\b`)
 
 	// fencedCodeBlockPattern strips fenced code blocks before prose analysis so
@@ -212,19 +214,19 @@ func classifyEscalationSection(section string) (mention bool, policy bool) {
 	return true, true
 }
 
-// HasEscalatedPermissionsReviewPolicy implements OSPS-GV-04.01: while active,
-// the project documentation MUST have a policy that code collaborators are
-// reviewed prior to granting escalated permissions to sensitive resources.
+// HasEscalatedPermissionsReviewPolicy checks that the project documentation
+// has a policy that code collaborators are reviewed prior to granting
+// escalated permissions to sensitive resources.
 //
-// This is distinct from GV-03.02 (requirements for acceptable contributions):
-// the subject here is the person receiving elevated access, not the change
-// being merged. Security Insights has no escalation-policy field, so evidence
+// This is distinct from HasContributionReviewPolicy (requirements for
+// acceptable contributions): the subject here is the person receiving elevated
+// access, not the change being merged. Security Insights has no escalation-policy field, so evidence
 // is layered: repository documentation prose is scanned for a section that
 // pairs escalation vocabulary with review vocabulary; an uncontradicted
 // requirement Passes at Medium (heuristic prose match), a weaker pairing or a
 // declared Security Insights governance URL or a governance file needs human
-// review, and an observed absence of every signal Fails, mirroring GV-03.02's
-// terminal. Unreadable documentation is never reported as a violation.
+// review, and an observed absence of every signal Fails, mirroring
+// HasContributionReviewPolicy's terminal. Unreadable documentation is never reported as a violation.
 func HasEscalatedPermissionsReviewPolicy(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	if !payload.IsCodeRepo {
 		return gemara.NotApplicable, "Repository contains no code - skipping escalated-permissions policy check", gemara.High
