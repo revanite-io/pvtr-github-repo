@@ -8,6 +8,7 @@ import (
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/markdown"
 	"github.com/ossf/si-tooling/v2/si"
 	"github.com/rhysd/actionlint"
 )
@@ -781,7 +782,6 @@ var (
 	scopeNegationPattern          = regexp.MustCompile(`\b(?:not all|not every|only some|only selected)\s+(?:code\s+)?changes?\b`)
 	negatedRemediationPattern     = regexp.MustCompile(`\bnot\s+(?:be\s+)?(?:address(?:ed)?|remediat(?:e|ed)?|resolv(?:e|ed)?|fix(?:ed)?|remov(?:e|ed)?|replac(?:e|ed)?|reject(?:ed)?|block(?:ed)?)\b`)
 	sentenceSplitPattern          = regexp.MustCompile(`[.!?;]+(?:\s+|$)`)
-	htmlCommentPattern            = regexp.MustCompile(`(?s)<!--.*?-->`)
 )
 
 var scaToolKeywords = []string{"software composition", "dependency scanning", "dependency analysis", "composition analysis"}
@@ -1449,35 +1449,15 @@ func repositoryDocumentation(payload data.Payload) ([]data.DocumentationFile, er
 	return files, err
 }
 
+// documentationSections returns the prose sections of a documentation file,
+// lowercased and collapsed onto a single line each. The downstream matchers
+// compare against lowercase literals and expect no line breaks inside a
+// statement, so the normalization happens here rather than in markdown.Sections.
 func documentationSections(content string) []string {
-	content = htmlCommentPattern.ReplaceAllString(content, "")
-	var (
-		sections []string
-		current  []string
-		inFence  bool
-	)
-	flush := func() {
-		section := strings.ToLower(strings.Join(strings.Fields(strings.Join(current, "\n")), " "))
-		if strings.TrimSpace(section) != "" {
-			sections = append(sections, section)
-		}
-		current = nil
+	var sections []string
+	for _, section := range markdown.Sections(content) {
+		sections = append(sections, strings.ToLower(strings.Join(strings.Fields(section), " ")))
 	}
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
-			continue
-		}
-		if inFence || strings.HasPrefix(trimmed, ">") {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#") {
-			flush()
-		}
-		current = append(current, line)
-	}
-	flush()
 	return sections
 }
 
