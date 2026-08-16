@@ -237,10 +237,9 @@ func summarizeFileList(files []string) string {
 	return fmt.Sprintf("%s, and %d more", strings.Join(files[:max], ", "), len(files)-max)
 }
 
-// WorkflowJobPermissionsLeastPrivilege implements OSPS-AC-04.02: when a job is
-// assigned permissions in a CI/CD pipeline, the source code or configuration
-// must only assign the minimum privileges necessary for the corresponding
-// activity.
+// WorkflowJobPermissionsLeastPrivilege assesses whether a CI/CD job that is
+// assigned permissions is granted only the minimum privileges necessary for the
+// corresponding activity.
 //
 // It inspects the workflow-level and job-level `permissions:` blocks of every
 // GitHub Actions workflow. A `write-all` grant gives the job's GITHUB_TOKEN
