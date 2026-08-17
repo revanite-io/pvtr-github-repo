@@ -8,6 +8,7 @@ import (
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
 	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
+	"github.com/ossf/si-tooling/v2/si"
 	sdkai "github.com/privateerproj/privateer-sdk/ai"
 )
 
@@ -40,6 +41,99 @@ func InsightsListsRepositories(payload data.Payload) (result gemara.Result, mess
 	}
 
 	return gemara.Failed, "Insights does not contain a list of repositories", confidence
+}
+
+// SubprojectsEnforceSecurityRequirements assesses OSPS-QA-04.02: when the
+// project has made a release comprising multiple source code repositories,
+// all subprojects must enforce security requirements that are as strict or
+// stricter than the primary codebase.
+//
+// The scanner evaluates a single repository per run, so it cannot compare
+// security enforcement across repositories. This step instead narrows the
+// result as far as the payload allows: it rules the requirement out when no
+// release exists or when Security Insights lists no repositories beyond the
+// one under evaluation, and otherwise degrades to manual review with the
+// subproject repositories a reviewer needs to inspect named in the message.
+func SubprojectsEnforceSecurityRequirements(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	// The requirement only applies once a release exists.
+	released, observable := reusable_steps.HasPublishedRelease(payload)
+	if !observable {
+		return gemara.NeedsReview, "Release data is unavailable; manually review whether a release comprises multiple repositories and whether all subprojects enforce security requirements as strict as the primary codebase", gemara.Low
+	}
+	if !released {
+		return gemara.NotApplicable, "No published releases found; the subproject security requirement does not apply", gemara.High
+	}
+
+	// Security Insights is the only observable source for the project's
+	// repository list (OSPS-QA-04.01 requires multi-repo projects to publish
+	// it there). Without it the scanner cannot tell whether subprojects exist.
+	if payload.InsightsError {
+		return gemara.NeedsReview, "Security Insights content could not be parsed, so the project's repository list is unknown; manually review whether release subprojects enforce security requirements as strict as the primary codebase", gemara.Low
+	}
+	if payload.Insights.Header.URL == "" {
+		return gemara.NeedsReview, "No Security Insights file was found, so the project's repository list is unknown; manually review whether release subprojects enforce security requirements as strict as the primary codebase", gemara.Low
+	}
+
+	subprojects := subprojectRepositories(payload.Insights)
+	if len(subprojects) == 0 {
+		return gemara.NotApplicable, "Security Insights lists no repositories beyond the one under evaluation, so no release subprojects are in scope", gemara.Medium
+	}
+
+	repoWord := "repositories"
+	if len(subprojects) == 1 {
+		repoWord = "repository"
+	}
+	return gemara.NeedsReview, fmt.Sprintf(
+		"Security Insights lists %d additional project %s (%s); the scanner evaluates one repository at a time, so manually verify each subproject enforces security requirements as strict or stricter than the primary codebase",
+		len(subprojects), repoWord, strings.Join(subprojects, ", ")), gemara.Low
+}
+
+// subprojectRepositories returns the URLs of repositories listed in Security
+// Insights other than the repository under evaluation. The SI specification
+// requires project.repositories to include the current repository, so entries
+// matching repository.url are filtered out; when repository.url is absent,
+// every listed entry counts. Results are deduplicated and reported in their
+// original (non-normalized) form so messages stay recognizable.
+func subprojectRepositories(insights si.SecurityInsights) []string {
+	if insights.Project == nil {
+		return nil
+	}
+
+	self := ""
+	if insights.Repository != nil {
+		self = normalizeRepoURL(string(insights.Repository.Url))
+	}
+
+	var subprojects []string
+	seen := map[string]bool{}
+	for _, repo := range insights.Project.Repositories {
+		url := normalizeRepoURL(string(repo.Url))
+		if url == "" || url == self || seen[url] {
+			continue
+		}
+		seen[url] = true
+		subprojects = append(subprojects, strings.TrimSpace(string(repo.Url)))
+	}
+	return subprojects
+}
+
+// normalizeRepoURL canonicalizes a repository URL for equality checks:
+// lowercased, scheme and "www." stripped, and trailing slashes and a ".git"
+// suffix removed. Git remote forms (git@host:owner/repo) reduce to
+// host/owner/repo so they match their https equivalents.
+func normalizeRepoURL(raw string) string {
+	url := strings.ToLower(strings.TrimSpace(raw))
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimPrefix(url, "ssh://")
+	url = strings.TrimPrefix(url, "git://")
+	if rest, ok := strings.CutPrefix(url, "git@"); ok {
+		url = strings.Replace(rest, ":", "/", 1)
+	}
+	url = strings.TrimPrefix(url, "www.")
+	url = strings.TrimSuffix(url, "/")
+	url = strings.TrimSuffix(url, ".git")
+	return url
 }
 
 func StatusChecksAreRequiredByRulesets(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
