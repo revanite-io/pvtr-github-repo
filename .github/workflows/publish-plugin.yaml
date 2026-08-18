@@ -1,0 +1,66 @@
+---
+name: "Publish plugin to grc.store"
+
+# Manual-only on purpose. The first successful publish TOFU-pins the signer
+# identity of ossf/github-repo to THIS workflow file's path, so it has to be a
+# deliberate act and every later publish must come from this same file. Add a
+# `release: {types: [published]}` trigger once the manual run is proven.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or ref to build and publish (e.g. v0.28.0)"
+        required: true
+      hub-url:
+        description: "grc.store hub to publish to"
+        required: true
+        default: "https://hub.preview.grc.store"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Mints two distinct OIDC tokens: the hub push token (audience =
+      # ci_audience) and the Sigstore signing identity (audience = sigstore,
+      # requested by pvtr itself). The hub must list this repo as a
+      # ci_publishers trusted publisher for the ossf namespace.
+      id-token: write
+    env:
+      # Must be a pvtr release that contains `pvtr publish` — see REV-345.
+      PVTR_VERSION: REPLACE_WITH_PVTR_RELEASE_TAG
+      PVTR_HUB_URL: ${{ inputs.hub-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: install pvtr
+        run: go install github.com/privateerproj/privateer@${PVTR_VERSION}
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: "~> v2"
+          args: build --clean
+      - name: publish
+        # The hub token is minted and consumed inside this one step so it is
+        # never written to the job environment. pvtr reads the plugin's
+        # coordinate, license and catalog linkage from the built binary itself.
+        run: |
+          audience=$(curl -fsSL "${PVTR_HUB_URL}/.well-known/grc-store-configuration" | jq -r '.ci_audience')
+          if [ -z "$audience" ] || [ "$audience" = "null" ]; then
+            echo "hub ${PVTR_HUB_URL} advertises no ci_audience" >&2
+            exit 1
+          fi
+          PVTR_TOKEN=$(curl -fsSL \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}" | jq -r '.value')
+          echo "::add-mask::${PVTR_TOKEN}"
+          export PVTR_TOKEN
+          privateer publish --dist dist
