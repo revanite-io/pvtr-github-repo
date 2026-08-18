@@ -33,9 +33,7 @@ var (
 		"repo",
 		"token",
 	}
-	// catalogNamespaces declares the grc.store namespace that owns each embedded
-	// catalog. The OSPS Baseline is OSSF-owned, but the vendored YAML carries no
-	// metadata.author.id and `pvtr publish` refuses to guess an owner.
+	// The vendored Baseline YAML carries no metadata.author.id, so declare the owner.
 	catalogNamespaces = map[string]string{
 		"osps-baseline":         "ossf",
 		"osps-baseline-2025-10": "ossf",
@@ -51,7 +49,7 @@ func main() {
 		Version = fmt.Sprintf("%s-%s", Version, VersionPostfix)
 	}
 
-	orchestrator, err := newOrchestrator(Version)
+	orchestrator, err := newOrchestrator()
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		os.Exit(shared.InternalError)
@@ -60,8 +58,8 @@ func main() {
 	runCmd := command.NewPluginCommands(
 		PluginName,
 		Version,
-		VersionPostfix,
 		GitCommitHash,
+		BuiltAt,
 		orchestrator,
 	)
 
@@ -71,14 +69,12 @@ func main() {
 	}
 }
 
-// newOrchestrator builds the fully populated orchestrator for the given plugin
-// version. Publisher, License and catalogNamespaces are inert at run time and
-// exist so `pvtr publish` can derive the plugin's grc.store coordinate
-// (ossf/github-repo) and its catalog linkage from the binary itself.
-func newOrchestrator(version string) (*pluginkit.EvaluationOrchestrator, error) {
+// newOrchestrator builds the orchestrator. Publisher, License and
+// catalogNamespaces are unused at run time; `pvtr publish` reads them.
+func newOrchestrator() (*pluginkit.EvaluationOrchestrator, error) {
 	orchestrator := &pluginkit.EvaluationOrchestrator{
 		PluginName:        PluginName,
-		PluginVersion:     version,
+		PluginVersion:     Version,
 		PluginUri:         "https://github.com/ossf/pvtr-github-repo-scanner",
 		Publisher:         "ossf",
 		License:           "Apache-2.0",

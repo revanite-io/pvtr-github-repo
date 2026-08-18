@@ -31,7 +31,7 @@ jobs:
       # ci_publishers trusted publisher for the ossf namespace.
       id-token: write
     env:
-      # Must be a pvtr release that contains `pvtr publish` — see REV-345.
+      # TODO: must be a pvtr release that contains `pvtr publish` — see REV-345.
       PVTR_VERSION: REPLACE_WITH_PVTR_RELEASE_TAG
       PVTR_HUB_URL: ${{ inputs.hub-url }}
     steps:
@@ -49,10 +49,10 @@ jobs:
           version: "~> v2"
           args: build --clean
       - name: publish
-        # The hub token is minted and consumed inside this one step so it is
-        # never written to the job environment. pvtr reads the plugin's
-        # coordinate, license and catalog linkage from the built binary itself.
+        # pvtr reads the plugin's coordinate, license and catalog linkage from
+        # the built binary itself.
         run: |
+          set -euo pipefail
           audience=$(curl -fsSL "${PVTR_HUB_URL}/.well-known/grc-store-configuration" | jq -r '.ci_audience')
           if [ -z "$audience" ] || [ "$audience" = "null" ]; then
             echo "hub ${PVTR_HUB_URL} advertises no ci_audience" >&2
@@ -61,6 +61,10 @@ jobs:
           PVTR_TOKEN=$(curl -fsSL \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}" | jq -r '.value')
+          if [ -z "$PVTR_TOKEN" ] || [ "$PVTR_TOKEN" = "null" ]; then
+            echo "failed to mint a hub OIDC token for audience ${audience}" >&2
+            exit 1
+          fi
           echo "::add-mask::${PVTR_TOKEN}"
           export PVTR_TOKEN
-          privateer publish --dist dist
+          privateer publish
