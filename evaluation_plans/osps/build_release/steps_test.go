@@ -1121,10 +1121,10 @@ func TestEvaluateWorkflows(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result, message, _ := evaluateWorkflows(testCase.workflows, testCase.checkWorkflow, "all workflows passed")
-			assert.Equal(t, testCase.expectedResult, result, message)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message, _ := evaluateWorkflows(tt.workflows, tt.checkWorkflow, "all workflows passed")
+			assert.Equal(t, tt.expectedResult, result, message)
 		})
 	}
 }
@@ -1428,11 +1428,11 @@ func TestEnsureLatestReleaseHasChangelog(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result, message, _ := EnsureLatestReleaseHasChangelog(testCase.payload)
-			assert.Equal(t, testCase.expectedResult, result, testCase.name)
-			assert.Equal(t, testCase.expectedMessage, message, testCase.name)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message, _ := EnsureLatestReleaseHasChangelog(tt.payload)
+			assert.Equal(t, tt.expectedResult, result, tt.name)
+			assert.Equal(t, tt.expectedMessage, message, tt.name)
 		})
 	}
 }
@@ -2219,6 +2219,24 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 			wantConfidence: gemara.Low,
 		},
 		{
+			name: "single-digit raw tag does not overmatch",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("1", "", "tool-build-7781.zip"),
+			}}},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "do not embed a release identifier",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "blank-named assets are not counted",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v1.2.3", "", "  "),
+			}}},
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "no attached assets",
+			wantConfidence: gemara.Low,
+		},
+		{
 			name: "companion-only releases need review",
 			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
 				assetRelease("v1.2.3", "", "checksums.txt", "app.spdx.json"),
@@ -2239,12 +2257,12 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			result, message, confidence := ReleaseAssetsAssociatedWithRelease(testCase.payload)
-			assert.Equal(t, testCase.wantResult, result, testCase.name)
-			assert.Contains(t, message, testCase.wantMsgPart, testCase.name)
-			assert.Equal(t, testCase.wantConfidence, confidence, testCase.name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message, confidence := ReleaseAssetsAssociatedWithRelease(tt.payload)
+			assert.Equal(t, tt.wantResult, result, tt.name)
+			assert.Contains(t, message, tt.wantMsgPart, tt.name)
+			assert.Equal(t, tt.wantConfidence, confidence, tt.name)
 		})
 	}
 }
@@ -2258,13 +2276,15 @@ func TestReleaseIdentifierCandidates(t *testing.T) {
 		{"tag with v prefix", data.ReleaseData{TagName: "v1.2.3"}, []string{"v1.2.3", "1.2.3"}},
 		{"tag without v prefix", data.ReleaseData{TagName: "2024.06"}, []string{"2024.06"}},
 		{"short v tag keeps only the tag", data.ReleaseData{TagName: "v1"}, []string{"v1"}},
+		{"single-character tag produces no candidates", data.ReleaseData{TagName: "1"}, nil},
+		{"single-character release name is skipped", data.ReleaseData{Name: "x"}, nil},
 		{"spaced release name is skipped", data.ReleaseData{Name: "Release 1.2.3"}, nil},
 		{"unspaced release name is kept", data.ReleaseData{TagName: "v1.2.3", Name: "1.2.3-hotfix"}, []string{"v1.2.3", "1.2.3", "1.2.3-hotfix"}},
 		{"empty release", data.ReleaseData{}, nil},
 	}
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			assert.Equal(t, testCase.want, releaseIdentifierCandidates(testCase.release), testCase.name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, releaseIdentifierCandidates(tt.release), tt.name)
 		})
 	}
 }
@@ -2281,9 +2301,18 @@ func TestIsReleaseAssetCompanion(t *testing.T) {
 		"sha256sums":              true,
 		"license":                 true,
 		"readme.md":               true,
+		"app.tar.gz.gpg":          true,
+		"release.sigstore":        true,
+		"bom.spdx":                true,
+		"bom.cdx.xml":             true,
+		"gh_2.96.0_checksums.txt": true,
+		"md5sums":                 true,
+		"license-mit":             true,
+		"license-apache":          true,
 		"app.tar.gz":              false,
 		"mytool-1.2.3.zip":        false,
 		"notes.txt":               false,
+		"license-manager.zip":     false,
 	}
 	for name, want := range cases {
 		assert.Equal(t, want, isReleaseAssetCompanion(name), name)

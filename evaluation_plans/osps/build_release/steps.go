@@ -500,23 +500,32 @@ func ReleaseHasUniqueIdentifier(payload data.Payload) (result gemara.Result, mes
 // accompanies rather than carrying the release identifier itself, so it is
 // exempt from the name-association expectation.
 var releaseAssetCompanionSuffixes = []string{
-	".sig", ".asc", ".pem", ".minisig",
-	".sha1", ".sha256", ".sha512", ".md5",
-	".intoto.jsonl", ".sbom", ".spdx.json", ".cdx.json",
+	".pem",
+	".sbom", ".spdx", ".spdx.json", ".cdx", ".cdx.json", ".cdx.xml",
 }
 
 // releaseAssetCompanionNames are exact (lowercased) asset names that accompany
-// a release without identifying a specific artifact: checksum manifests and
-// standard documentation files.
+// a release without identifying a specific artifact: standard documentation
+// files, common split-license names, and the one manifest name the shared
+// checksum classifier's markers do not cover. Names are matched exactly rather
+// than by prefix so a real artifact such as license-manager.zip is not exempted.
 var releaseAssetCompanionNames = map[string]bool{
-	"checksums.txt": true, "sha256sums": true, "sha512sums": true, "md5sums": true,
+	"md5sums": true,
 	"license": true, "license.txt": true, "license.md": true,
+	"license-mit": true, "license-apache": true,
 	"readme": true, "readme.txt": true, "readme.md": true,
 }
 
 // isReleaseAssetCompanion reports whether a lowercased asset name is a
-// companion file rather than a release artifact in its own right.
+// companion file rather than a release artifact in its own right. Signature,
+// attestation, and checksum recognition is delegated to the classifiers shared
+// with ReleasesAreSignedOrAttested so the two controls cannot disagree about
+// the same asset; the local lists add only what those classifiers do not
+// cover (certificates, SBOMs, documentation).
 func isReleaseAssetCompanion(lowerName string) bool {
+	if signatureAssetKind(lowerName) != "" || isHashManifest(lowerName) {
+		return true
+	}
 	if releaseAssetCompanionNames[lowerName] {
 		return true
 	}
@@ -530,19 +539,19 @@ func isReleaseAssetCompanion(lowerName string) bool {
 
 // releaseIdentifierCandidates returns the lowercased identifier strings an
 // asset name may embed to associate itself with the release: the tag, the tag
-// without its leading "v" (kept only when at least two characters so a single
-// digit cannot match almost any name), and the release name when it contains
-// no spaces (asset file names cannot contain a spaced title).
+// without its leading "v", and the release name when it contains no spaces
+// (asset file names cannot contain a spaced title). Every candidate must be at
+// least two characters so a single digit cannot match almost any name.
 func releaseIdentifierCandidates(release data.ReleaseData) []string {
 	var candidates []string
 	tag := strings.ToLower(strings.TrimSpace(release.TagName))
-	if tag != "" {
+	if len(tag) >= 2 {
 		candidates = append(candidates, tag)
 		if trimmed := strings.TrimPrefix(tag, "v"); trimmed != tag && len(trimmed) >= 2 {
 			candidates = append(candidates, trimmed)
 		}
 	}
-	if name := strings.ToLower(strings.TrimSpace(release.Name)); name != "" && !strings.Contains(name, " ") {
+	if name := strings.ToLower(strings.TrimSpace(release.Name)); len(name) >= 2 && !strings.Contains(name, " ") {
 		candidates = append(candidates, name)
 	}
 	return candidates
@@ -557,17 +566,6 @@ func assetNameContainsAny(lowerName string, candidates []string) bool {
 		}
 	}
 	return false
-}
-
-// releaseAssetLabel names a release in evidence messages, preferring the tag.
-func releaseAssetLabel(release data.ReleaseData) string {
-	if release.TagName != "" {
-		return release.TagName
-	}
-	if release.Name != "" {
-		return release.Name
-	}
-	return "(unnamed)"
 }
 
 // ReleaseAssetsAssociatedWithRelease checks that when an official release is
@@ -607,14 +605,17 @@ func ReleaseAssetsAssociatedWithRelease(payload data.Payload) (gemara.Result, st
 		}
 		candidates := releaseIdentifierCandidates(release)
 		for _, asset := range release.Assets {
-			totalAssets++
 			lower := strings.ToLower(strings.TrimSpace(asset.Name))
-			if lower == "" || isReleaseAssetCompanion(lower) {
+			if lower == "" {
+				continue
+			}
+			totalAssets++
+			if isReleaseAssetCompanion(lower) {
 				continue
 			}
 			checkedAssets++
 			if !assetNameContainsAny(lower, candidates) {
-				unassociated = append(unassociated, fmt.Sprintf("%s (release %s)", asset.Name, releaseAssetLabel(release)))
+				unassociated = append(unassociated, fmt.Sprintf("%s (release %s)", asset.Name, reusable_steps.ReleaseLabel(release)))
 			}
 		}
 	}
