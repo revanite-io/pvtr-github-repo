@@ -1166,7 +1166,7 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &fakeReviewRulesMetadata{rules: data.PullRequestReviewRules{
-					Observed: true, RuleCount: 2, RequiredApprovals: 1, RequireLastPushApproval: true,
+					Observed: true, RequiredApprovals: 1, RequireLastPushApproval: true,
 				}},
 			},
 			wantResult:     gemara.Passed,
@@ -1181,7 +1181,7 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &fakeReviewRulesMetadata{rules: data.PullRequestReviewRules{
-					Observed: true, RuleCount: 1, RequiredApprovals: 1,
+					Observed: true, RequiredApprovals: 1,
 				}},
 			},
 			wantResult:     gemara.NeedsReview,
@@ -1193,7 +1193,7 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &fakeReviewRulesMetadata{rules: data.PullRequestReviewRules{
-					Observed: true, RuleCount: 1, RequiredApprovals: 2, DismissStaleReviews: true,
+					Observed: true, RequiredApprovals: 2, DismissStaleReviews: true,
 				}},
 			},
 			wantResult:     gemara.Passed,
@@ -1252,10 +1252,62 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 			wantConfidence: gemara.Low,
 		},
 		{
+			// Nil metadata means rulesets were never looked up either, and the
+			// ruleset message is checked first, so that is the reported reason.
 			name:           "zero-value payload does not panic and needs review",
 			payload:        data.Payload{},
 			wantResult:     gemara.NeedsReview,
-			wantMsgPart:    "only visible to admin tokens",
+			wantMsgPart:    "Repository rulesets could not be observed",
+			wantConfidence: gemara.Low,
+		},
+		{
+			// A ruleset-arm entry must not report a classic count the entry
+			// gate itself refused to trust (stale RefUpdateRule count with
+			// RequiresApprovingReviews false).
+			name: "stale classic count without classic requirement is not reported",
+			payload: data.Payload{
+				GraphqlRepoData: classic(false, 3, false),
+				RepositoryMetadata: &fakeReviewRulesMetadata{rules: data.PullRequestReviewRules{
+					Observed: true, RequiredApprovals: 1, RequireLastPushApproval: true,
+				}},
+			},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "requires 1 non-author approving review(s)",
+			wantConfidence: gemara.High,
+		},
+		{
+			name: "classic approval without stale protection needs review",
+			payload: data.Payload{
+				GraphqlRepoData: classic(true, 1, false),
+				RepositoryMetadata: &fakeReviewRulesMetadata{
+					rules: data.PullRequestReviewRules{Observed: true},
+					admin: true,
+				},
+			},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "commits pushed after an approval can merge unreviewed",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "cross-source aggregation reports the higher requirement",
+			payload: data.Payload{
+				GraphqlRepoData: classic(true, 3, false),
+				RepositoryMetadata: &fakeReviewRulesMetadata{rules: data.PullRequestReviewRules{
+					Observed: true, RequiredApprovals: 1, DismissStaleReviews: true,
+				}},
+			},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "requires 3 non-author approving review(s)",
+			wantConfidence: gemara.High,
+		},
+		{
+			name: "non-admin with unobserved rulesets reports the ruleset gap",
+			payload: data.Payload{
+				GraphqlRepoData:    &data.GraphqlRepoData{},
+				RepositoryMetadata: &fakeReviewRulesMetadata{rules: data.PullRequestReviewRules{}},
+			},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "Repository rulesets could not be observed",
 			wantConfidence: gemara.Low,
 		},
 	}

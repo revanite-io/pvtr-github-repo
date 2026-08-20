@@ -262,14 +262,13 @@ func TestDefaultBranchPullRequestReviewRules(t *testing.T) {
 		metadata := &GitHubRepositoryMetadata{}
 		rules := metadata.DefaultBranchPullRequestReviewRules()
 		assert.False(t, rules.Observed)
-		assert.Zero(t, rules.RuleCount)
+		assert.Zero(t, rules.RequiredApprovals)
 	})
 
 	t.Run("observed with no pull_request rules", func(t *testing.T) {
 		metadata := &GitHubRepositoryMetadata{defaultBranchRules: &github.BranchRules{}}
 		rules := metadata.DefaultBranchPullRequestReviewRules()
 		assert.True(t, rules.Observed)
-		assert.Zero(t, rules.RuleCount)
 		assert.Zero(t, rules.RequiredApprovals)
 	})
 
@@ -285,7 +284,6 @@ func TestDefaultBranchPullRequestReviewRules(t *testing.T) {
 		}}
 		rules := metadata.DefaultBranchPullRequestReviewRules()
 		assert.True(t, rules.Observed)
-		assert.Equal(t, 2, rules.RuleCount)
 		assert.Equal(t, 2, rules.RequiredApprovals)
 		assert.True(t, rules.RequireLastPushApproval)
 		assert.True(t, rules.DismissStaleReviews)
