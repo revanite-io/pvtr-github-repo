@@ -3,10 +3,12 @@ package evaluation_plans
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/goccy/go-yaml"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/reusable_steps"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,6 +39,82 @@ func TestAllSteps(t *testing.T) {
 		_, exists := OSPS["fake-id"]
 		assert.False(t, exists, "mutating AllSteps() result should not affect OSPS")
 	})
+}
+
+// aiAssistedBehaviorRequirements records which catalog requirement each
+// AI-assisted behavior currently serves.
+//
+// This mapping lives in a test on purpose. ai_prompts.yaml is keyed by behavior
+// so a rubric is not the property of one catalog entry and a second catalog can
+// reuse it (see #448); the correspondence still has to be asserted somewhere, so
+// it is asserted here rather than compiled into the step packages.
+var aiAssistedBehaviorRequirements = map[string]string{
+	"workflow-job-permissions":     "OSPS-AC-04.02",
+	"test-execution-documentation": "OSPS-QA-06.02",
+	"test-maintenance-policy":      "OSPS-QA-06.03",
+}
+
+// TestAIAssistedBehaviorsMapToRequirements asserts every prompt in the prompt
+// file is claimed by a requirement that has a registered step, and that the
+// mapping above covers the prompt file exactly. A behavior added to the prompt
+// file without an entry here fails, so a new prompt cannot ship without stating
+// which requirement it serves.
+func TestAIAssistedBehaviorsMapToRequirements(t *testing.T) {
+	behaviors := reusable_steps.AIAssistedBehaviors()
+	assert.NotEmpty(t, behaviors)
+
+	allSteps := AllSteps()
+	for _, behavior := range behaviors {
+		requirementID, ok := aiAssistedBehaviorRequirements[behavior]
+		if !assert.True(t, ok, "AI-assisted behavior %s is not mapped to a requirement", behavior) {
+			continue
+		}
+		assert.Contains(t, allSteps, requirementID,
+			"requirement %s (behavior %s) has no registered steps", requirementID, behavior)
+	}
+
+	for behavior := range aiAssistedBehaviorRequirements {
+		assert.Contains(t, behaviors, behavior,
+			"behavior %s is mapped to a requirement but has no prompt in ai_prompts.yaml", behavior)
+	}
+}
+
+// TestAIAssistedBehaviorsArePinnedByGoldens asserts every prompt in the prompt
+// file is pinned by a golden file in the package whose step sends it.
+//
+// This is what keeps the goldens honest as behaviors are added. Without it a new
+// prompt file entry could ship with no golden, and its prompt text would never
+// have to appear in a pull request diff. The reverse case — a step that stopped
+// calling RunAIAssessment — is caught by that step's own prompt golden test,
+// not here.
+func TestAIAssistedBehaviorsArePinnedByGoldens(t *testing.T) {
+	behaviors := reusable_steps.AIAssistedBehaviors()
+	assert.NotEmpty(t, behaviors)
+
+	goldenPaths, err := filepath.Glob(filepath.Join("osps", "*", "testdata", "*_prompt.golden"))
+	assert.NoError(t, err)
+
+	goldens := make(map[string]string, len(goldenPaths))
+	for _, goldenPath := range goldenPaths {
+		content, err := os.ReadFile(goldenPath)
+		assert.NoError(t, err)
+		goldens[goldenPath] = strings.TrimSuffix(string(content), "\n")
+	}
+
+	for _, behavior := range behaviors {
+		prompt, err := reusable_steps.AIPrompt(behavior)
+		assert.NoError(t, err)
+
+		pinned := false
+		for _, golden := range goldens {
+			if golden == prompt {
+				pinned = true
+				break
+			}
+		}
+		assert.True(t, pinned,
+			"no golden file pins the prompt for %s; add one under the testdata directory of the package whose step sends it", behavior)
+	}
 }
 
 // TestAllCatalogAssessmentIDsHaveSteps ensures every assessment requirement ID
