@@ -43,30 +43,44 @@ func InsightsListsRepositories(payload data.Payload) (result gemara.Result, mess
 	return gemara.Failed, "Insights does not contain a list of repositories", confidence
 }
 
-// SubprojectsEnforceSecurityRequirements assesses OSPS-QA-04.02: when the
-// project has made a release comprising multiple source code repositories,
-// all subprojects must enforce security requirements that are as strict or
-// stricter than the primary codebase.
+// SubprojectsEnforceSecurityRequirements assesses whether, when the project
+// has made a release comprising multiple source code repositories, all
+// subprojects enforce security requirements as strict or stricter than the
+// primary codebase.
 //
 // The scanner evaluates a single repository per run, so it cannot compare
-// security enforcement across repositories. This step instead narrows the
-// result as far as the payload allows: it rules the requirement out when no
-// release exists or when Security Insights lists no repositories beyond the
-// one under evaluation, and otherwise degrades to manual review with the
-// subproject repositories a reviewer needs to inspect named in the message.
+// security enforcement across repositories, and it can only observe the
+// scanned repository's own release history - not whether some other
+// repository's release is the one that actually comprises multiple
+// repositories. Gating on the scanned repo's releases is a deliberate
+// single-repo-scanner trade-off: a subproject repository typically cuts no
+// releases of its own (the release comes from the primary repo), so that
+// would incorrectly read as "not applicable" here even when the primary
+// repo's release does comprise it - the "no published releases" verdict
+// below is capped at Medium confidence, not High, to reflect that.
 func SubprojectsEnforceSecurityRequirements(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	// The requirement only applies once a release exists.
-	released, observable := reusable_steps.HasPublishedRelease(payload)
-	if !observable {
+	if payload.RestData == nil {
 		return gemara.NeedsReview, "Release data is unavailable; manually review whether a release comprises multiple repositories and whether all subprojects enforce security requirements as strict as the primary codebase", gemara.Low
 	}
-	if !released {
-		return gemara.NotApplicable, "No published releases found; the subproject security requirement does not apply", gemara.High
+	if payload.ReleasesError != nil {
+		return gemara.NeedsReview, fmt.Sprintf("Release data could not be retrieved: %v. Manually review whether a release comprises multiple repositories and whether all subprojects enforce security requirements as strict as the primary codebase", payload.ReleasesError), gemara.Low
+	}
+
+	published := false
+	for _, release := range payload.Releases {
+		if !release.Draft {
+			published = true
+			break
+		}
+	}
+	if !published {
+		return gemara.NotApplicable, "No published releases found for this repository; a subproject repository frequently has no releases of its own even when the primary repository's release comprises multiple repositories, so read this verdict with that limitation in mind", gemara.Medium
 	}
 
 	// Security Insights is the only observable source for the project's
-	// repository list (OSPS-QA-04.01 requires multi-repo projects to publish
-	// it there). Without it the scanner cannot tell whether subprojects exist.
+	// repository list (InsightsListsRepositories requires multi-repo projects
+	// to publish it there). Without it the scanner cannot tell whether
+	// subprojects exist.
 	if payload.InsightsError {
 		return gemara.NeedsReview, "Security Insights content could not be parsed, so the project's repository list is unknown; manually review whether release subprojects enforce security requirements as strict as the primary codebase", gemara.Low
 	}
@@ -74,47 +88,101 @@ func SubprojectsEnforceSecurityRequirements(payload data.Payload) (result gemara
 		return gemara.NeedsReview, "No Security Insights file was found, so the project's repository list is unknown; manually review whether release subprojects enforce security requirements as strict as the primary codebase", gemara.Low
 	}
 
-	subprojects := subprojectRepositories(payload.Insights)
+	// An absent or empty project.repositories list is itself an
+	// InsightsListsRepositories violation, not evidence this is a
+	// single-repository project - it must not be read as grounds for
+	// NotApplicable.
+	if payload.Insights.Project == nil || len(payload.Insights.Project.Repositories) == 0 {
+		return gemara.NeedsReview, "Security Insights does not list the project's repositories, so the scanner cannot tell whether release subprojects exist; manually review whether all subprojects enforce security requirements as strict or stricter than the primary codebase", gemara.Low
+	}
+
+	owner, repo := "", ""
+	if payload.Config != nil {
+		owner = payload.Config.GetString("owner")
+		repo = payload.Config.GetString("repo")
+	}
+	subprojects, unresolved := subprojectRepositories(payload.Insights, owner, repo)
+
 	if len(subprojects) == 0 {
+		if unresolved > 0 {
+			// project.repositories plainly declares entries beyond the primary
+			// repo, just not ones this scanner can identify - do not silently
+			// read that as "no subprojects".
+			return gemara.NeedsReview, fmt.Sprintf(
+				"Security Insights lists %d additional project %s without a usable URL; manually verify each subproject enforces security requirements as strict or stricter than the primary codebase",
+				unresolved, repoNoun(unresolved)), gemara.Low
+		}
 		return gemara.NotApplicable, "Security Insights lists no repositories beyond the one under evaluation, so no release subprojects are in scope", gemara.Medium
 	}
 
-	repoWord := "repositories"
-	if len(subprojects) == 1 {
-		repoWord = "repository"
-	}
-	return gemara.NeedsReview, fmt.Sprintf(
+	message = fmt.Sprintf(
 		"Security Insights lists %d additional project %s (%s); the scanner evaluates one repository at a time, so manually verify each subproject enforces security requirements as strict or stricter than the primary codebase",
-		len(subprojects), repoWord, strings.Join(subprojects, ", ")), gemara.Low
+		len(subprojects), repoNoun(len(subprojects)), strings.Join(subprojects, ", "))
+	if unresolved > 0 {
+		verb := "were"
+		if unresolved == 1 {
+			verb = "was"
+		}
+		message += fmt.Sprintf("; %d further %s %s skipped for lacking a usable URL and should also be reviewed", unresolved, entryNoun(unresolved), verb)
+	}
+	return gemara.NeedsReview, message, gemara.Low
+}
+
+// repoNoun and entryNoun pluralize the evidence messages above.
+func repoNoun(n int) string {
+	if n == 1 {
+		return "repository"
+	}
+	return "repositories"
+}
+
+func entryNoun(n int) string {
+	if n == 1 {
+		return "entry"
+	}
+	return "entries"
 }
 
 // subprojectRepositories returns the URLs of repositories listed in Security
-// Insights other than the repository under evaluation. The SI specification
-// requires project.repositories to include the current repository, so entries
-// matching repository.url are filtered out; when repository.url is absent,
-// every listed entry counts. Results are deduplicated and reported in their
-// original (non-normalized) form so messages stay recognizable.
-func subprojectRepositories(insights si.SecurityInsights) []string {
+// Insights other than the repository under evaluation, deduplicated and
+// reported in their original (non-normalized) form so messages stay
+// recognizable. It also returns the count of declared entries that could not
+// be resolved to a comparable URL (blank/missing repo.Url), so the caller can
+// distinguish "genuinely no subprojects" from "subprojects declared but not
+// identifiable" instead of silently dropping them.
+//
+// The repository under evaluation is identified by Security Insights'
+// repository.url when present; that section is optional in the SI v2 spec
+// (ensureInsightsInitialized substitutes an empty *si.Repository when it is
+// absent), so owner/repo - the scanner's own identity - build a
+// github.com/{owner}/{repo} fallback when repository.url is empty.
+func subprojectRepositories(insights si.SecurityInsights, owner, repo string) (subprojects []string, unresolved int) {
 	if insights.Project == nil {
-		return nil
+		return nil, 0
 	}
 
 	self := ""
 	if insights.Repository != nil {
 		self = normalizeRepoURL(string(insights.Repository.Url))
 	}
+	if self == "" && owner != "" && repo != "" {
+		self = normalizeRepoURL(fmt.Sprintf("github.com/%s/%s", owner, repo))
+	}
 
-	var subprojects []string
 	seen := map[string]bool{}
-	for _, repo := range insights.Project.Repositories {
-		url := normalizeRepoURL(string(repo.Url))
-		if url == "" || url == self || seen[url] {
+	for _, r := range insights.Project.Repositories {
+		url := normalizeRepoURL(string(r.Url))
+		if url == "" {
+			unresolved++
+			continue
+		}
+		if url == self || seen[url] {
 			continue
 		}
 		seen[url] = true
-		subprojects = append(subprojects, strings.TrimSpace(string(repo.Url)))
+		subprojects = append(subprojects, strings.TrimSpace(string(r.Url)))
 	}
-	return subprojects
+	return subprojects, unresolved
 }
 
 // normalizeRepoURL canonicalizes a repository URL for equality checks:
