@@ -73,7 +73,7 @@ func TestVersionProvenance(t *testing.T) {
 	}
 	os.Stdout = w
 	execErr := cmd.Execute()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = orig
 	out, _ := io.ReadAll(r)
 	if execErr != nil {
