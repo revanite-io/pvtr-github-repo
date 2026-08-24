@@ -154,13 +154,18 @@ func Test_BranchProtectionRestrictsPushes(t *testing.T) {
 	falseVal := false
 
 	tests := []struct {
-		name        string
-		payload     data.Payload
-		wantResult  gemara.Result
-		wantMessage string
+		name string
+		// Set on the GraphQL data in the loop: the nested structs are
+		// anonymous, so they cannot be filled in the payload literal.
+		restrictsPushes          bool
+		requiresApprovingReviews bool
+		payload                  data.Payload
+		wantResult               gemara.Result
+		wantMessage              string
 	}{
 		{
-			name: "branch protection restricts pushes",
+			name:            "branch protection restricts pushes",
+			restrictsPushes: true,
 			payload: data.Payload{
 				GraphqlRepoData:    &data.GraphqlRepoData{},
 				RepositoryMetadata: &FakeBranchRuleMetadata{},
@@ -169,7 +174,8 @@ func Test_BranchProtectionRestrictsPushes(t *testing.T) {
 			wantMessage: "Branch protection rule restricts pushes",
 		},
 		{
-			name: "branch protection requires approving reviews",
+			name:                     "branch protection requires approving reviews",
+			requiresApprovingReviews: true,
 			payload: data.Payload{
 				GraphqlRepoData:    &data.GraphqlRepoData{},
 				RepositoryMetadata: &FakeBranchRuleMetadata{},
@@ -251,6 +257,21 @@ func Test_BranchProtectionRestrictsPushes(t *testing.T) {
 			wantMessage: "Default branch has no branch protection rules or rulesets; pushes are unrestricted",
 		},
 		{
+			// RulesetsObserved() is true for a zero-length list, so this case
+			// pins the ordering: the flag's proof must win over it.
+			name: "observed unprotected: admin token with an empty ruleset list",
+			payload: data.Payload{
+				GraphqlRepoData: &data.GraphqlRepoData{},
+				RepositoryMetadata: &FakeBranchRuleMetadata{
+					protectedFlag:       &falseVal,
+					rulesetsObserved:    true,
+					viewerCanAdminister: true,
+				},
+			},
+			wantResult:  gemara.Failed,
+			wantMessage: "Default branch has no branch protection rules or rulesets; pushes are unrestricted",
+		},
+		{
 			name: "weak positive: protected flag true alone stays unobservable",
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
@@ -263,12 +284,12 @@ func Test_BranchProtectionRestrictsPushes(t *testing.T) {
 		},
 	}
 
-	// Set branch protection fields on the GraphQL data
-	tests[0].payload.Repository.DefaultBranchRef.BranchProtectionRule.RestrictsPushes = true
-	tests[1].payload.Repository.DefaultBranchRef.BranchProtectionRule.RequiresApprovingReviews = true
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			rule := &tt.payload.Repository.DefaultBranchRef.BranchProtectionRule
+			rule.RestrictsPushes = tt.restrictsPushes
+			rule.RequiresApprovingReviews = tt.requiresApprovingReviews
+
 			gotResult, gotMessage, _ := BranchProtectionRestrictsPushes(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
@@ -281,10 +302,12 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 	falseVal := false
 
 	tests := []struct {
-		name        string
-		payload     data.Payload
-		wantResult  gemara.Result
-		wantMessage string
+		name string
+		// Set on the GraphQL data in the loop; see the note above.
+		allowsDeletions bool
+		payload         data.Payload
+		wantResult      gemara.Result
+		wantMessage     string
 	}{
 		{
 			name: "admin token, branch protection prevents deletion, no rulesets",
@@ -292,10 +315,25 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &FakeBranchRuleMetadata{
 					viewerCanAdminister: true,
+					protectedFlag:       &trueVal,
 				},
 			},
 			wantResult:  gemara.Passed,
 			wantMessage: "Default branch is protected from deletions by branch protection rules",
+		},
+		{
+			// A failed branch fetch leaves the flag nil; an admin's all-zero
+			// refUpdateRule then proves nothing, so this must not report Passed.
+			name: "admin token, branch fetch failed, no rule observed",
+			payload: data.Payload{
+				GraphqlRepoData: &data.GraphqlRepoData{},
+				RepositoryMetadata: &FakeBranchRuleMetadata{
+					viewerCanAdminister: true,
+					rulesetsObserved:    true,
+				},
+			},
+			wantResult:  gemara.NeedsReview,
+			wantMessage: unobservableProtectionMessage,
 		},
 		{
 			name: "ruleset prevents deletion (trustworthy without admin)",
@@ -310,7 +348,8 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 			wantMessage: "Default branch is protected from deletions by rulesets",
 		},
 		{
-			name: "branch protection allows deletion but ruleset prevents it",
+			name:            "branch protection allows deletion but ruleset prevents it",
+			allowsDeletions: true,
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &FakeBranchRuleMetadata{
@@ -322,7 +361,8 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 			wantMessage: "Default branch is protected from deletions by rulesets",
 		},
 		{
-			name: "admin token, branch protection allows deletion, no ruleset protection",
+			name:            "admin token, branch protection allows deletion, no ruleset protection",
+			allowsDeletions: true,
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &FakeBranchRuleMetadata{
@@ -333,7 +373,8 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 			wantMessage: "Default branch is not protected from deletions",
 		},
 		{
-			name: "admin token, branch protection allows deletion and ruleset allows deletion",
+			name:            "admin token, branch protection allows deletion and ruleset allows deletion",
+			allowsDeletions: true,
 			payload: data.Payload{
 				GraphqlRepoData: &data.GraphqlRepoData{},
 				RepositoryMetadata: &FakeBranchRuleMetadata{
@@ -393,12 +434,10 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 	// AllowsDeletions defaults to false (a visible rule prevents deletion). Set it
 	// to true for the cases where branch protection allows deletion. Indexes track
 	// the tests slice above.
-	tests[2].payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions = true
-	tests[3].payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions = true
-	tests[4].payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions = true
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.payload.Repository.DefaultBranchRef.RefUpdateRule.AllowsDeletions = tt.allowsDeletions
+
 			gotResult, gotMessage, _ := BranchProtectionPreventsDeletion(tt.payload)
 			assert.Equal(t, tt.wantResult, gotResult)
 			assert.Equal(t, tt.wantMessage, gotMessage)
