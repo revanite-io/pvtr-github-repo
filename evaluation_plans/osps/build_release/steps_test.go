@@ -2110,6 +2110,20 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 			wantConfidence: gemara.High,
 		},
 		{
+			// A GraphQL soft failure leaves latestRelease zeroed while the
+			// repository node resolves; that must not read as a repo with no
+			// releases.
+			name: "partially resolved graphql data needs review instead of not applicable",
+			payload: func() data.Payload {
+				payload := latestReleasePayload("", "")
+				payload.GraphqlPartialData = true
+				return payload
+			}(),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "resolved partially",
+			wantConfidence: gemara.Low,
+		},
+		{
 			name:           "assets embedding the tag pass",
 			payload:        latestReleasePayload("v1.2.3", "", "mytool_v1.2.3_linux_amd64.tar.gz", "mytool_v1.2.3_windows.zip"),
 			wantResult:     gemara.Passed,

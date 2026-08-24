@@ -629,6 +629,11 @@ func ReleaseAssetsAssociatedWithRelease(payload data.Payload) (gemara.Result, st
 	// maintainer choice; the REST release list guarantees neither.
 	latest := payload.Repository.LatestRelease
 	if latest.TagName == "" && latest.Name == "" {
+		// An empty latestRelease is ambiguous when the GraphQL query resolved
+		// only partially: the field may have been zeroed rather than absent.
+		if payload.GraphqlPartialData {
+			return gemara.NeedsReview, "GraphQL release data resolved partially; manually confirm whether a latest release exists and its assets are associated with the release identifier", gemara.Low
+		}
 		return gemara.NotApplicable, "No release is designated latest (no published, non-prerelease release exists); the asset-identifier requirement does not apply", gemara.High
 	}
 
