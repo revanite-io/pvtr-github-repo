@@ -1160,6 +1160,11 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 		g.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount = count
 		return g
 	}
+	classicDismissOnly := func(count int) *data.GraphqlRepoData {
+		g := classic(true, count, false)
+		g.Repository.DefaultBranchRef.BranchProtectionRule.DismissesStaleReviews = true
+		return g
+	}
 
 	tests := []struct {
 		name           string
@@ -1283,6 +1288,22 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 			},
 			wantResult:     gemara.Passed,
 			wantMsgPart:    "requires 1 non-author approving review(s)",
+			wantConfidence: gemara.High,
+		},
+		{
+			// Classic branch protection can close the stale-approval gap with
+			// dismissal alone; the ruleset arm already credits this, and the
+			// classic arm must observe the same field.
+			name: "classic stale-review dismissal closes the gap",
+			payload: data.Payload{
+				GraphqlRepoData: classicDismissOnly(2),
+				RepositoryMetadata: &fakeReviewRulesMetadata{
+					rules: data.PullRequestReviewRules{Observed: true},
+					admin: true,
+				},
+			},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "requires 2 non-author approving review(s)",
 			wantConfidence: gemara.High,
 		},
 		{
