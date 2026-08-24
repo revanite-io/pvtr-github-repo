@@ -479,12 +479,6 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled or archived software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
 }
 
-// sbomExtensionSuffixes are filename suffixes that identify SBOM documents.
-var sbomExtensionSuffixes = []string{
-	".spdx", ".spdx.json", ".spdx.yaml", ".spdx.yml", ".spdx.rdf", ".spdx.xml",
-	".cdx.json", ".cdx.xml", ".cdx",
-}
-
 // isSBOMAsset reports whether a release asset name looks like a software bill of
 // materials. Matching is case-insensitive. The bare token "bom" and the
 // "cyclonedx"/"sbom" markers are guarded to avoid false positives on unrelated
@@ -495,10 +489,8 @@ func isSBOMAsset(name string) bool {
 		return false
 	}
 
-	for _, suffix := range sbomExtensionSuffixes {
-		if strings.HasSuffix(lower, suffix) {
-			return true
-		}
+	if reusable_steps.HasSBOMExtension(lower) {
+		return true
 	}
 
 	// Archives may be tools or distributions whose product name contains an
