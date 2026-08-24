@@ -619,9 +619,8 @@ func SastEnforcedOnChanges(payload data.Payload) (result gemara.Result, message 
 		requiredContexts = append(requiredContexts, payload.RepositoryMetadata.RequiredStatusCheckContexts()...)
 	}
 
-	// Protection state is observable either with an admin token (full detail)
-	// or when the publicly readable branch `protected` flag is false, which
-	// proves no protection — and hence no required checks — exists at all.
+	// An admin token sees full detail; an observed absence of protection means
+	// there are no required checks to miss.
 	protectionObservable := (payload.RepositoryMetadata != nil && payload.RepositoryMetadata.ViewerCanAdminister()) ||
 		data.ObservedUnprotected(payload.RepositoryMetadata)
 

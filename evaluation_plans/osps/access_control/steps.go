@@ -67,10 +67,6 @@ func BranchProtectionRestrictsPushes(payload data.Payload) (result gemara.Result
 		result = gemara.Failed
 		message = "Found Ruleset, but not protection of the default branch"
 		confidence = gemara.Medium
-	// The branch `protected` flag is readable by any token, and false means no
-	// classic branch protection and no rulesets exist — a trustworthy negative
-	// even without admin. (A true flag is too weak to pass on: it may reflect
-	// only a deletion rule.)
 	case data.ObservedUnprotected(metadata):
 		result = gemara.Failed
 		message = "Default branch has no branch protection rules or rulesets; pushes are unrestricted"
@@ -91,8 +87,6 @@ func BranchProtectionPreventsDeletion(payload data.Payload) (result gemara.Resul
 		return gemara.Passed, "Default branch is protected from deletions by rulesets", gemara.High
 	}
 
-	// The publicly readable branch `protected` flag being false proves no
-	// protection of any kind exists, so deletion is not prevented.
 	if data.ObservedUnprotected(metadata) {
 		return gemara.Failed, "Default branch has no branch protection rules or rulesets; deletions are not prevented", gemara.High
 	}

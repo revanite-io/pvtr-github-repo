@@ -156,23 +156,19 @@ func (r *GitHubRepositoryMetadata) RulesetsObserved() bool {
 }
 
 // DefaultBranchProtectedFlag returns the `protected` boolean from the REST
-// "Get a branch" endpoint, or nil when the branch fetch failed. Unlike the
-// classic branch protection details (admin-only), this flag is readable by any
-// token — including anonymous requests — and is true when either classic
-// branch protection or any ruleset applies to the branch. A true value is a
-// weak positive (it may reflect only a deletion rule), but a false value is a
-// strong negative: no classic protection and no branch rules exist at all.
-// Visibility verified empirically against github.com (2026-08); the docs do
-// not spell it out, so GHES behavior may differ.
+// "Get a branch" endpoint, or nil when the branch fetch failed. It is true
+// when either classic branch protection or any ruleset applies, so true is a
+// weak positive (it may reflect only a deletion rule) while false proves
+// neither exists. Readable by any token, including anonymous ones — verified
+// empirically against github.com (2026-08); undocumented, so GHES may differ.
 func (r *GitHubRepositoryMetadata) DefaultBranchProtectedFlag() *bool {
 	return r.defaultBranchProtected
 }
 
 // ObservedUnprotected reports whether the scan positively observed that the
-// default branch has no protection of any kind — no classic branch protection
-// and no rulesets. It is the trustworthy negative counterpart to the
-// admin-only protection details: because any token can observe it, callers may
-// treat missing protection as a confident failure rather than as unobservable.
+// default branch has no protection of any kind. Unlike the admin-only
+// protection details, this negative holds for any token, so callers may fail
+// on it rather than report it as unobservable.
 func ObservedUnprotected(metadata RepositoryMetadata) bool {
 	if metadata == nil {
 		return false

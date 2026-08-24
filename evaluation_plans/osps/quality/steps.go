@@ -153,13 +153,9 @@ func NoUnreviewableBinariesInRepo(payload data.Payload) (result gemara.Result, m
 // RequiresNonAuthorApproval checks that changes require at least one
 // non-author approving review before merging to the default branch. GitHub
 // forbids self-approval, so a required count >= 1 satisfies the catalog.
-//
-// Rulesets are publicly readable and aggregated across every applying rule.
-// Classic branch protection is admin-only and reads as zero values otherwise,
-// so an unobserved absence is NeedsReview rather than Failed (#440). A
-// requirement without last-push approval or stale-review dismissal lets
-// commits pushed after an approval merge unreviewed; the catalog does not
-// cover that gap, so it surfaces as NeedsReview.
+// Classic branch protection reads as zero values without admin, so an
+// unobserved absence is NeedsReview rather than Failed (#440), as is a
+// requirement that lets post-approval commits merge unreviewed.
 func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	var ruleset data.PullRequestReviewRules
 	adminObservable := false
@@ -190,9 +186,8 @@ func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, mess
 		return gemara.NeedsReview, fmt.Sprintf("The default branch requires %d non-author approving review(s), but neither last-push approval nor stale-review dismissal is enabled, so commits pushed after an approval can merge unreviewed; confirm the review process covers this gap", approvals), gemara.Medium
 	}
 
-	// No review requirement was observed anywhere. Report the ruleset gap
-	// first: it applies to any token, whereas the classic-visibility caveat
-	// below only explains the admin-only blind spot.
+	// Nothing observed anywhere. The ruleset gap applies to any token, so
+	// report it ahead of the admin-only blind spot below.
 	if !ruleset.Observed {
 		return gemara.NeedsReview, "Repository rulesets could not be observed; manually confirm whether the default branch requires a non-author approving review", gemara.Low
 	}
