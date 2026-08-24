@@ -1121,10 +1121,10 @@ func TestEvaluateWorkflows(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result, message, _ := evaluateWorkflows(testCase.workflows, testCase.checkWorkflow, "all workflows passed")
-			assert.Equal(t, testCase.expectedResult, result, message)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message, _ := evaluateWorkflows(tt.workflows, tt.checkWorkflow, "all workflows passed")
+			assert.Equal(t, tt.expectedResult, result, message)
 		})
 	}
 }
@@ -1428,11 +1428,11 @@ func TestEnsureLatestReleaseHasChangelog(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result, message, _ := EnsureLatestReleaseHasChangelog(testCase.payload)
-			assert.Equal(t, testCase.expectedResult, result, testCase.name)
-			assert.Equal(t, testCase.expectedMessage, message, testCase.name)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message, _ := EnsureLatestReleaseHasChangelog(tt.payload)
+			assert.Equal(t, tt.expectedResult, result, tt.name)
+			assert.Equal(t, tt.expectedMessage, message, tt.name)
 		})
 	}
 }
@@ -2069,4 +2069,247 @@ func TestCicdSanitizesCollaboratorInputNoWorkflows(t *testing.T) {
 	result, message, _ := CicdSanitizesCollaboratorInput(data.Payload{})
 	assert.Equal(t, gemara.NotApplicable, result)
 	assert.Contains(t, message, "missing required repository data")
+}
+
+// latestReleasePayload builds a payload whose GraphQL latest release carries
+// the given tag, name, and asset names.
+func latestReleasePayload(tag, name string, assetNames ...string) data.Payload {
+	g := &data.GraphqlRepoData{}
+	g.Repository.LatestRelease.TagName = tag
+	g.Repository.LatestRelease.Name = name
+	for _, assetName := range assetNames {
+		g.Repository.LatestRelease.Assets.Nodes = append(
+			g.Repository.LatestRelease.Assets.Nodes, data.ReleaseAssetNode{Name: assetName})
+	}
+	return data.Payload{GraphqlRepoData: g}
+}
+
+func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
+	tests := []struct {
+		name           string
+		payload        data.Payload
+		wantResult     gemara.Result
+		wantMsgPart    string
+		wantConfidence gemara.ConfidenceLevel
+	}{
+		{
+			name:           "nil graphql data is unobservable",
+			payload:        data.Payload{},
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "Release data is unavailable",
+			wantConfidence: gemara.Low,
+		},
+		{
+			// GitHub designates the latest release (non-prerelease, non-draft,
+			// or maintainer-set); a repo with none, including prerelease-only
+			// repos, is out of scope for the requirement.
+			name:           "no designated latest release is not applicable",
+			payload:        latestReleasePayload("", ""),
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "No release is designated latest",
+			wantConfidence: gemara.High,
+		},
+		{
+			// A GraphQL soft failure leaves latestRelease zeroed while the
+			// repository node resolves; that must not read as a repo with no
+			// releases.
+			name: "partially resolved graphql data needs review instead of not applicable",
+			payload: func() data.Payload {
+				payload := latestReleasePayload("", "")
+				payload.GraphqlPartialData = true
+				return payload
+			}(),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "resolved partially",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "assets embedding the tag pass",
+			payload:        latestReleasePayload("v1.2.3", "", "mytool_v1.2.3_linux_amd64.tar.gz", "mytool_v1.2.3_windows.zip"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "assets embedding the tag without the v prefix pass",
+			payload:        latestReleasePayload("v1.2.3", "", "mytool-1.2.3-linux.tar.gz"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "assets embedding a v-prefixed form of an unprefixed tag pass",
+			payload:        latestReleasePayload("1.2.3", "", "mytool-v1.2.3.zip"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "assets embedding the release name pass",
+			payload:        latestReleasePayload("", "2024.06", "mytool-2024.06.tgz"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "matching is case-insensitive",
+			payload:        latestReleasePayload("V1.2.3", "", "MyTool_v1.2.3_Linux.TAR.GZ"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "companion files are exempt",
+			payload: latestReleasePayload("v1.2.3", "",
+				"mytool_1.2.3_linux.tar.gz",
+				"mytool_1.2.3_linux.tar.gz.sha256",
+				"mytool_1.2.3_linux.tar.gz.sig",
+				"checksums.txt",
+				"LICENSE",
+				"bom.spdx.yaml"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "unassociated asset needs review and is named",
+			payload:        latestReleasePayload("v1.2.3", "", "mytool_1.2.3_linux.tar.gz", "mytool-latest-windows.zip"),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "latest release (v1.2.3) do not embed a release identifier in their name: mytool-latest-windows.zip",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name: "listing caps at five with an overflow note",
+			payload: latestReleasePayload("v9.9", "",
+				"a.zip", "b.zip", "c.zip", "d.zip", "e.zip", "f.zip", "g.zip"),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "and 2 more",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "single-digit tag yields no candidates and needs review",
+			payload:        latestReleasePayload("1", "", "tool-build-7781.zip"),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "do not embed a release identifier",
+			wantConfidence: gemara.Low,
+		},
+		{
+			// A candidate must be delimiter-bounded: tag v1 appearing inside
+			// v10 is not an association.
+			name:           "candidate inside a longer number does not match",
+			payload:        latestReleasePayload("v1", "", "myapp-v10.zip"),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "do not embed a release identifier",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "delimiter-bounded short tag still matches",
+			payload:        latestReleasePayload("v1", "", "myapp-v1.zip"),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name:           "blank-named assets are not counted",
+			payload:        latestReleasePayload("v1.2.3", "", "  "),
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "no attached assets",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "latest release without assets does not apply",
+			payload:        latestReleasePayload("v1.2.3", ""),
+			wantResult:     gemara.NotApplicable,
+			wantMsgPart:    "no attached assets",
+			wantConfidence: gemara.Low,
+		},
+		{
+			name:           "companion-only releases need review",
+			payload:        latestReleasePayload("v1.2.3", "", "checksums.txt", "app.spdx.json"),
+			wantResult:     gemara.NeedsReview,
+			wantMsgPart:    "only companion files",
+			wantConfidence: gemara.Low,
+		},
+		{
+			// The REST release list played no part in selecting the release;
+			// only GitHub's latest-release designation is consulted.
+			name: "rest release list is not consulted",
+			payload: func() data.Payload {
+				payload := latestReleasePayload("v2.0.0", "", "tool-2.0.0.zip")
+				payload.RestData = &data.RestData{Releases: []data.ReleaseData{
+					{TagName: "v3.0.0-rc.1", Assets: []data.ReleaseAsset{{Name: "tool-unversioned.zip"}}},
+				}}
+				return payload
+			}(),
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the latest release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, message, confidence := ReleaseAssetsAssociatedWithRelease(tt.payload)
+			assert.Equal(t, tt.wantResult, result, tt.name)
+			assert.Contains(t, message, tt.wantMsgPart, tt.name)
+			assert.Equal(t, tt.wantConfidence, confidence, tt.name)
+		})
+	}
+}
+
+func TestReleaseIdentifierCandidates(t *testing.T) {
+	tests := []struct {
+		name    string
+		release data.ReleaseData
+		want    []string
+	}{
+		{"tag with v prefix", data.ReleaseData{TagName: "v1.2.3"}, []string{"v1.2.3", "1.2.3"}},
+		{"tag without v prefix gains a v-prefixed candidate", data.ReleaseData{TagName: "2024.06"}, []string{"2024.06", "v2024.06"}},
+		{"short v tag keeps only the tag", data.ReleaseData{TagName: "v1"}, []string{"v1"}},
+		{"single-character tag produces no candidates", data.ReleaseData{TagName: "1"}, nil},
+		{"single-character release name is skipped", data.ReleaseData{Name: "x"}, nil},
+		{"spaced release name is skipped", data.ReleaseData{Name: "Release 1.2.3"}, nil},
+		{"unspaced release name is kept", data.ReleaseData{TagName: "v1.2.3", Name: "1.2.3-hotfix"}, []string{"v1.2.3", "1.2.3", "1.2.3-hotfix"}},
+		{"empty release", data.ReleaseData{}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, releaseIdentifierCandidates(tt.release), tt.name)
+		})
+	}
+}
+
+func TestIsReleaseAssetCompanion(t *testing.T) {
+	cases := map[string]bool{
+		"app.tar.gz.sha256":       true,
+		"app.tar.gz.sig":          true,
+		"app.tar.gz.asc":          true,
+		"provenance.intoto.jsonl": true,
+		"app.spdx.json":           true,
+		"app.cdx.json":            true,
+		"checksums.txt":           true,
+		"sha256sums":              true,
+		"license":                 true,
+		"readme.md":               true,
+		"app.tar.gz.gpg":          true,
+		"release.sigstore":        true,
+		"bom.spdx":                true,
+		"bom.cdx.xml":             true,
+		"gh_2.96.0_checksums.txt": true,
+		"md5sums":                 true,
+		"license-mit":             true,
+		"license-apache":          true,
+		"app.tar.gz":              false,
+		"mytool-1.2.3.zip":        false,
+		"notes.txt":               false,
+		"license-manager.zip":     false,
+		"bom.spdx.yaml":           true,
+		"bom.spdx.rdf":            true,
+		// Exempted through the shared checksum markers' substring matching;
+		// documented behavior, see the companion-names comment.
+		"checksums-generator-1.0.zip": true,
+	}
+	for name, want := range cases {
+		assert.Equal(t, want, isReleaseAssetCompanion(name), name)
+	}
 }

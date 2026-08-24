@@ -150,23 +150,56 @@ func NoUnreviewableBinariesInRepo(payload data.Payload) (result gemara.Result, m
 	return gemara.Failed, fmt.Sprintf("Unreviewable binary artifacts found in the repository: %s", strings.Join(unreviewableBinaries, ", ")), confidence
 }
 
+// RequiresNonAuthorApproval checks that changes require at least one
+// non-author approving review before merging to the default branch. GitHub
+// forbids self-approval, so a required count >= 1 satisfies the catalog.
+//
+// Rulesets are publicly readable and aggregated across every applying rule.
+// Classic branch protection is admin-only and reads as zero values otherwise,
+// so an unobserved absence is NeedsReview rather than Failed (#440). A
+// requirement without last-push approval or stale-review dismissal lets
+// commits pushed after an approval merge unreviewed; the catalog does not
+// cover that gap, so it surfaces as NeedsReview.
 func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	protection := payload.Repository.DefaultBranchRef.BranchProtectionRule
-
-	if !protection.RequiresApprovingReviews {
-		return gemara.Failed, "Branch protection rule does not require reviews", confidence
+	var ruleset data.PullRequestReviewRules
+	adminObservable := false
+	if payload.RepositoryMetadata != nil {
+		ruleset = payload.RepositoryMetadata.DefaultBranchPullRequestReviewRules()
+		adminObservable = payload.RepositoryMetadata.ViewerCanAdminister()
 	}
 
-	reviewCount := payload.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
-	if reviewCount < 1 {
-		return gemara.Failed, "Branch protection rule requires 0 approving reviews", confidence
+	classicRequires := false
+	classicCount := 0
+	classicLastPush := false
+	if payload.GraphqlRepoData != nil {
+		protection := payload.Repository.DefaultBranchRef.BranchProtectionRule
+		classicRequires = protection.RequiresApprovingReviews
+		classicCount = payload.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
+		classicLastPush = protection.RequireLastPushApproval
 	}
 
-	if !protection.RequireLastPushApproval {
-		return gemara.Failed, "Branch protection does not require re-approval after new commits", confidence
+	if ruleset.RequiredApprovals >= 1 || (classicRequires && classicCount >= 1) {
+		approvals := ruleset.RequiredApprovals
+		if classicRequires && classicCount > approvals {
+			approvals = classicCount
+		}
+		staleGapClosed := ruleset.RequireLastPushApproval || ruleset.DismissStaleReviews || classicLastPush
+		if staleGapClosed {
+			return gemara.Passed, fmt.Sprintf("The default branch requires %d non-author approving review(s), and commits pushed after an approval cannot merge unreviewed", approvals), gemara.High
+		}
+		return gemara.NeedsReview, fmt.Sprintf("The default branch requires %d non-author approving review(s), but neither last-push approval nor stale-review dismissal is enabled, so commits pushed after an approval can merge unreviewed; confirm the review process covers this gap", approvals), gemara.Medium
 	}
 
-	return gemara.Passed, fmt.Sprintf("Branch protection requires %d approving reviews and re-approval after new commits", reviewCount), confidence
+	// No review requirement was observed anywhere. Report the ruleset gap
+	// first: it applies to any token, whereas the classic-visibility caveat
+	// below only explains the admin-only blind spot.
+	if !ruleset.Observed {
+		return gemara.NeedsReview, "Repository rulesets could not be observed; manually confirm whether the default branch requires a non-author approving review", gemara.Low
+	}
+	if !adminObservable {
+		return gemara.NeedsReview, "No required-review rule was observed, but classic branch protection is only visible to admin tokens; manually confirm whether the default branch requires a non-author approving review", gemara.Low
+	}
+	return gemara.Failed, "Neither repository rulesets nor classic branch protection requires an approving review before merging to the default branch", gemara.High
 }
 
 func HasOneOrMoreStatusChecks(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
@@ -432,7 +465,7 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 			}
 		}
 
-		label := releaseLabel(release)
+		label := reusable_steps.ReleaseLabel(release)
 		if hasCompiled || hasAmbiguous {
 			releasesWithArtifacts = append(releasesWithArtifacts, label)
 			if hasCompiled {
@@ -479,24 +512,6 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled or archived software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
 }
 
-// releaseLabel returns a human-friendly identifier for a release, preferring the
-// tag name and falling back to the display name.
-func releaseLabel(release data.ReleaseData) string {
-	if release.TagName != "" {
-		return release.TagName
-	}
-	if release.Name != "" {
-		return release.Name
-	}
-	return "(unnamed release)"
-}
-
-// sbomExtensionSuffixes are filename suffixes that identify SBOM documents.
-var sbomExtensionSuffixes = []string{
-	".spdx", ".spdx.json", ".spdx.yaml", ".spdx.yml", ".spdx.rdf", ".spdx.xml",
-	".cdx.json", ".cdx.xml", ".cdx",
-}
-
 // isSBOMAsset reports whether a release asset name looks like a software bill of
 // materials. Matching is case-insensitive. The bare token "bom" and the
 // "cyclonedx"/"sbom" markers are guarded to avoid false positives on unrelated
@@ -507,10 +522,8 @@ func isSBOMAsset(name string) bool {
 		return false
 	}
 
-	for _, suffix := range sbomExtensionSuffixes {
-		if strings.HasSuffix(lower, suffix) {
-			return true
-		}
+	if reusable_steps.HasSBOMExtension(lower) {
+		return true
 	}
 
 	// Archives may be tools or distributions whose product name contains an
