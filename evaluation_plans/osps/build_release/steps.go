@@ -575,18 +575,23 @@ func assetNameContainsAny(lowerName string, candidates []string) bool {
 // GitHub structurally attaches every asset to its release, so the observable
 // question is whether each asset's name also carries the release identifier
 // (tag, tag without the leading v, or release name), the convention the
-// baseline's recommendation describes. Signature, checksum, attestation, and
-// SBOM companions plus standard documentation files are exempt: they are
-// associated through the artifact they accompany. An asset without a
-// recognizable identifier is not proof of a violation, because "another unique
-// identifier for the asset" may come from a scheme the scanner cannot observe,
-// so such assets surface as NeedsReview rather than Failed.
+// baseline's recommendation describes. Only the most recent published release
+// is evaluated: the requirement describes the release process as it stands at
+// evaluation time, so older releases that predate a naming convention do not
+// drag the verdict down. Signature, checksum, attestation, and SBOM companions
+// plus standard documentation files are exempt: they are associated through
+// the artifact they accompany. An asset without a recognizable identifier is
+// not proof of a violation, because "another unique identifier for the asset"
+// may come from a scheme the scanner cannot observe, so such assets surface as
+// NeedsReview rather than Failed.
 //
 //   - NeedsReview: release data unobservable, at least one non-companion asset
-//     does not embed a release identifier, or only companion files are
-//     published.
-//   - NotApplicable: no published releases, or no release publishes assets.
-//   - Passed: every non-companion asset embeds a release identifier.
+//     of the most recent release does not embed a release identifier, or that
+//     release publishes only companion files.
+//   - NotApplicable: no published releases, or the most recent release
+//     publishes no assets.
+//   - Passed: every non-companion asset of the most recent release embeds a
+//     release identifier.
 func ReleaseAssetsAssociatedWithRelease(payload data.Payload) (gemara.Result, string, gemara.ConfidenceLevel) {
 	released, observable := reusable_steps.HasPublishedRelease(payload)
 	if !observable {
@@ -596,32 +601,38 @@ func ReleaseAssetsAssociatedWithRelease(payload data.Payload) (gemara.Result, st
 		return gemara.NotApplicable, "No published releases found; the asset-identifier requirement does not apply", gemara.High
 	}
 
+	// The REST release list is newest-first, so the first non-draft entry is
+	// the most recent published release. HasPublishedRelease above guarantees
+	// one exists.
+	var latest data.ReleaseData
+	for _, release := range payload.Releases {
+		if !release.Draft {
+			latest = release
+			break
+		}
+	}
+
+	candidates := releaseIdentifierCandidates(latest)
 	totalAssets := 0
 	checkedAssets := 0
 	var unassociated []string
-	for _, release := range payload.Releases {
-		if release.Draft {
+	for _, asset := range latest.Assets {
+		lower := strings.ToLower(strings.TrimSpace(asset.Name))
+		if lower == "" {
 			continue
 		}
-		candidates := releaseIdentifierCandidates(release)
-		for _, asset := range release.Assets {
-			lower := strings.ToLower(strings.TrimSpace(asset.Name))
-			if lower == "" {
-				continue
-			}
-			totalAssets++
-			if isReleaseAssetCompanion(lower) {
-				continue
-			}
-			checkedAssets++
-			if !assetNameContainsAny(lower, candidates) {
-				unassociated = append(unassociated, fmt.Sprintf("%s (release %s)", asset.Name, reusable_steps.ReleaseLabel(release)))
-			}
+		totalAssets++
+		if isReleaseAssetCompanion(lower) {
+			continue
+		}
+		checkedAssets++
+		if !assetNameContainsAny(lower, candidates) {
+			unassociated = append(unassociated, asset.Name)
 		}
 	}
 
 	if totalAssets == 0 {
-		return gemara.NotApplicable, "Published releases have no attached assets; the asset-identifier requirement does not apply", gemara.Low
+		return gemara.NotApplicable, "The most recent release has no attached assets; the asset-identifier requirement does not apply", gemara.Low
 	}
 	if len(unassociated) > 0 {
 		const maxListedAssets = 5
@@ -632,13 +643,13 @@ func ReleaseAssetsAssociatedWithRelease(payload data.Payload) (gemara.Result, st
 			listed = listed[:maxListedAssets]
 		}
 		return gemara.NeedsReview, fmt.Sprintf(
-			"%d release asset(s) do not embed a release identifier in their name: %s%s. They may be associated through another identifier scheme; manual review required",
-			len(unassociated), strings.Join(listed, ", "), overflow), gemara.Low
+			"%d asset(s) of the most recent release (%s) do not embed a release identifier in their name: %s%s. They may be associated through another identifier scheme; manual review required",
+			len(unassociated), reusable_steps.ReleaseLabel(latest), strings.Join(listed, ", "), overflow), gemara.Low
 	}
 	if checkedAssets == 0 {
-		return gemara.NeedsReview, "Published release assets are only companion files (checksums, signatures, documentation); manually review how release artifacts are identified", gemara.Low
+		return gemara.NeedsReview, "The most recent release publishes only companion files (checksums, signatures, documentation); manually review how release artifacts are identified", gemara.Low
 	}
-	return gemara.Passed, "All release assets embed a release identifier (tag or release name) in their file name", gemara.Medium
+	return gemara.Passed, "All assets of the most recent release embed a release identifier (tag or release name) in their file name", gemara.Medium
 }
 
 func getLinks(payload data.Payload) []string {

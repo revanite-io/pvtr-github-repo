@@ -2135,7 +2135,7 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 				assetRelease("v1.2.3", "", "mytool_v1.2.3_linux_amd64.tar.gz", "mytool_v1.2.3_windows.zip"),
 			}}},
 			wantResult:     gemara.Passed,
-			wantMsgPart:    "All release assets embed a release identifier",
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
 			wantConfidence: gemara.Medium,
 		},
 		{
@@ -2144,7 +2144,7 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 				assetRelease("v1.2.3", "", "mytool-1.2.3-linux.tar.gz"),
 			}}},
 			wantResult:     gemara.Passed,
-			wantMsgPart:    "All release assets embed a release identifier",
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
 			wantConfidence: gemara.Medium,
 		},
 		{
@@ -2153,7 +2153,7 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 				assetRelease("", "2024.06", "mytool-2024.06.tgz"),
 			}}},
 			wantResult:     gemara.Passed,
-			wantMsgPart:    "All release assets embed a release identifier",
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
 			wantConfidence: gemara.Medium,
 		},
 		{
@@ -2162,7 +2162,7 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 				assetRelease("V1.2.3", "", "MyTool_v1.2.3_Linux.TAR.GZ"),
 			}}},
 			wantResult:     gemara.Passed,
-			wantMsgPart:    "All release assets embed a release identifier",
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
 			wantConfidence: gemara.Medium,
 		},
 		{
@@ -2177,7 +2177,7 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 					"app.spdx.json"),
 			}}},
 			wantResult:     gemara.Passed,
-			wantMsgPart:    "All release assets embed a release identifier",
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
 			wantConfidence: gemara.Medium,
 		},
 		{
@@ -2186,17 +2186,30 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 				assetRelease("v1.2.3", "", "mytool_1.2.3_linux.tar.gz", "mytool-latest-windows.zip"),
 			}}},
 			wantResult:     gemara.NeedsReview,
-			wantMsgPart:    "mytool-latest-windows.zip (release v1.2.3)",
+			wantMsgPart:    "most recent release (v1.2.3) do not embed a release identifier in their name: mytool-latest-windows.zip",
 			wantConfidence: gemara.Low,
 		},
 		{
-			name: "unassociated assets across releases are aggregated",
+			// The REST release list is newest-first; only the most recent
+			// published release is judged, so an older release that predates
+			// the naming convention cannot drag the verdict down.
+			name: "older releases are not evaluated",
 			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v2.0.0", "", "tool-2.0.0.zip"),
 				assetRelease("v1.0.0", "", "tool-nightly.zip"),
-				assetRelease("v2.0.0", "", "tool-2.0.0.zip", "tool-latest.zip"),
+			}}},
+			wantResult:     gemara.Passed,
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
+			wantConfidence: gemara.Medium,
+		},
+		{
+			name: "unassociated asset in the most recent release needs review despite clean older releases",
+			payload: data.Payload{RestData: &data.RestData{Releases: []data.ReleaseData{
+				assetRelease("v2.0.0", "", "tool-latest.zip"),
+				assetRelease("v1.0.0", "", "tool-1.0.0.zip"),
 			}}},
 			wantResult:     gemara.NeedsReview,
-			wantMsgPart:    "2 release asset(s) do not embed a release identifier",
+			wantMsgPart:    "1 asset(s) of the most recent release (v2.0.0) do not embed a release identifier",
 			wantConfidence: gemara.Low,
 		},
 		{
@@ -2252,7 +2265,7 @@ func TestReleaseAssetsAssociatedWithRelease(t *testing.T) {
 				assetRelease("v1.2.3", "", "mytool_1.2.3.zip"),
 			}}},
 			wantResult:     gemara.Passed,
-			wantMsgPart:    "All release assets embed a release identifier",
+			wantMsgPart:    "All assets of the most recent release embed a release identifier",
 			wantConfidence: gemara.Medium,
 		},
 	}
