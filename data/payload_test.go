@@ -71,9 +71,10 @@ func TestGetGraphqlRepoData(t *testing.T) {
 	t.Run("a clean response is returned as-is", func(t *testing.T) {
 		client, _ := graphqlServer(t, `{"data":{"repository":{"name":"kubernetes","hasIssuesEnabled":true,"dependencyGraphManifests":{"totalCount":39}}}}`)
 
-		data, err := getGraphqlRepoData(cfg, client, "kubernetes", "kubernetes")
+		data, partial, err := getGraphqlRepoData(cfg, client, "kubernetes", "kubernetes")
 		require.NoError(t, err)
 		require.NotNil(t, data)
+		assert.False(t, partial, "a clean response is not partial")
 		assert.Equal(t, "kubernetes", data.Repository.Name)
 		assert.Equal(t, 39, data.Repository.DependencyGraphManifests.TotalCount)
 	})
@@ -88,9 +89,10 @@ func TestGetGraphqlRepoData(t *testing.T) {
 			`"dependencyGraphManifests":null,"licenseInfo":{"name":"Apache License 2.0"}}},`+
 			`"errors":[{"message":"Resource not accessible by integration"}]}`)
 
-		data, err := getGraphqlRepoData(cfg, client, "kubernetes", "kubernetes")
+		data, partial, err := getGraphqlRepoData(cfg, client, "kubernetes", "kubernetes")
 		require.NoError(t, err, "a field-level permission error with partial data must not be fatal")
 		require.NotNil(t, data)
+		assert.True(t, partial, "the soft-failure path must be reported so steps can distinguish absent from unresolved")
 		assert.Equal(t, "kubernetes", data.Repository.Name)
 		assert.True(t, data.Repository.HasIssuesEnabled)
 		assert.Equal(t, "Apache License 2.0", data.Repository.LicenseInfo.Name)
@@ -105,8 +107,9 @@ func TestGetGraphqlRepoData(t *testing.T) {
 		// is nothing to fall back on, so the error must propagate.
 		client, _ := graphqlServer(t, `{"data":null,"errors":[{"message":"Could not resolve to a Repository"}]}`)
 
-		data, err := getGraphqlRepoData(cfg, client, "nope", "nope")
+		data, partial, err := getGraphqlRepoData(cfg, client, "nope", "nope")
 		require.Error(t, err)
+		assert.False(t, partial)
 		assert.Nil(t, data)
 	})
 }

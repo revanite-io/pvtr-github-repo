@@ -87,6 +87,35 @@ func HasPublishedRelease(payload data.Payload) (released bool, observable bool) 
 	return false, true
 }
 
+// sbomExtensionSuffixes are filename suffixes that identify SBOM documents,
+// shared so every control classifies the same file the same way.
+var sbomExtensionSuffixes = []string{
+	".spdx", ".spdx.json", ".spdx.yaml", ".spdx.yml", ".spdx.rdf", ".spdx.xml",
+	".cdx.json", ".cdx.xml", ".cdx",
+}
+
+// HasSBOMExtension reports whether a lowercased asset name carries a software
+// bill-of-materials document extension.
+func HasSBOMExtension(lowerName string) bool {
+	for _, suffix := range sbomExtensionSuffixes {
+		if strings.HasSuffix(lowerName, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// ReleaseLabel names a release in evidence messages, preferring the tag.
+func ReleaseLabel(release data.ReleaseData) string {
+	if release.TagName != "" {
+		return release.TagName
+	}
+	if release.Name != "" {
+		return release.Name
+	}
+	return "(unnamed release)"
+}
+
 // AIFallback logs why an AI-assisted assessment was abandoned and returns
 // NeedsReview with the supplied fallback message. Use this when an AI-assisted
 // step cannot complete (e.g. client construction failure, missing evidence,

@@ -74,6 +74,11 @@ type GraphqlRepoData struct {
 		}
 		LatestRelease struct {
 			Description string
+			TagName     string
+			Name        string
+			Assets      struct {
+				Nodes []ReleaseAssetNode
+			} `graphql:"releaseAssets(first: 100)"`
 		}
 		ContributingGuidelines struct {
 			Body string
@@ -97,4 +102,9 @@ type GraphqlRepoData struct {
 			TotalCount int
 		}
 	} `graphql:"repository(owner: $owner, name: $name)"`
+}
+
+// ReleaseAssetNode is one asset of the GraphQL latest release.
+type ReleaseAssetNode struct {
+	Name string
 }

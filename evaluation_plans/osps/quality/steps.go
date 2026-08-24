@@ -432,7 +432,7 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 			}
 		}
 
-		label := releaseLabel(release)
+		label := reusable_steps.ReleaseLabel(release)
 		if hasCompiled || hasAmbiguous {
 			releasesWithArtifacts = append(releasesWithArtifacts, label)
 			if hasCompiled {
@@ -479,24 +479,6 @@ func ReleasesHaveSBOM(payload data.Payload) (result gemara.Result, message strin
 	return gemara.NeedsReview, fmt.Sprintf("No SBOM was found among the GitHub assets for release(s) publishing compiled or archived software: %s. Review publisher evidence because an SBOM may be retained privately or distributed through another channel", strings.Join(releasesMissingSBOM, ", ")), gemara.Low
 }
 
-// releaseLabel returns a human-friendly identifier for a release, preferring the
-// tag name and falling back to the display name.
-func releaseLabel(release data.ReleaseData) string {
-	if release.TagName != "" {
-		return release.TagName
-	}
-	if release.Name != "" {
-		return release.Name
-	}
-	return "(unnamed release)"
-}
-
-// sbomExtensionSuffixes are filename suffixes that identify SBOM documents.
-var sbomExtensionSuffixes = []string{
-	".spdx", ".spdx.json", ".spdx.yaml", ".spdx.yml", ".spdx.rdf", ".spdx.xml",
-	".cdx.json", ".cdx.xml", ".cdx",
-}
-
 // isSBOMAsset reports whether a release asset name looks like a software bill of
 // materials. Matching is case-insensitive. The bare token "bom" and the
 // "cyclonedx"/"sbom" markers are guarded to avoid false positives on unrelated
@@ -507,10 +489,8 @@ func isSBOMAsset(name string) bool {
 		return false
 	}
 
-	for _, suffix := range sbomExtensionSuffixes {
-		if strings.HasSuffix(lower, suffix) {
-			return true
-		}
+	if reusable_steps.HasSBOMExtension(lower) {
+		return true
 	}
 
 	// Archives may be tools or distributions whose product name contains an
