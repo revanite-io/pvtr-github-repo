@@ -3,26 +3,55 @@
 This guide explains how to turn on AI-assisted checks in the Privateer GitHub
 repository scanner, how to set up a provider, and how to read the results.
 
-What is described here matches
-[`privateer-sdk`](https://github.com/privateerproj/privateer-sdk) **v1.32.2**,
-the version this scanner currently builds against. The SDK owns the AI client,
-the answer format, and the `ai_*` settings, so a later SDK version can change
+The AI client, the answer format, and the `ai_*` settings all come from
+[`privateer-sdk`](https://github.com/privateerproj/privateer-sdk). See `go.mod`
+for the version this scanner currently builds against; an SDK upgrade can change
 any of this.
 
 For a short introduction, see the
 [AI-Assisted Checks](../README.md#ai-assisted-checks) section of the README.
 
-## What AI Assistance Does
+## Why Some Requirements Need AI
 
-A handful of OSPS Baseline requirements ask whether a project *documents*
-something, or whether a setting is *appropriate for what a job actually does*.
-Searching for keywords cannot answer those questions. For those requirements,
-the scanner can send a limited amount of repository content to an AI model and
-ask it to answer in a fixed format.
+Most Baseline requirements can be answered by looking for something specific: a
+file exists, a setting has a certain value, a release has an attached SBOM. A
+few cannot, because they ask whether something is *good enough* rather than
+whether it is *present*.
+
+`OSPS-QA-06.02` is the clearest example. It asks whether a project documents
+when and how its tests are run. Searching for the word "test" finds a match in
+almost every repository, and finding one proves nothing:
+
+- A README saying "run the tests before submitting" mentions tests and gives no
+  command. A contributor still cannot run them.
+- A README with `make test` under a heading about releases explains *how* but
+  never says *when* — is it expected on every change, or only at release time?
+- A page explaining how end users report failing tests is about tests, but says
+  nothing to a contributor.
+
+Each of these contains the keyword. None of them satisfies the requirement. The
+difference is in meaning, not in the presence of a word, so the check has to
+read the documentation rather than search it.
+
+`OSPS-QA-06.03` turns on an even finer distinction: the difference between
+*describing* and *requiring*. "The project has an automated test suite" and
+"changes to functionality must add or update tests" can use nearly identical
+words, but only the second is a policy. That is what the requirement asks for.
+
+`OSPS-AC-04.02` is ambiguous in a different way. It asks whether a CI/CD job
+grants itself no more permission than it needs, and the identical setting can be
+correct or wrong depending on the job. `contents: write` is necessary for a job
+that publishes a release and excessive for one that only runs a linter. No rule
+that inspects the permission alone can separate the two; you have to consider
+what the job does with it.
+
+For requirements like these, the scanner can send the relevant files to an AI
+model and ask it to answer in a fixed format.
 
 AI never replaces a regular check. It is only used where a regular check does
 not exist or cannot reach a conclusion, and its answer is saved as evidence
-alongside every other observation the scan records.
+alongside every other observation the scan records. Where the rules can decide,
+they do — see [Which Checks Use AI](#which-checks-use-ai).
 
 ## AI Is Opt-In
 
@@ -299,11 +328,13 @@ access to the provider's own logs.
 
 <!-- markdownlint-enable MD013 -->
 
-`OSPS-AC-04.02` is checked by the regular rules first. A `write-all` grant fails
-outright, permissions set to `none` or left empty pass, and a workflow with no
-`permissions:` block at all is not applicable — none of those involve a model.
-AI is only asked about what is left: a job holding a specific grant where
-whether it is needed depends on what the job actually does.
+`OSPS-AC-04.02` is checked by the regular rules first. Granting everything fails
+outright — whether written as `write-all` or as every scope listed at its
+highest level. Permissions set to `none` or left empty pass, and a workflow with
+no `permissions:` block at all is not applicable. None of those involve a model.
+AI is only asked about what is left: a job holding a specific grant, such as
+`contents: write`, where whether it is needed depends on what the job actually
+does.
 
 ### Size Limits
 

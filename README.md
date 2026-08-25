@@ -29,10 +29,19 @@ You may have to adjust the plugin name in the config.yaml file to match them.
 
 ## AI-Assisted Checks
 
-A few OSPS Baseline requirements ask whether a project *documents* something, or
-whether a setting is *appropriate for what it is used for*. Searching for
-keywords cannot answer those questions, so the scanner can optionally ask an AI
-model and record its answer as evidence.
+Most Baseline requirements can be answered by looking for something specific: a
+file exists, a setting has a certain value. A few ask whether something is *good
+enough* rather than whether it is *present*, and those cannot be answered by
+searching for keywords.
+
+`OSPS-QA-06.02`, for example, asks whether a project documents when and how its
+tests are run. A README saying "run the tests before submitting" contains the
+word "test" but gives no command; a `make test` snippet explains how but never
+says when it is expected. Both mention testing and neither satisfies the
+requirement, so the check has to read the documentation rather than search it.
+
+For requirements like these, the scanner can optionally ask an AI model and
+record its answer as evidence.
 
 AI is **opt-in**. With no `ai_*` settings the scanner behaves exactly as it
 always has, contacts no provider, and sends nothing anywhere.
