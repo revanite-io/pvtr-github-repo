@@ -29,84 +29,27 @@ You may have to adjust the plugin name in the config.yaml file to match them.
 
 ## AI-Assisted Checks
 
-Most Baseline requirements can be answered by looking for something specific: a
-file exists, a setting has a certain value. A few ask whether something is *good
-enough* rather than whether it is *present*.
+Some requirements need judgment rather than a simple file or setting check. The
+scanner can use an AI model for these requirements and store the assessment as
+evidence. AI is disabled by default.
 
-`OSPS-QA-06.02` asks whether a project documents when and how its tests are run.
-Searching for the word "test" matches almost every repository and proves
-nothing: "run the tests before submitting" leaves a contributor without a
-command, and a `make test` snippet never says whether tests are expected on
-every change or only at release time. Both mention testing; neither satisfies
-the requirement.
+Enable AI with a provider, model, and API key:
 
-For requirements like these, the scanner can optionally ask an AI model and
-record its answer as evidence.
-
-AI is **opt-in**. With no `ai_*` settings the scanner behaves exactly as it
-always has, contacts no provider, and sends nothing anywhere.
-
-### Configuration
-
-<!-- markdownlint-disable MD013 -->
-
-| Setting | Environment variable | Required | Default | Purpose |
-| --- | --- | :---: | --- | --- |
-| `ai_provider` | `PVTR_AI_PROVIDER` | yes | -- | Which AI service to use: `openai` or `anthropic`. |
-| `ai_model` | `PVTR_AI_MODEL` | yes | -- | Model name, spelled the way your provider spells it. |
-| `ai_api_key` | `PVTR_AI_API_KEY` | yes | -- | Your API key for that provider. |
-| `ai_base_url` | `PVTR_AI_BASE_URL` | no | provider default | A different endpoint, such as a proxy or gateway. |
-| `ai_timeout` | `PVTR_AI_TIMEOUT` | no | `30s` | How long to wait for one answer, for example `30s` or `2m`. |
-| `ai_max_tokens` | `PVTR_AI_MAX_TOKENS` | no | `1024` | Longest answer to allow back from the model. |
-
-<!-- markdownlint-enable MD013 -->
-
-Put the settings at the top level so every service picks them up, or inside a
-single service's `vars` block to apply them to just that service:
-
-```yaml
-ai_provider: openai
-ai_model: gpt-4o-mini
-# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
-
-services:
-  my-scan:
-    plugin: github-repo
-    vars:
-      owner: <github org or user name>
-      repo: <github repo name>
-      token: <classic token with permissions repo + admin:org>
+```sh
+export PVTR_AI_PROVIDER='openai'
+export PVTR_AI_MODEL='gpt-4o-mini'
+export PVTR_AI_API_KEY='<your-api-key>'
 ```
 
-### Reading The Results
+The scanner supports OpenAI and Anthropic. AI-assisted results include the
+`[AI-Assisted]` prefix and a confidence level. Provider errors and invalid
+responses produce `Needs Review`; the scan continues.
 
-A requirement answered with AI help is prefixed with `[AI-Assisted]`:
+> **The scanner does not detect or redact secrets in repository files before
+> sending those files to the provider or storing them in AI evidence.**
 
-```text
-[AI-Assisted] CONTRIBUTING.md tells contributors to run `go test ./...` before opening a pull request.
-```
-
-The model answers `Passed`, `Failed`, or `Needs Review`, with a confidence of
-`low`, `medium`, or `high`. Anything unexpected — a malformed answer, a provider
-error, a timeout, a missing API key — becomes `Needs Review` at low confidence
-and the scan continues. **An AI-assisted check never silently passes a
-requirement.**
-
-The model's full reasoning, the exact question it was asked, the content it was
-shown, and the model used are all saved as evidence in the results file, so a
-reviewer can check or dispute the answer.
-
-Three requirements use AI today: `OSPS-QA-06.02`, `OSPS-QA-06.03`, and
-`OSPS-AC-04.02`. Each one makes at most one call to the provider per scan, and
-only the specific documentation or workflow files a question needs are sent —
-never the whole repository.
-
-Note that repository content is sent to whichever provider you configure, and
-that provider charges you for the calls.
-
-For provider examples, where to put the settings, how to check a configuration
-without paying for provider calls, size limits, and the full evidence format,
-see [docs/ai-assisted-checks.md](docs/ai-assisted-checks.md).
+See [AI-Assisted Checks](docs/ai-assisted-checks.md) for configuration,
+security guidance, supported checks, and result details.
 
 ## Docker Usage
 
