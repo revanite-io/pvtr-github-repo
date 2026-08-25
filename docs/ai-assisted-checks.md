@@ -14,44 +14,19 @@ For a short introduction, see the
 ## Why Some Requirements Need AI
 
 Most Baseline requirements can be answered by looking for something specific: a
-file exists, a setting has a certain value, a release has an attached SBOM. A
-few cannot, because they ask whether something is *good enough* rather than
-whether it is *present*.
+file exists, a setting has a certain value, a release has an SBOM attached. A
+few ask whether something is *good enough* rather than whether it is *present*.
 
-`OSPS-QA-06.02` is the clearest example. It asks whether a project documents
-when and how its tests are run. Searching for the word "test" finds a match in
-almost every repository, and finding one proves nothing:
-
-- A README saying "run the tests before submitting" mentions tests and gives no
-  command. A contributor still cannot run them.
-- A README with `make test` under a heading about releases explains *how* but
-  never says *when* — is it expected on every change, or only at release time?
-- A page explaining how end users report failing tests is about tests, but says
-  nothing to a contributor.
-
-Each of these contains the keyword. None of them satisfies the requirement. The
-difference is in meaning, not in the presence of a word, so the check has to
-read the documentation rather than search it.
-
-`OSPS-QA-06.03` turns on an even finer distinction: the difference between
-*describing* and *requiring*. "The project has an automated test suite" and
-"changes to functionality must add or update tests" can use nearly identical
-words, but only the second is a policy. That is what the requirement asks for.
-
-`OSPS-AC-04.02` is ambiguous in a different way. It asks whether a CI/CD job
-grants itself no more permission than it needs, and the identical setting can be
-correct or wrong depending on the job. `contents: write` is necessary for a job
-that publishes a release and excessive for one that only runs a linter. No rule
-that inspects the permission alone can separate the two; you have to consider
-what the job does with it.
+`OSPS-QA-06.02` asks whether a project documents when and how its tests are run.
+Searching for the word "test" matches almost every repository and proves
+nothing: "run the tests before submitting" leaves a contributor without a
+command, and a `make test` snippet never says whether tests are expected on
+every change or only at release time. Both mention testing; neither satisfies
+the requirement. The difference is in meaning, not in the presence of a word, so
+the check has to read the documentation rather than search it.
 
 For requirements like these, the scanner can send the relevant files to an AI
-model and ask it to answer in a fixed format.
-
-AI never replaces a regular check. It is only used where a regular check does
-not exist or cannot reach a conclusion, and its answer is saved as evidence
-alongside every other observation the scan records. Where the rules can decide,
-they do — see [Which Checks Use AI](#which-checks-use-ai).
+model and ask for an answer in a fixed format.
 
 ## AI Is Opt-In
 
@@ -317,6 +292,10 @@ access to the provider's own logs.
 > file should not be sent to an AI provider in the first place.
 
 ## Which Checks Use AI
+
+AI never replaces a regular check. It is used only where a regular check does
+not exist or cannot reach a conclusion, and its answer is saved as evidence
+alongside every other observation the scan records.
 
 <!-- markdownlint-disable MD013 -->
 

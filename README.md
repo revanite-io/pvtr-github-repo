@@ -31,14 +31,14 @@ You may have to adjust the plugin name in the config.yaml file to match them.
 
 Most Baseline requirements can be answered by looking for something specific: a
 file exists, a setting has a certain value. A few ask whether something is *good
-enough* rather than whether it is *present*, and those cannot be answered by
-searching for keywords.
+enough* rather than whether it is *present*.
 
-`OSPS-QA-06.02`, for example, asks whether a project documents when and how its
-tests are run. A README saying "run the tests before submitting" contains the
-word "test" but gives no command; a `make test` snippet explains how but never
-says when it is expected. Both mention testing and neither satisfies the
-requirement, so the check has to read the documentation rather than search it.
+`OSPS-QA-06.02` asks whether a project documents when and how its tests are run.
+Searching for the word "test" matches almost every repository and proves
+nothing: "run the tests before submitting" leaves a contributor without a
+command, and a `make test` snippet never says whether tests are expected on
+every change or only at release time. Both mention testing; neither satisfies
+the requirement.
 
 For requirements like these, the scanner can optionally ask an AI model and
 record its answer as evidence.
