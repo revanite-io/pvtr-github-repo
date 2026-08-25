@@ -28,16 +28,32 @@ the check has to read the documentation rather than search it.
 For requirements like these, the scanner can send the relevant files to an AI
 model and ask for an answer in a fixed format.
 
-## AI Is Opt-In
+## Turning AI On
 
-When none of the `ai_*` settings are set, AI is off. The scanner makes no
+AI is off until you configure it. With no `ai_*` settings the scanner makes no
 requests to any provider, and every AI-capable check gives the same answer it
 gave before AI support existed.
 
-Setting *any* `ai_*` setting while a required one is missing counts as a mistake
-in the configuration rather than as "turned off" — including setting only an
-optional one such as `ai_base_url`. The affected check reports `Needs Review`
-and logs a warning; the scan itself still finishes.
+The smallest working configuration is a provider, a model, and an API key:
+
+```yaml
+ai_provider: openai
+ai_model: gpt-4o-mini
+# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
+
+services:
+  my-scan:
+    plugin: github-repo
+    vars:
+      owner: <github org or user name>
+      repo: <github repo name>
+      token: <classic token with permissions repo + admin:org>
+```
+
+AI counts as on as soon as *any* `ai_*` setting is present. If the required ones
+are not all there, the affected checks report `Needs Review` and log a warning
+rather than quietly carrying on without AI, so a half-finished configuration is
+visible instead of silent. The scan itself still finishes.
 
 ## Configuration Settings
 
@@ -64,92 +80,14 @@ Avoid setting `ai_max_tokens` much lower than the default. The answer has to
 carry a short message, a longer explanation, and any citations, so a tight limit
 can cut the answer off and send the check to manual review.
 
-### Where To Put The Settings
+### Where Settings Go
 
-You can put AI settings at the top level of the config file, where every service
-picks them up, or inside one service's `vars` block. For each setting, the
-scanner uses the first of these it finds:
-
-1. `services.<service-name>.vars.<name>`
-2. top-level `vars.<name>`
-3. a top-level `<name>` entry
-4. the matching `PVTR_*` environment variable
-
-So a value set on a service beats one set at the top level, which is how one
-service can use a different model or endpoint from the rest. See
-[Running Only Some Services With AI](#running-only-some-services-with-ai) before
-trying to use this to turn AI off for one service.
-
-### Keeping The API Key Out Of The Config File
-
-Prefer passing the API key through `PVTR_AI_API_KEY`, or from whatever secret
-store your CI already uses, rather than writing it into `config.yml`:
-
-```sh
-export PVTR_AI_API_KEY='<your-provider-api-key>'
-./pvtr run --binaries-path .
-```
-
-## Provider Examples
-
-The scanner has no code specific to any one provider. It asks the SDK for a
-client and the SDK picks the provider from `ai_provider`, so the choices are
-whichever ones the pinned SDK supports — currently `openai` and `anthropic`.
-Each one has its own test suite in the SDK, so neither is an afterthought.
-
-### OpenAI
+Settings at the top level apply to every service. Settings inside a service's
+`vars` block apply to that service only, and win over the top-level value:
 
 ```yaml
 ai_provider: openai
-ai_model: gpt-4o-mini
-# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
-
-services:
-  my-scan:
-    plugin: github-repo
-    vars:
-      owner: <github org or user name>
-      repo: <github repo name>
-      token: <classic token with permissions repo + admin:org>
-```
-
-### Anthropic
-
-```yaml
-ai_provider: anthropic
-ai_model: <anthropic model id>   # check the provider's current model list
-# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
-
-services:
-  my-scan:
-    plugin: github-repo
-    vars:
-      owner: <github org or user name>
-      repo: <github repo name>
-      token: <classic token with permissions repo + admin:org>
-```
-
-### A Gateway Or Self-Hosted Endpoint
-
-Use `ai_base_url` when calls have to go through a company gateway, a monitoring
-proxy, or a deployment you host yourself that accepts the same requests as the
-provider you picked. Leave `ai_provider` set to whichever provider's request
-format the endpoint accepts.
-
-```yaml
-ai_provider: openai
-ai_model: <model id exposed by the endpoint>
-ai_base_url: https://ai-gateway.internal.example.com/v1
-```
-
-### Per-Service Overrides
-
-A setting on a service beats anything it would otherwise pick up from the top
-level, so one service can use a different model from the rest:
-
-```yaml
-ai_provider: openai
-ai_model: gpt-4o-mini
+ai_model: gpt-4o-mini        # every service uses this model...
 
 services:
   routine-scan:
@@ -165,33 +103,89 @@ services:
       owner: <github org or user name>
       repo: <other repo name>
       token: <classic token>
-      ai_model: <a more capable model id>
+      ai_model: <a more capable model id>   # ...except this one
+```
+
+Any setting can also come from its `PVTR_AI_*` environment variable, which is
+the usual way to pass the API key. The environment overrides a top-level setting
+like the `ai_provider:` above, but not one inside a `vars:` block.
+
+### Keeping The API Key Out Of The Config File
+
+Prefer passing the API key through `PVTR_AI_API_KEY`, or from whatever secret
+store your CI already uses, rather than writing it into `config.yml`:
+
+```sh
+export PVTR_AI_API_KEY='<your-provider-api-key>'
+./pvtr run --binaries-path .
 ```
 
 ### Running Only Some Services With AI
 
-If only some of your services should use AI, put the AI settings **inside those
-services** rather than at the top level. Services that say nothing about AI then
-run with it off.
+Put the AI settings inside the services that need them rather than at the top
+level. A service that says nothing about AI runs with it off.
 
-Turning AI off for one service that would otherwise pick up top-level settings
-is possible but easy to get wrong. Setting a value to empty does override the
-top-level one, but AI counts as "off" only when *every* `ai_*` setting ends up
-empty. Blanking `ai_provider` and `ai_model` while an `ai_api_key` is still
-reachable — from a top-level entry or from `PVTR_AI_API_KEY` — leaves the
-service switched on but broken, and its AI-assisted requirements report
-`Needs Review`. Setting AI only on the services that need it avoids this.
+Going the other way — inheriting top-level settings and then switching them off
+for one service — is easy to get wrong. AI counts as off only when *every*
+`ai_*` setting ends up empty, so blanking `ai_provider` and `ai_model` while an
+`ai_api_key` is still reachable from the top level or the environment leaves the
+service switched on but broken, and its AI-assisted checks report `Needs Review`.
+
+## Provider Examples
+
+The scanner has no code specific to any one provider. It asks the SDK for a
+client and the SDK picks the provider from `ai_provider`, so the choices are
+whichever ones the pinned SDK supports — currently `openai` and `anthropic`.
+Each one has its own test suite in the SDK, so neither is an afterthought.
+
+The example above uses OpenAI. To use Anthropic instead, change the provider and
+the model:
+
+```yaml
+ai_provider: anthropic
+ai_model: <anthropic model id>   # check the provider's current model list
+```
+
+### A Gateway Or Self-Hosted Endpoint
+
+Use `ai_base_url` when calls have to go through a company gateway, a monitoring
+proxy, or a deployment you host yourself that accepts the same requests as the
+provider you picked. Leave `ai_provider` set to whichever provider's request
+format the endpoint accepts.
+
+```yaml
+ai_provider: openai
+ai_model: <model id exposed by the endpoint>
+ai_base_url: https://ai-gateway.internal.example.com/v1
+```
 
 ## Checking Your Configuration Without Paying For Calls
 
-The scanner has no dry-run mode. AI dry-run existed briefly in the SDK
-([privateer-sdk#227](https://github.com/privateerproj/privateer-sdk/pull/227))
+There is no dry-run mode, but you can still check most of a configuration
+cheaply:
+
+- **Typos cost nothing.** The provider name, model, and API key are checked on
+  your machine before any network call happens. A provider name that is not
+  supported, an empty `ai_model`, an `ai_api_key` left unset while other AI
+  settings are present, or an `ai_timeout` the scanner cannot read all fail
+  without contacting a provider.
+- **Watch the logs.** Abandoned AI assessments are logged at `warn` level with
+  the requirement id and the reason, so keep `loglevel` at `info` or lower (the
+  default in `example-config.yml`) — at `error` these warnings are hidden. A run
+  that logs no such warning and still asks for manual review on the requirements
+  below means AI was never picked up at all, which usually means the settings
+  are in the wrong place.
+- **Point at a local endpoint.** Set `ai_base_url` to a local mock server that
+  accepts OpenAI-style requests to exercise the whole AI path, including
+  gathering content and checking the answer, without using your provider account.
+- **Run one service.** Use `--service=<service_name>` to run a single service
+  while you work on the configuration.
+
+If you are looking for a dry-run flag you saw mentioned elsewhere: it existed
+briefly in the SDK ([privateer-sdk#227](https://github.com/privateerproj/privateer-sdk/pull/227))
 and was removed when the AI packages were reorganized in
 [privateer-sdk#252](https://github.com/privateerproj/privateer-sdk/pull/252).
-This scanner never had a dry-run of its own, so there is nothing to turn on with
-the current SDK.
-
-You can still check most of a configuration cheaply:
+This scanner never had one of its own.
 
 - **Typos cost nothing.** The provider name, model, and API key are checked on
   your machine before any network call happens. A provider name that is not
