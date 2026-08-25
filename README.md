@@ -30,9 +30,9 @@ You may have to adjust the plugin name in the config.yaml file to match them.
 ## AI-Assisted Checks
 
 A few OSPS Baseline requirements ask whether a project *documents* something, or
-whether a setting is *appropriate for what it is used for*. Those questions
-cannot be answered by pattern matching, so the scanner can optionally ask a
-large language model and record its answer as evidence.
+whether a setting is *appropriate for what it is used for*. Searching for
+keywords cannot answer those questions, so the scanner can optionally ask an AI
+model and record its answer as evidence.
 
 AI is **opt-in**. With no `ai_*` settings the scanner behaves exactly as it
 always has, contacts no provider, and sends nothing anywhere.
@@ -41,24 +41,24 @@ always has, contacts no provider, and sends nothing anywhere.
 
 <!-- markdownlint-disable MD013 -->
 
-| Key | Environment variable | Required | Default | Purpose |
+| Setting | Environment variable | Required | Default | Purpose |
 | --- | --- | :---: | --- | --- |
-| `ai_provider` | `PVTR_AI_PROVIDER` | yes | -- | Backend adapter: `openai` or `anthropic`. |
-| `ai_model` | `PVTR_AI_MODEL` | yes | -- | Provider-specific model identifier. |
-| `ai_api_key` | `PVTR_AI_API_KEY` | yes | -- | Provider credential. |
-| `ai_base_url` | `PVTR_AI_BASE_URL` | no | adapter default | Alternate endpoint: proxy, gateway, or self-hosted deployment. |
-| `ai_timeout` | `PVTR_AI_TIMEOUT` | no | `30s` | Per-call timeout, as a Go duration string. |
-| `ai_max_tokens` | `PVTR_AI_MAX_TOKENS` | no | `1024` | Cap on the model's response length. |
+| `ai_provider` | `PVTR_AI_PROVIDER` | yes | -- | Which AI service to use: `openai` or `anthropic`. |
+| `ai_model` | `PVTR_AI_MODEL` | yes | -- | Model name, spelled the way your provider spells it. |
+| `ai_api_key` | `PVTR_AI_API_KEY` | yes | -- | Your API key for that provider. |
+| `ai_base_url` | `PVTR_AI_BASE_URL` | no | provider default | A different endpoint, such as a proxy or gateway. |
+| `ai_timeout` | `PVTR_AI_TIMEOUT` | no | `30s` | How long to wait for one answer, for example `30s` or `2m`. |
+| `ai_max_tokens` | `PVTR_AI_MAX_TOKENS` | no | `1024` | Longest answer to allow back from the model. |
 
 <!-- markdownlint-enable MD013 -->
 
-Declare the keys at the top level to have every service inherit them, or inside
-a single service's `vars` block to scope them to that service:
+Put the settings at the top level so every service picks them up, or inside a
+single service's `vars` block to apply them to just that service:
 
 ```yaml
 ai_provider: openai
 ai_model: gpt-4o-mini
-# Supply the credential via PVTR_AI_API_KEY rather than writing it here.
+# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
 
 services:
   my-scan:
@@ -77,27 +77,27 @@ A requirement answered with AI help is prefixed with `[AI-Assisted]`:
 [AI-Assisted] CONTRIBUTING.md tells contributors to run `go test ./...` before opening a pull request.
 ```
 
-The model's verdict maps to `Passed`, `Failed`, or `Needs Review`, with a
-`low` / `medium` / `high` confidence. Anything unexpected — a malformed
-response, a provider error, a timeout, a missing credential — becomes
-`Needs Review` at low confidence and the scan continues. **An AI-assisted check
-never silently passes a requirement.**
+The model answers `Passed`, `Failed`, or `Needs Review`, with a confidence of
+`low`, `medium`, or `high`. Anything unexpected — a malformed answer, a provider
+error, a timeout, a missing API key — becomes `Needs Review` at low confidence
+and the scan continues. **An AI-assisted check never silently passes a
+requirement.**
 
-The model's full reasoning, the exact prompt, the material it was shown, and the
-model used are all recorded as evidence in the evaluation log, so a reviewer can
-audit or dispute the answer.
+The model's full reasoning, the exact question it was asked, the content it was
+shown, and the model used are all saved as evidence in the results file, so a
+reviewer can check or dispute the answer.
 
 Three requirements use AI today: `OSPS-QA-06.02`, `OSPS-QA-06.03`, and
-`OSPS-AC-04.02`. At most one provider call is made per applicable requirement
-per scan, and only the specific documentation or workflow files a question needs
-are sent — never the whole repository.
+`OSPS-AC-04.02`. Each one makes at most one call to the provider per scan, and
+only the specific documentation or workflow files a question needs are sent —
+never the whole repository.
 
 Note that repository content is sent to whichever provider you configure, and
-that provider usage is billed to you.
+that provider charges you for the calls.
 
-For provider examples, configuration precedence, how to validate a
-configuration without provider spend, size limits, and the full evidence
-format, see [docs/ai-assisted-checks.md](docs/ai-assisted-checks.md).
+For provider examples, where to put the settings, how to check a configuration
+without paying for provider calls, size limits, and the full evidence format,
+see [docs/ai-assisted-checks.md](docs/ai-assisted-checks.md).
 
 ## Docker Usage
 

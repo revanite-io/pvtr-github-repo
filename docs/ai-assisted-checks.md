@@ -1,14 +1,13 @@
 # AI-Assisted Checks
 
-This guide explains how to enable AI-assisted assessments in the Privateer
-GitHub repository scanner, how to configure a provider, and how to read the
-results.
+This guide explains how to turn on AI-assisted checks in the Privateer GitHub
+repository scanner, how to set up a provider, and how to read the results.
 
-The behavior described here reflects
+What is described here matches
 [`privateer-sdk`](https://github.com/privateerproj/privateer-sdk) **v1.32.2**,
 the version this scanner currently builds against. The SDK owns the AI client,
-the verdict schema, and the `ai_*` configuration keys, so upgrading the SDK can
-change this surface.
+the answer format, and the `ai_*` settings, so a later SDK version can change
+any of this.
 
 For a short introduction, see the
 [AI-Assisted Checks](../README.md#ai-assisted-checks) section of the README.
@@ -16,72 +15,70 @@ For a short introduction, see the
 ## What AI Assistance Does
 
 A handful of OSPS Baseline requirements ask whether a project *documents*
-something, or whether a configuration is *appropriate for what a job actually
-does*. These questions cannot be answered by pattern matching alone. For those
-requirements, the scanner can send a bounded slice of repository content to a
-large language model and ask for a structured verdict.
+something, or whether a setting is *appropriate for what a job actually does*.
+Searching for keywords cannot answer those questions. For those requirements,
+the scanner can send a limited amount of repository content to an AI model and
+ask it to answer in a fixed format.
 
-AI never replaces a deterministic check. It is only consulted where a
-deterministic check does not exist or cannot reach a conclusion, and its answer
-is recorded as evidence alongside every other observation in the evaluation log.
+AI never replaces a regular check. It is only used where a regular check does
+not exist or cannot reach a conclusion, and its answer is saved as evidence
+alongside every other observation the scan records.
 
 ## AI Is Opt-In
 
-When none of the `ai_*` keys are set, AI is off. The scanner makes no requests
-to any provider, and every AI-capable step keeps the same non-AI verdict it
-produced before AI support existed.
+When none of the `ai_*` settings are set, AI is off. The scanner makes no
+requests to any provider, and every AI-capable check gives the same answer it
+gave before AI support existed.
 
-Setting *any* `ai_*` key while a required one is missing is treated as a
-misconfiguration rather than as "disabled" — including setting only an optional
-key such as `ai_base_url`. The affected step reports `Needs Review` and logs a
-warning; the scan itself still completes.
+Setting *any* `ai_*` setting while a required one is missing counts as a mistake
+in the configuration rather than as "turned off" — including setting only an
+optional one such as `ai_base_url`. The affected check reports `Needs Review`
+and logs a warning; the scan itself still finishes.
 
-## Configuration Keys
+## Configuration Settings
 
 <!-- markdownlint-disable MD013 -->
 
-| Key | Environment variable | Required | Default | Purpose |
+| Setting | Environment variable | Required | Default | Purpose |
 | --- | --- | :---: | --- | --- |
-| `ai_provider` | `PVTR_AI_PROVIDER` | yes | -- | Backend adapter: `openai` or `anthropic`. |
-| `ai_model` | `PVTR_AI_MODEL` | yes | -- | Provider-specific model identifier. |
-| `ai_api_key` | `PVTR_AI_API_KEY` | yes | -- | Provider credential. |
-| `ai_base_url` | `PVTR_AI_BASE_URL` | no | adapter default | Alternate endpoint: a proxy, gateway, or self-hosted deployment. |
-| `ai_timeout` | `PVTR_AI_TIMEOUT` | no | `30s` | Per-call timeout, as a Go duration string. |
-| `ai_max_tokens` | `PVTR_AI_MAX_TOKENS` | no | `1024` | Cap on the length of the model's response. |
+| `ai_provider` | `PVTR_AI_PROVIDER` | yes | -- | Which AI service to use: `openai` or `anthropic`. |
+| `ai_model` | `PVTR_AI_MODEL` | yes | -- | Model name, spelled the way your provider spells it. |
+| `ai_api_key` | `PVTR_AI_API_KEY` | yes | -- | Your API key for that provider. |
+| `ai_base_url` | `PVTR_AI_BASE_URL` | no | provider default | A different endpoint: a proxy, a gateway, or a deployment you host yourself. |
+| `ai_timeout` | `PVTR_AI_TIMEOUT` | no | `30s` | How long to wait for one answer, for example `30s` or `2m`. |
+| `ai_max_tokens` | `PVTR_AI_MAX_TOKENS` | no | `1024` | Longest answer to allow back from the model. |
 
 <!-- markdownlint-enable MD013 -->
 
-The default endpoints are `https://api.openai.com/v1` for `openai` and
-`https://api.anthropic.com/v1` for `anthropic`.
+If you do not set `ai_base_url`, the scanner uses `https://api.openai.com/v1`
+for `openai` and `https://api.anthropic.com/v1` for `anthropic`.
 
-`ai_max_tokens` must be an integer; the remaining keys must be strings. An
-`ai_timeout` value that is not a valid Go duration is a hard error rather than a
-silent fallback to the default.
+`ai_max_tokens` must be a whole number; the rest must be text. An `ai_timeout`
+the scanner cannot read stops the run instead of quietly using the default.
 
-Lowering `ai_max_tokens` much below the default is not recommended. The response
-has to carry a short message, a long-form explanation, and any citations, so an
-aggressive cap can truncate the answer and cause the step to fall back to manual
-review.
+Avoid setting `ai_max_tokens` much lower than the default. The answer has to
+carry a short message, a longer explanation, and any citations, so a tight limit
+can cut the answer off and send the check to manual review.
 
-### Where To Put The Keys
+### Where To Put The Settings
 
-AI settings may be declared at the top level of the config file, in which case
-every service inherits them, or inside a single service's `vars` block. For a
-given key, the scanner resolves the first of these that is present:
+You can put AI settings at the top level of the config file, where every service
+picks them up, or inside one service's `vars` block. For each setting, the
+scanner uses the first of these it finds:
 
-1. `services.<service-name>.vars.<key>`
-2. top-level `vars.<key>`
-3. a top-level `<key>` entry
-4. the corresponding `PVTR_*` environment variable
+1. `services.<service-name>.vars.<name>`
+2. top-level `vars.<name>`
+3. a top-level `<name>` entry
+4. the matching `PVTR_*` environment variable
 
-A per-service value therefore overrides an inherited one, which is how a single
+So a value set on a service beats one set at the top level, which is how one
 service can use a different model or endpoint from the rest. See
 [Running Only Some Services With AI](#running-only-some-services-with-ai) before
-trying to use an override to disable AI for one service.
+trying to use this to turn AI off for one service.
 
-### Keeping The Credential Out Of The Config File
+### Keeping The API Key Out Of The Config File
 
-Prefer supplying the API key through `PVTR_AI_API_KEY`, or from whatever secret
+Prefer passing the API key through `PVTR_AI_API_KEY`, or from whatever secret
 store your CI already uses, rather than writing it into `config.yml`:
 
 ```sh
@@ -91,18 +88,17 @@ export PVTR_AI_API_KEY='<your-provider-api-key>'
 
 ## Provider Examples
 
-The scanner contains no provider-specific code. It asks the SDK for a client and
-the SDK selects an adapter from `ai_provider`, so the available providers are
-whichever ones the pinned SDK registers — currently `openai` and `anthropic`.
-Each adapter is covered by its own test suite in the SDK, so neither is a
-second-class path.
+The scanner has no code specific to any one provider. It asks the SDK for a
+client and the SDK picks the provider from `ai_provider`, so the choices are
+whichever ones the pinned SDK supports — currently `openai` and `anthropic`.
+Each one has its own test suite in the SDK, so neither is an afterthought.
 
 ### OpenAI
 
 ```yaml
 ai_provider: openai
 ai_model: gpt-4o-mini
-# Supply the credential via PVTR_AI_API_KEY rather than this file.
+# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
 
 services:
   my-scan:
@@ -118,7 +114,7 @@ services:
 ```yaml
 ai_provider: anthropic
 ai_model: <anthropic model id>   # check the provider's current model list
-# Supply the credential via PVTR_AI_API_KEY rather than this file.
+# Pass the API key via PVTR_AI_API_KEY rather than writing it here.
 
 services:
   my-scan:
@@ -131,10 +127,10 @@ services:
 
 ### A Gateway Or Self-Hosted Endpoint
 
-Use `ai_base_url` when calls must travel through a corporate gateway, an
-observability proxy, or a self-hosted deployment that speaks the selected
-provider's wire protocol. Keep `ai_provider` set to the protocol the endpoint
-implements.
+Use `ai_base_url` when calls have to go through a company gateway, a monitoring
+proxy, or a deployment you host yourself that accepts the same requests as the
+provider you picked. Leave `ai_provider` set to whichever provider's request
+format the endpoint accepts.
 
 ```yaml
 ai_provider: openai
@@ -144,8 +140,8 @@ ai_base_url: https://ai-gateway.internal.example.com/v1
 
 ### Per-Service Overrides
 
-A service's own `vars` win over anything inherited, so one service can use a
-different model from the rest:
+A setting on a service beats anything it would otherwise pick up from the top
+level, so one service can use a different model from the rest:
 
 ```yaml
 ai_provider: openai
@@ -170,45 +166,45 @@ services:
 
 ### Running Only Some Services With AI
 
-If only a subset of your services should use AI, configure AI **inside those
+If only some of your services should use AI, put the AI settings **inside those
 services** rather than at the top level. Services that say nothing about AI then
-run with it disabled.
+run with it off.
 
-Opting a single service out of inherited settings is possible but easy to get
-wrong. An explicitly empty value does override an inherited one, but AI counts
-as "not configured" only when *every* `ai_*` key resolves to empty. Blanking
-`ai_provider` and `ai_model` while an `ai_api_key` is still reachable — from a
-top-level entry or from `PVTR_AI_API_KEY` — leaves the service configured but
-invalid, and its AI-assisted requirements report `Needs Review`. Scoping AI to
-the services that need it avoids the problem entirely.
+Turning AI off for one service that would otherwise pick up top-level settings
+is possible but easy to get wrong. Setting a value to empty does override the
+top-level one, but AI counts as "off" only when *every* `ai_*` setting ends up
+empty. Blanking `ai_provider` and `ai_model` while an `ai_api_key` is still
+reachable — from a top-level entry or from `PVTR_AI_API_KEY` — leaves the
+service switched on but broken, and its AI-assisted requirements report
+`Needs Review`. Setting AI only on the services that need it avoids this.
 
-## Validating Your Configuration Without Provider Spend
+## Checking Your Configuration Without Paying For Calls
 
 The scanner has no dry-run mode. AI dry-run existed briefly in the SDK
 ([privateer-sdk#227](https://github.com/privateerproj/privateer-sdk/pull/227))
-and was removed when the AI packages were restructured in
+and was removed when the AI packages were reorganized in
 [privateer-sdk#252](https://github.com/privateerproj/privateer-sdk/pull/252).
-This scanner never implemented dry-run itself, so there is nothing to enable on
+This scanner never had a dry-run of its own, so there is nothing to turn on with
 the current SDK.
 
 You can still check most of a configuration cheaply:
 
-- **Typos cost nothing.** The provider name, model, and credential are
-  validated locally before any network call is made. An unsupported
-  `ai_provider`, an empty `ai_model`, an `ai_api_key` left unset while other AI
-  keys are present, or an unparseable `ai_timeout` all fail without contacting a
-  provider.
+- **Typos cost nothing.** The provider name, model, and API key are checked on
+  your machine before any network call happens. A provider name that is not
+  supported, an empty `ai_model`, an `ai_api_key` left unset while other AI
+  settings are present, or an `ai_timeout` the scanner cannot read all fail
+  without contacting a provider.
 - **Watch the logs.** Abandoned AI assessments are logged at `warn` level with
   the requirement id and the reason, so keep `loglevel` at `info` or lower (the
-  default in `example-config.yml`) — at `error` these warnings are suppressed.
-  A run that produces no such warning and still reports manual review for the
-  requirements below means AI was never picked up at all, which usually points
-  at the keys being in the wrong place.
-- **Point at a local endpoint.** Set `ai_base_url` to a local
-  OpenAI-compatible mock server to exercise the full AI code path, including
-  evidence gathering and response validation, without any provider usage.
-- **Scope the run.** Use `--service=<service_name>` to run a single service
-  while you are iterating on the configuration.
+  default in `example-config.yml`) — at `error` these warnings are hidden. A run
+  that logs no such warning and still asks for manual review on the requirements
+  below means AI was never picked up at all, which usually means the settings
+  are in the wrong place.
+- **Point at a local endpoint.** Set `ai_base_url` to a local mock server that
+  accepts OpenAI-style requests to exercise the whole AI path, including
+  gathering content and checking the answer, without using your provider account.
+- **Run one service.** Use `--service=<service_name>` to run a single service
+  while you work on the configuration.
 
 ## Reading `[AI-Assisted]` Results
 
@@ -219,75 +215,76 @@ message:
 [AI-Assisted] CONTRIBUTING.md tells contributors to run `go test ./...` before opening a pull request.
 ```
 
-When the model returns a verdict but no usable message, the prefix is followed
-by the verdict itself:
+When the model gives an answer but no usable message, the prefix is followed by
+the answer itself, labelled `verdict`:
 
 ```text
 [AI-Assisted] verdict: needs_review (medium confidence)
 ```
 
-The message is always a single line and is capped at 160 characters, so it reads
-like every other assessment message. The model's longer reasoning is not
-discarded; it is kept in the evidence record described below.
+The message is always a single line, and anything past 160 characters is cut
+with an ellipsis, so it reads like every other result message. The model's
+longer reasoning is not thrown away; it is kept in the evidence described below
+(up to 1500 characters).
 
-### Verdicts
+### Answers
 
-The model answers with `pass`, `fail`, or `needs_review`, which map to `Passed`,
-`Failed`, and `Needs Review`. Anything else the model might return — an
-unexpected value, a missing field, a malformed payload — maps to `Needs Review`.
+The model replies `pass`, `fail`, or `needs_review`, which become `Passed`,
+`Failed`, and `Needs Review`. Anything else the model might send back — an
+unexpected value, a missing field, a garbled reply — becomes `Needs Review`.
 
-An AI-assisted check therefore **never silently passes a requirement**. The
-worst case is that a human is asked to look at it.
+So an AI-assisted check **never silently passes a requirement**. The worst case
+is that a person is asked to look at it.
 
 ### Confidence
 
-Confidence is a `low`, `medium`, or `high` enum reported by the model, not a
-numeric score. Treat it as a triage aid: a `Passed` result at `low` confidence
-deserves a spot check before you rely on it.
+The model reports its confidence as `low`, `medium`, or `high` — not as a
+number. Treat it as a hint about how much to trust the answer: a `Passed` result
+at `low` confidence is worth a quick look before you rely on it.
 
-For `OSPS-AC-04.02` the scanner applies an extra guard of its own. Unless the
-model returns a definite verdict at `high` confidence, the result is recorded as
-`Needs Review` at `low` confidence, with the model's summary appended to the
-deterministic finding.
+For `OSPS-AC-04.02` the scanner adds a check of its own. Unless the model gives
+a clear answer at `high` confidence, the result is recorded as `Needs Review` at
+`low` confidence, with the model's summary added to what the regular check
+found.
 
 ### When AI Cannot Answer
 
-Every failure path degrades to `Needs Review` at `low` confidence, logs a
-warning naming the requirement, records no AI evidence, and lets the scan
-continue. This covers:
+Every failure ends the same way: `Needs Review` at `low` confidence, a warning
+in the log naming the requirement, no AI evidence saved, and the scan carries
+on. This covers:
 
-- AI is configured incorrectly and the client cannot be built.
-- The repository content needed for the question could not be retrieved.
-- The content exceeds the size limits described below.
+- AI settings are wrong and the client cannot be built.
+- The repository content needed for the question could not be fetched.
+- The content is larger than the limits described below.
 - The provider returned an error, timed out, rate-limited the request, or
-  rejected the credential.
-- The response did not conform to the expected verdict schema.
+  rejected the API key.
+- The answer did not match the expected format.
 
 A failed AI call never turns into a `Failed` requirement.
 
 ## Evidence And Auditing
 
-When the model answers, the scanner records a `gemara` evidence entry of type
-`ai-assessment` in the normal evaluation log. There is no separate evidence file
-or directory to collect.
+When the model answers, the scanner saves an entry of type `ai-assessment` in
+the results file the scan already writes. There is no extra evidence file or
+directory to collect.
 
-The entry contains:
+The entry holds:
 
-- the verdict, confidence, short message, long-form explanation, and any
-  citations the model supplied;
-- the exact prompt and the exact material the model was shown;
-- provenance: the provider, the model actually used, and the provider's request
-  identifier;
-- a description naming the files the assessment was based on, as a permalink to
-  each file at the scanned commit where one can be constructed, and otherwise as
-  a repository-absolute path such as `/README.md`.
+- the answer, the confidence, the short message, the longer explanation, and any
+  citations the model gave;
+- the exact question the model was asked and the exact content it was shown;
+- where the answer came from: the provider, the model actually used, and the
+  provider's request id;
+- a description naming the files the answer was based on — as a permanent link
+  to each file at the scanned commit where one can be built, and otherwise as a
+  path from the repository root such as `/README.md`.
 
-That is enough for a reviewer to judge, reproduce, or dispute the answer without
-access to provider-side logs.
+That is enough for a reviewer to judge, repeat, or dispute the answer without
+access to the provider's own logs.
 
 > **Do not point AI-assisted checks at content you would not publish.** The
-> prompt and the material are written verbatim into the results file, and no
-> redaction is performed on them. Anything that should not appear in a results
+> question and the content are written word for word into the results file, and
+> nothing is removed or masked. Anything that should not appear in a results
 > file should not be sent to an AI provider in the first place.
 
 ## Which Checks Use AI
@@ -296,46 +293,46 @@ access to provider-side logs.
 
 | Requirement | Question asked | When AI is consulted |
 | --- | --- | --- |
-| `OSPS-QA-06.02` | Does project documentation explain when and how tests are run? | Whenever AI is configured. Without AI the requirement reports `Needs Review`. |
-| `OSPS-QA-06.03` | Does project documentation state a policy for maintaining tests? | Whenever AI is configured. Without AI the requirement reports `Needs Review`. |
-| `OSPS-AC-04.02` | Are the permissions a CI/CD job grants itself the minimum it needs? | Only when the deterministic check is inconclusive. |
+| `OSPS-QA-06.02` | Does project documentation explain when and how tests are run? | Whenever AI is set up. Without AI the requirement reports `Needs Review`. |
+| `OSPS-QA-06.03` | Does project documentation state a policy for maintaining tests? | Whenever AI is set up. Without AI the requirement reports `Needs Review`. |
+| `OSPS-AC-04.02` | Are the permissions a CI/CD job grants itself the minimum it needs? | Only when the regular check cannot decide. |
 
 <!-- markdownlint-enable MD013 -->
 
-`OSPS-AC-04.02` is evaluated deterministically first. A `write-all` grant fails
+`OSPS-AC-04.02` is checked by the regular rules first. A `write-all` grant fails
 outright, permissions set to `none` or left empty pass, and a workflow with no
-explicit `permissions:` block is not applicable — none of those consult a model.
-AI is only asked about the remaining case, where a job holds a specific grant
-whose necessity depends on what the job actually does.
+`permissions:` block at all is not applicable — none of those involve a model.
+AI is only asked about what is left: a job holding a specific grant where
+whether it is needed depends on what the job actually does.
 
 ### Size Limits
 
-The scanner bounds what it will send:
+The scanner limits what it will send:
 
-- README and CONTRIBUTING material for the `OSPS-QA-06` requirements is capped
-  at 64 KiB combined.
-- Workflow material for `OSPS-AC-04.02` is capped at 50 workflow files and
-  64 KiB. Both caps apply only to the workflows that actually need semantic
-  review, not to every workflow in the repository, so a repository with many
-  workflows can still be assessed as long as few of them are ambiguous.
+- README and CONTRIBUTING content for the `OSPS-QA-06` requirements is limited
+  to 64 KiB in total.
+- Workflow content for `OSPS-AC-04.02` is limited to 50 workflow files and
+  64 KiB. Both limits count only the workflows that actually need a judgment
+  call, not every workflow in the repository, so a repository with many
+  workflows can still be checked as long as few of them are unclear.
 
-Exceeding a limit defers to manual review instead of truncating the input.
-Truncation could drop the very passage the verdict depends on and produce a
-confidently wrong answer, so the scanner refuses to guess.
+Going over a limit sends the requirement to manual review instead of cutting the
+content short. Cutting it short could drop the very passage the answer depends
+on and produce a confident but wrong answer, so the scanner does not guess.
 
 ## Cost And Operational Notes
 
-- At most one provider call is made per applicable requirement per scan. With
-  the checks listed above, a single scan makes at most three calls, and fewer
-  when a deterministic check already answered.
-- Request size is bounded by the caps above, and response size by
+- Each applicable requirement makes at most one call to the provider per scan.
+  With the checks listed above, one scan makes at most three calls, and fewer
+  when a regular check already answered.
+- Request size is limited by the caps above, and answer size by
   `ai_max_tokens`.
-- Only the specific files a question needs are sent — documentation and
-  workflow definitions — never the whole repository or its source code.
-- Usage charges are yours. A small, inexpensive model is generally sufficient
-  for these questions.
-- If a provider is unreachable or over quota, scans still complete; the affected
-  requirements report `Needs Review`.
-- The repository content is sent to whichever provider you configure. Confirm
-  that is acceptable for the repositories you scan, particularly for private
-  ones, before enabling AI.
+- Only the specific files a question needs are sent — documentation and workflow
+  files — never the whole repository or its source code.
+- The provider charges you for these calls. A small, inexpensive model is
+  usually good enough for these questions.
+- If a provider is unreachable or you are over quota, scans still finish; the
+  affected requirements report `Needs Review`.
+- Repository content is sent to whichever provider you configure. Confirm that
+  is acceptable for the repositories you scan, especially private ones, before
+  turning AI on.
