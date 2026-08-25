@@ -91,6 +91,12 @@ export PVTR_AI_API_KEY='<your-provider-api-key>'
 
 ## Provider Examples
 
+The scanner contains no provider-specific code. It asks the SDK for a client and
+the SDK selects an adapter from `ai_provider`, so the available providers are
+whichever ones the pinned SDK registers — currently `openai` and `anthropic`.
+Each adapter is covered by its own test suite in the SDK, so neither is a
+second-class path.
+
 ### OpenAI
 
 ```yaml
