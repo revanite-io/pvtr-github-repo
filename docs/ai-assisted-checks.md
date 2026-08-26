@@ -10,35 +10,6 @@ optional and never replaces the deterministic checks.
 
 ## Enabling AI
 
-Add the provider and model to the service's `vars` in `config.yml`. This example
-enables OpenAI for `my-scan`:
-
-```yaml
-services:
-  my-scan:
-    plugin: github-repo
-    vars:
-      owner: <github org or user name>
-      repo: <github repo name>
-      token: <classic token with permissions repo + admin:org>
-      ai_provider: openai
-      ai_model: gpt-4o-mini
-```
-
-Set the API key in an environment variable or CI secret store, then run the
-scanner:
-
-```sh
-export PVTR_AI_API_KEY='<your-api-key>'
-./pvtr run --binaries-path .
-```
-
-All three settings are required. The scanner supports `openai` and `anthropic`.
-To use Anthropic, set `ai_provider` to `anthropic` and use an Anthropic model
-name for `ai_model`.
-
-## Configuration
-
 <!-- markdownlint-disable MD013 -->
 
 | Setting | Environment variable | Required | Default | Description |
@@ -52,21 +23,40 @@ name for `ai_model`.
 
 <!-- markdownlint-enable MD013 -->
 
+Add the settings to the service's `vars` in `config.yml`. This example shows
+every setting and enables OpenAI for `my-scan`:
+
+```yaml
+services:
+  my-scan:
+    plugin: github-repo
+    vars:
+      owner: <github org or user name>
+      repo: <github repo name>
+      token: <classic token with permissions repo + admin:org>
+      ai_provider: openai
+      ai_model: gpt-4o-mini
+      ai_base_url: https://api.openai.com/v1
+      ai_timeout: 30s
+      ai_max_tokens: 1024
+```
+
+Set the API key in an environment variable or CI secret store, then run the
+scanner:
+
+```sh
+export PVTR_AI_API_KEY='<your-api-key>'
+./pvtr run --binaries-path .
+```
+
+To use Anthropic, set `ai_provider` to `anthropic`, use an Anthropic model name,
+and omit `ai_base_url` to use the provider default. Set `ai_base_url` only for a
+compatible gateway, proxy, or self-hosted endpoint.
+
 All three required settings must be present. If one is missing, the affected
 checks report `Needs Review`, log a warning, and allow the scan to continue.
 `ai_timeout` must use a duration such as `30s` or `2m`; an invalid duration stops
 the run. `ai_max_tokens` must be a whole number.
-
-### Custom Endpoints
-
-Set `ai_base_url` to use a compatible gateway, proxy, or self-hosted endpoint.
-The endpoint must accept the request format for the selected provider.
-
-```yaml
-ai_provider: openai
-ai_model: <model-id>
-ai_base_url: https://ai-gateway.example.com/v1
-```
 
 ## Security And Privacy
 
