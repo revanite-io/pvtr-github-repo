@@ -1,14 +1,12 @@
 # AI-Assisted Checks
 
-AI-assisted checks help evaluate requirements that need judgment rather than a
-simple file or setting check.
+Deterministic checks remain the baseline. AI is an optional enhancement used
+only when those checks cannot answer a requirement. AI is never required.
 
 For example, `OSPS-QA-06.02` asks whether a project explains when and how to run
 its tests. Finding the word "test" is not enough: the documentation must provide
 useful instructions. An AI model can review the relevant documentation and
 assess whether it meets the requirement.
-
-AI is disabled by default.
 
 ## Enabling AI
 

@@ -29,9 +29,8 @@ You may have to adjust the plugin name in the config.yaml file to match them.
 
 ## AI-Assisted Checks
 
-Some requirements need judgment rather than a simple file or setting check. The
-scanner can use an AI model for these requirements and store the assessment as
-evidence. AI is disabled by default.
+Deterministic checks remain the baseline. AI is an optional enhancement used
+only when those checks cannot answer a requirement. AI is never required.
 
 Enable AI with a provider, model, and API key:
 
