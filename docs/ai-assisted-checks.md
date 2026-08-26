@@ -12,14 +12,16 @@ optional and never replaces the deterministic checks.
 
 <!-- markdownlint-disable MD013 -->
 
-| Setting | Environment variable | Required | Default | Description |
-| --- | --- | :---: | --- | --- |
-| `ai_provider` | `PVTR_AI_PROVIDER` | yes | -- | AI provider: `openai` or `anthropic`. |
-| `ai_model` | `PVTR_AI_MODEL` | yes | -- | Model name from the provider. |
-| `ai_api_key` | `PVTR_AI_API_KEY` | yes | -- | API key for the provider. |
-| `ai_base_url` | `PVTR_AI_BASE_URL` | no | provider default | URL for a compatible gateway, proxy, or self-hosted endpoint. |
-| `ai_timeout` | `PVTR_AI_TIMEOUT` | no | `30s` | Maximum time to wait for a response. |
-| `ai_max_tokens` | `PVTR_AI_MAX_TOKENS` | no | `1024` | Maximum response size. |
+Configure AI with these settings in `config.yml`:
+
+| Setting | Required | Default | Description |
+| --- | :---: | --- | --- |
+| `ai_provider` | yes | -- | AI provider: `openai` or `anthropic`. |
+| `ai_model` | yes | -- | Model name from the provider. |
+| `ai_api_key` | yes | -- | API key for the provider. Do not store it in `config.yml`. |
+| `ai_base_url` | no | provider default | URL for a compatible gateway, proxy, or self-hosted endpoint. |
+| `ai_timeout` | no | `30s` | Maximum time to wait for a response. |
+| `ai_max_tokens` | no | `1024` | Maximum response size. |
 
 <!-- markdownlint-enable MD013 -->
 
@@ -41,13 +43,16 @@ services:
       ai_max_tokens: 1024
 ```
 
-Set the API key in an environment variable or CI secret store, then run the
-scanner:
+Store the API key in an environment variable or CI secret rather than in
+`config.yml`. The scanner reads it from `PVTR_AI_API_KEY`:
 
 ```sh
 export PVTR_AI_API_KEY='<your-api-key>'
 ./pvtr run --binaries-path .
 ```
+
+A CI secret may use any name as long as its value is exposed to the scanner as
+`PVTR_AI_API_KEY`.
 
 To use Anthropic, set `ai_provider` to `anthropic`, use an Anthropic model name,
 and omit `ai_base_url` to use the provider default. Set `ai_base_url` only for a

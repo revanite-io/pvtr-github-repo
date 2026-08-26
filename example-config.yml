@@ -26,14 +26,14 @@ services:
       token: <classic token with permissions repo + admin:org>
 
       # AI-assisted checks are disabled unless these settings are present.
-      # Prefer PVTR_AI_* environment variables, especially for the API key.
+      # Store the API key in an environment variable or CI secret.
       # Secrets in repository files are not detected or redacted.
       # See docs/ai-assisted-checks.md.
 
       # --- Required to enable AI ---
       # ai_provider: openai        # openai or anthropic
       # ai_model: gpt-4o-mini      # model name, as your provider spells it
-      # ai_api_key: <api key>      # prefer the PVTR_AI_API_KEY env var instead
+      # The API key is also required; expose it as PVTR_AI_API_KEY.
 
       # --- Optional (defaults shown) ---
       # ai_base_url: https://api.openai.com/v1  # proxy, gateway, or self-hosted
