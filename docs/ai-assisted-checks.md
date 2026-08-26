@@ -1,6 +1,6 @@
 # AI-Assisted Checks
 
-Some requirements cannot be answered by checking for a file or setting. For
+Some requirements are subjective and cannot be answered by implementing checks for a file, setting or an API call in the code. For
 example, `OSPS-QA-06.02` asks whether a project explains when and how to run its
 tests. Finding the word "test" is not enough; the documentation must provide
 useful instructions.
@@ -10,11 +10,7 @@ optional and never replaces the deterministic checks.
 
 ## Enabling AI
 
-Set an AI provider, model, and API key. The scanner supports `openai` and
-`anthropic`.
-
-The recommended setup uses environment variables so the API key is not stored
-in the configuration file:
+This example enables AI with OpenAI and runs the scanner:
 
 ```sh
 export PVTR_AI_PROVIDER='openai'
@@ -24,17 +20,22 @@ export PVTR_AI_API_KEY='<your-api-key>'
 ./pvtr run --binaries-path .
 ```
 
-For Anthropic, change the provider and model:
+All three settings are required. `PVTR_AI_PROVIDER` selects the provider,
+`PVTR_AI_MODEL` selects one of its models, and `PVTR_AI_API_KEY` authenticates
+the request. The scanner supports `openai` and `anthropic`.
+
+Keep the API key in an environment variable or CI secret store. The environment
+variables apply to every service in the run. Use `--service=<service-name>` to
+run only one configured service.
+
+To use Anthropic instead, change the provider and model:
 
 ```sh
 export PVTR_AI_PROVIDER='anthropic'
 export PVTR_AI_MODEL='<anthropic-model-id>'
 ```
 
-Environment variables apply to every service in the run. Use
-`--service=<service-name>` to run only one configured service.
-
-You can also add non-secret settings to the configuration file:
+Non-secret settings can also go in the configuration file:
 
 ```yaml
 ai_provider: openai
