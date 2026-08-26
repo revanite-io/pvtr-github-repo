@@ -33,11 +33,10 @@ Some requirements cannot be answered by checking for a file or setting. AI can
 assess these requirements when a deterministic check cannot. AI is optional and
 never replaces the deterministic checks.
 
-Enable AI with a provider, model, and API key:
+Add `ai_provider` and `ai_model` to the service's `vars` in `config.yml`, then
+set the API key:
 
 ```sh
-export PVTR_AI_PROVIDER='openai'
-export PVTR_AI_MODEL='gpt-4o-mini'
 export PVTR_AI_API_KEY='<your-api-key>'
 ```
 

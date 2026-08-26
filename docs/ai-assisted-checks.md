@@ -10,37 +10,10 @@ optional and never replaces the deterministic checks.
 
 ## Enabling AI
 
-This example enables AI with OpenAI and runs the scanner:
-
-```sh
-export PVTR_AI_PROVIDER='openai'
-export PVTR_AI_MODEL='gpt-4o-mini'
-export PVTR_AI_API_KEY='<your-api-key>'
-
-./pvtr run --binaries-path .
-```
-
-All three settings are required. `PVTR_AI_PROVIDER` selects the provider,
-`PVTR_AI_MODEL` selects one of its models, and `PVTR_AI_API_KEY` authenticates
-the request. The scanner supports `openai` and `anthropic`.
-
-Keep the API key in an environment variable or CI secret store. The environment
-variables apply to every service in the run. Use `--service=<service-name>` to
-run only one configured service.
-
-To use Anthropic instead, change the provider and model:
-
-```sh
-export PVTR_AI_PROVIDER='anthropic'
-export PVTR_AI_MODEL='<anthropic-model-id>'
-```
-
-Non-secret settings can also go in the configuration file:
+Add the provider and model to the service's `vars` in `config.yml`. This example
+enables OpenAI for `my-scan`:
 
 ```yaml
-ai_provider: openai
-ai_model: gpt-4o-mini
-
 services:
   my-scan:
     plugin: github-repo
@@ -48,18 +21,21 @@ services:
       owner: <github org or user name>
       repo: <github repo name>
       token: <classic token with permissions repo + admin:org>
+      ai_provider: openai
+      ai_model: gpt-4o-mini
 ```
 
-Top-level settings apply to every service. To override a setting for one
-service, add it to that service's `vars` block:
+Set the API key in an environment variable or CI secret store, then run the
+scanner:
 
-```yaml
-services:
-  my-scan:
-    plugin: github-repo
-    vars:
-      ai_model: <different-model-id>
+```sh
+export PVTR_AI_API_KEY='<your-api-key>'
+./pvtr run --binaries-path .
 ```
+
+All three settings are required. The scanner supports `openai` and `anthropic`.
+To use Anthropic, set `ai_provider` to `anthropic` and use an Anthropic model
+name for `ai_model`.
 
 ## Configuration
 
