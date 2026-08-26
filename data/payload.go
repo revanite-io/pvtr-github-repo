@@ -62,6 +62,16 @@ type payloadCache struct {
 	documentation       []DocumentationFile
 	documentationErr    error
 	documentationLoaded bool
+	// refLicenses caches LicenseAtRef lookups by ref. LE-02.02 and LE-03.02
+	// both evaluate the latest release's license, so without this the same
+	// endpoint would be hit once per control.
+	refLicenses map[string]refLicenseCacheEntry
+}
+
+type refLicenseCacheEntry struct {
+	license RefLicense
+	found   bool
+	err     error
 }
 
 // AddEvidence, GetEvidence, and ClearEvidence implement gemara.HasEvidence.
@@ -252,6 +262,31 @@ func (p *Payload) GetWorkflowFiles() ([]WorkflowFile, error) {
 	p.cache.workflows = files
 	p.cache.workflowsLoaded = true
 	return files, nil
+}
+
+// GetLicenseAtRef returns the license GitHub detects at the given git ref,
+// fetched once per payload per ref. Errors are cached deliberately, like
+// GetDocumentationFiles: LE-02.02 and LE-03.02 read the same ref, and a lookup
+// that just failed should surface the same evidence to both controls rather
+// than being retried within one run. A payload without a cache (as built
+// directly in tests) simply calls through uncached.
+func (p *Payload) GetLicenseAtRef(ref string) (RefLicense, bool, error) {
+	if p.RestData == nil {
+		return RefLicense{}, false, fmt.Errorf("payload missing required repository data")
+	}
+	if p.cache != nil {
+		if entry, ok := p.cache.refLicenses[ref]; ok {
+			return entry.license, entry.found, entry.err
+		}
+	}
+	license, found, err := p.RestData.LicenseAtRef(ref)
+	if p.cache != nil {
+		if p.cache.refLicenses == nil {
+			p.cache.refLicenses = make(map[string]refLicenseCacheEntry)
+		}
+		p.cache.refLicenses[ref] = refLicenseCacheEntry{license: license, found: found, err: err}
+	}
+	return license, found, err
 }
 
 // GetDocumentationFiles returns repository documentation once per payload.

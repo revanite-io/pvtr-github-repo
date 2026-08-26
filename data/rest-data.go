@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -521,6 +522,79 @@ func (r *RestData) getReleases() error {
 			return nil
 		}
 	}
+}
+
+// RefLicense describes the license GitHub detects in the repository tree at a
+// specific git ref.
+type RefLicense struct {
+	// SpdxId is GitHub's classification of the license file, or "NOASSERTION"
+	// when a license file exists but could not be identified.
+	SpdxId string
+	// Path is the location of the license file within the tree at the ref.
+	Path string
+}
+
+// LicenseAtRef fetches the license GitHub detects for the repository at the
+// given git ref (typically a release tag). GitHub's auto-generated release
+// archives contain the tree at the tag, so this observes the license actually
+// shipped with a release, which the default-branch license may no longer match.
+//
+// A 404 means GitHub found no license file at that ref; it is reported as
+// found=false with a nil error, distinct from request failures. MakeApiCall is
+// not used here because its uniform non-200 error cannot make that distinction.
+func (r *RestData) LicenseAtRef(ref string) (license RefLicense, found bool, err error) {
+	var logger hclog.Logger
+	if r.Config != nil {
+		logger = r.Config.Logger
+	}
+	if logger == nil {
+		logger = hclog.NewNullLogger()
+	}
+	if r.HttpClient == nil {
+		r.HttpClient = &http.Client{}
+	}
+
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/license?ref=%s", APIBase, r.owner, r.repo, url.QueryEscape(ref))
+	err = withRetry(logger, fmt.Sprintf("GET %s", endpoint), func() error {
+		request, err := http.NewRequest("GET", endpoint, nil)
+		if err != nil {
+			return err
+		}
+		request.Header.Set("Authorization", "Bearer "+r.token)
+		response, err := r.HttpClient.Do(request)
+		if err != nil {
+			return fmt.Errorf("error making http call: %s", err.Error())
+		}
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode == http.StatusNotFound {
+			// No license file exists at this ref. That is an observation about
+			// the release, not a request failure.
+			return nil
+		}
+		if response.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected response: %s", response.Status)
+		}
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return err
+		}
+		var decoded struct {
+			Path    string `json:"path"`
+			License struct {
+				SpdxId string `json:"spdx_id"`
+			} `json:"license"`
+		}
+		if err := json.Unmarshal(body, &decoded); err != nil {
+			return fmt.Errorf("failed to decode license data for ref %q: %w", ref, err)
+		}
+		license = RefLicense{SpdxId: decoded.License.SpdxId, Path: decoded.Path}
+		found = true
+		return nil
+	})
+	if err != nil {
+		return RefLicense{}, false, err
+	}
+	return license, found, nil
 }
 
 func (r *RestData) getWorkflowPermissions() error {
