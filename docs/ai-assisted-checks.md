@@ -1,12 +1,12 @@
 # AI-Assisted Checks
 
-Deterministic checks remain the baseline. AI is an optional enhancement used
-only when those checks cannot answer a requirement. AI is never required.
+Some requirements cannot be answered by checking for a file or setting. For
+example, `OSPS-QA-06.02` asks whether a project explains when and how to run its
+tests. Finding the word "test" is not enough; the documentation must provide
+useful instructions.
 
-For example, `OSPS-QA-06.02` asks whether a project explains when and how to run
-its tests. Finding the word "test" is not enough: the documentation must provide
-useful instructions. An AI model can review the relevant documentation and
-assess whether it meets the requirement.
+AI can assess requirements like this when a deterministic check cannot. AI is
+optional and never replaces the deterministic checks.
 
 ## Enabling AI
 

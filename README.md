@@ -29,8 +29,9 @@ You may have to adjust the plugin name in the config.yaml file to match them.
 
 ## AI-Assisted Checks
 
-Deterministic checks remain the baseline. AI is an optional enhancement used
-only when those checks cannot answer a requirement. AI is never required.
+Some requirements cannot be answered by checking for a file or setting. AI can
+assess these requirements when a deterministic check cannot. AI is optional and
+never replaces the deterministic checks.
 
 Enable AI with a provider, model, and API key:
 
