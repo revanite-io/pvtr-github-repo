@@ -314,7 +314,10 @@ func NoUnreviewableBinariesInRepo(payload data.Payload) (result gemara.Result, m
 
 // RequiresNonAuthorApproval checks that changes require at least one
 // non-author approving review before merging to the default branch. GitHub
-// forbids self-approval, so a required count >= 1 satisfies the catalog.
+// forbids self-approval, so a required count >= 1 meets the catalog text;
+// the verdict still routes to a human when the stale-approval gap below is
+// open, because the count alone does not prove post-approval commits are
+// reviewed.
 //
 // Rulesets are publicly readable and aggregated across every applying rule.
 // Classic branch protection is admin-only and reads as zero values otherwise,
@@ -332,12 +335,12 @@ func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, mess
 
 	classicRequires := false
 	classicCount := 0
-	classicLastPush := false
+	classicStaleGapClosed := false
 	if payload.GraphqlRepoData != nil {
 		protection := payload.Repository.DefaultBranchRef.BranchProtectionRule
 		classicRequires = protection.RequiresApprovingReviews
 		classicCount = payload.Repository.DefaultBranchRef.RefUpdateRule.RequiredApprovingReviewCount
-		classicLastPush = protection.RequireLastPushApproval
+		classicStaleGapClosed = protection.RequireLastPushApproval || protection.DismissesStaleReviews
 	}
 
 	if ruleset.RequiredApprovals >= 1 || (classicRequires && classicCount >= 1) {
@@ -345,7 +348,7 @@ func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, mess
 		if classicRequires && classicCount > approvals {
 			approvals = classicCount
 		}
-		staleGapClosed := ruleset.RequireLastPushApproval || ruleset.DismissStaleReviews || classicLastPush
+		staleGapClosed := ruleset.RequireLastPushApproval || ruleset.DismissStaleReviews || classicStaleGapClosed
 		if staleGapClosed {
 			return gemara.Passed, fmt.Sprintf("The default branch requires %d non-author approving review(s), and commits pushed after an approval cannot merge unreviewed", approvals), gemara.High
 		}
