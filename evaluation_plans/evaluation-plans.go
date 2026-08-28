@@ -49,7 +49,7 @@ var (
 			build_release.ReleaseHasUniqueIdentifier,
 		},
 		"OSPS-BR-02.02": {
-			reusable_steps.NotImplemented,
+			build_release.ReleaseAssetsAssociatedWithRelease,
 		},
 		"OSPS-BR-03.01": {
 			build_release.EnsureInsightsLinksUseHTTPS,
@@ -166,7 +166,8 @@ var (
 			quality.InsightsListsRepositories,
 		},
 		"OSPS-QA-04.02": {
-			reusable_steps.NotImplemented,
+			reusable_steps.IsCodeRepo,
+			quality.SubprojectsEnforceSecurityRequirements,
 		},
 		"OSPS-QA-05.01": {
 			quality.NoBinariesInRepo,

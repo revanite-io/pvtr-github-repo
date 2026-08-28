@@ -23,13 +23,18 @@ type Payload struct {
 	RepositoryMetadata        RepositoryMetadata
 	DependencyManifestsCount  int
 	IsCodeRepo                bool
-	SecurityPosture           SecurityPosture
-	Binaries                  BinaryAnalysis
-	VexDocuments              []string
-	VexDocumentsErr           error
-	client                    *githubv4.Client
-	httpClient                *http.Client
-	cache                     *payloadCache
+	// GraphqlPartialData is true when the GraphQL repo query returned a
+	// field-level error alongside a resolved repository node: the failed
+	// fields decoded to their zero values, so steps reading them cannot
+	// distinguish "absent" from "not resolved" without consulting this flag.
+	GraphqlPartialData bool
+	SecurityPosture    SecurityPosture
+	Binaries           BinaryAnalysis
+	VexDocuments       []string
+	VexDocumentsErr    error
+	client             *githubv4.Client
+	httpClient         *http.Client
+	cache              *payloadCache
 }
 
 // BinaryAnalysis holds information about binaries found in the repo
@@ -94,6 +99,7 @@ func Loader(config *config.Config) (payload any, err error) {
 
 	var (
 		graphql            *GraphqlRepoData
+		graphqlPartial     bool
 		ghRepo             *github.Repository
 		repositoryMetadata RepositoryMetadata
 		isCodeRepo         bool
@@ -104,7 +110,7 @@ func Loader(config *config.Config) (payload any, err error) {
 
 	g := new(errgroup.Group)
 	g.Go(func() (err error) {
-		graphql, err = getGraphqlRepoData(config, gqlClient, owner, repo)
+		graphql, graphqlPartial, err = getGraphqlRepoData(config, gqlClient, owner, repo)
 		return err
 	})
 	g.Go(func() error {
@@ -146,6 +152,7 @@ func Loader(config *config.Config) (payload any, err error) {
 		RepositoryMetadata:       repositoryMetadata,
 		DependencyManifestsCount: graphql.Repository.DependencyGraphManifests.TotalCount,
 		IsCodeRepo:               isCodeRepo,
+		GraphqlPartialData:       graphqlPartial,
 		httpClient:               httpClient,
 		APICallCounter:           callCounter,
 		SecurityPosture:          securityPosture,
@@ -157,7 +164,7 @@ func Loader(config *config.Config) (payload any, err error) {
 	}), nil
 }
 
-func getGraphqlRepoData(config *config.Config, client *githubv4.Client, owner, repo string) (data *GraphqlRepoData, err error) {
+func getGraphqlRepoData(config *config.Config, client *githubv4.Client, owner, repo string) (data *GraphqlRepoData, partial bool, err error) {
 	variables := map[string]any{
 		"owner": githubv4.String(owner),
 		"name":  githubv4.String(repo),
@@ -177,12 +184,12 @@ func getGraphqlRepoData(config *config.Config, client *githubv4.Client, owner, r
 		// fields — treat it as a soft failure and proceed on the partial data.
 		if data != nil && data.Repository.Name != "" {
 			config.Logger.Warn(fmt.Sprintf("GraphQL repo data query returned partial data; some fields were not accessible with the current token (checks that depend on them will see zero values): %s", err.Error()))
-			return data, nil
+			return data, true, nil
 		}
 		config.Logger.Error(fmt.Sprintf("Error querying GitHub GraphQL API: %s", err.Error()))
-		return nil, err
+		return nil, false, err
 	}
-	return data, err
+	return data, false, nil
 }
 
 // newRestData builds the REST accessor on the shared httpClient so its raw
