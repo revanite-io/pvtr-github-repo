@@ -6,4 +6,5 @@ var SupportedCatalogIDs = []string{
 	"osps-baseline",
 	"osps-baseline-2025-10",
 	"osps-baseline-2026-02",
+	"osps-baseline-2026-08",
 }

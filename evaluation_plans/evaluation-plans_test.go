@@ -77,6 +77,53 @@ func TestAllCatalogAssessmentIDsHaveSteps(t *testing.T) {
 	}
 }
 
+// TestCatalogApplicabilityMatchesConfigs ensures every assessment requirement
+// is applicable under the "Maturity Level N" labels that existing configs,
+// ci.sh, badgeurl, and the osps-baseline-action pass. Gemara matches these by
+// exact string, so a catalog using only another scheme (e.g. "maturity-1")
+// would silently evaluate zero assessments.
+func TestCatalogApplicabilityMatchesConfigs(t *testing.T) {
+	knownLabels := map[string]bool{
+		"Maturity Level 1": true,
+		"Maturity Level 2": true,
+		"Maturity Level 3": true,
+	}
+	catalogDir := filepath.Join("..", "data", "catalogs")
+	entries, err := os.ReadDir(catalogDir)
+	if err != nil {
+		t.Fatalf("failed to read catalog directory: %v", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(catalogDir, entry.Name()))
+		if err != nil {
+			t.Fatalf("failed to read catalog %s: %v", entry.Name(), err)
+		}
+		var catalog gemara.ControlCatalog
+		if err := yaml.Unmarshal(data, &catalog); err != nil {
+			t.Fatalf("failed to parse catalog %s: %v", entry.Name(), err)
+		}
+
+		for _, control := range catalog.Controls {
+			for _, req := range control.AssessmentRequirements {
+				matched := false
+				for _, label := range req.Applicability {
+					if knownLabels[label] {
+						matched = true
+						break
+					}
+				}
+				assert.True(t, matched,
+					"catalog %s requirement %s has applicability %v with no 'Maturity Level N' label; existing configs would silently skip it",
+					entry.Name(), req.Id, req.Applicability)
+			}
+		}
+	}
+}
+
 func TestSupportedCatalogIDsExist(t *testing.T) {
 	// Keep the declared compatibility contract in sync with bundled catalog data.
 	catalogDir := filepath.Join("..", "data", "catalogs")
