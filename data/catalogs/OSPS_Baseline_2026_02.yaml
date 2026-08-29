@@ -1,6 +1,6 @@
 # IMPORTANT
 # This file's applicability-categories have been modified from the source
-# in order to normalize functionality with later catalogs.
+# in order to normalize functionality with later catalogs beginning v2026.08.26.
 # Normalization is handled by /data/catalog_contract.go
 metadata:
   id: osps-baseline-2026-02
@@ -10,6 +10,10 @@ metadata:
     The Open Source Project Security (OSPS) Baseline is a set of security criteria
     that projects should meet to demonstrate a strong security posture.
   last-modified: "" 
+  author:
+    id: openssf
+    name: OSPS Baseline Authors
+    type: Human
 
   applicability-categories: #TODO: Update all applicability levels to use these IDs in a follow-up PR
     - id: maturity-1 # original source: "Maturity Level 1"
