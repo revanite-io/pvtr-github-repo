@@ -20,10 +20,10 @@ var maturityLevelAliases = map[string]string{
 	"maturity-3":       "maturity-3",
 }
 
-// NormalizeApplicability resolves the change in applicability level ids
+// normalizeApplicability resolves the drift in applicability level ids
 // across catalogs and catalog versions. Our copies of the data are modified
 // from the original to use a single consistent applicability set.
-func NormalizeApplicability(c *config.Config) {
+func normalizeApplicability(c *config.Config) {
 	for i, level := range c.Policy.Applicability {
 		if alias, ok := maturityLevelAliases[level]; ok {
 			c.Policy.Applicability[i] = alias
