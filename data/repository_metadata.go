@@ -229,9 +229,12 @@ func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (ghRepo
 		return repository, &GitHubRepositoryMetadata{}, err
 	}
 
-	// The organization and ruleset lookups are independent of each other and hit
-	// separate endpoints, so fetch them concurrently.
-	// Errors are expected when an org or ruleset isn't in place; safe to ignore.
+	// The organization, ruleset, and branch lookups are independent of each
+	// other and hit separate endpoints, so fetch them concurrently.
+	// Org and ruleset errors are expected when an org or ruleset isn't in
+	// place; safe to ignore. A branch fetch error is not ignored so much as
+	// recorded: it leaves branchProtected nil, which consumers read as
+	// "could not look" and degrade to NeedsReview.
 	var (
 		organization    *github.Organization
 		branchRules     *github.BranchRules

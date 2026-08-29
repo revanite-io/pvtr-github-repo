@@ -429,6 +429,23 @@ func Test_BranchProtectionPreventsDeletion(t *testing.T) {
 			wantResult:  gemara.NeedsReview,
 			wantMessage: unobservableProtectionMessage,
 		},
+		{
+			// flag=true fully explained by a non-deletion ruleset: an admin's
+			// zero-valued RefUpdateRule then carries no classic-BP information
+			// and must not read as deletion protection.
+			name: "weak positive: admin, flag true explained by non-deletion ruleset",
+			payload: data.Payload{
+				GraphqlRepoData: &data.GraphqlRepoData{},
+				RepositoryMetadata: &FakeBranchRuleMetadata{
+					protectedFlag:         &trueVal,
+					protectedFromDeletion: &falseVal,
+					rulesetsObserved:      true,
+					viewerCanAdminister:   true,
+				},
+			},
+			wantResult:  gemara.NeedsReview,
+			wantMessage: unobservableProtectionMessage,
+		},
 	}
 
 	// AllowsDeletions defaults to false (a visible rule prevents deletion). Set it

@@ -106,12 +106,15 @@ func BranchProtectionPreventsDeletion(payload data.Payload) (result gemara.Resul
 
 	// An admin is not immune to the same zero-value trap: a null GraphQL
 	// refUpdateRule decodes to an all-zero struct, which is indistinguishable
-	// from a real rule that blocks deletions. The `protected` flag settles it,
-	// so when the branch fetch failed and no rule field is set either, the
-	// honest answer is that nothing was observed.
+	// from a real rule that blocks deletions. When no rule field is set, the
+	// `protected` flag settles nothing: nil means the branch fetch failed, and
+	// true alongside observed rulesets (none of which prevents deletion, per
+	// the guard above) is fully explained by a non-deletion ruleset and
+	// carries no classic-BP information. Either way, the honest answer is
+	// that nothing about deletions was observed.
 	rule := payload.Repository.DefaultBranchRef.RefUpdateRule
 	ruleObserved := rule.AllowsDeletions || rule.AllowsForcePushes || rule.RequiredApprovingReviewCount > 0
-	if !ruleObserved && metadata.DefaultBranchProtectedFlag() == nil {
+	if !ruleObserved && (metadata.DefaultBranchProtectedFlag() == nil || metadata.RulesetsObserved()) {
 		return gemara.NeedsReview, unobservableProtectionMessage, gemara.Low
 	}
 
