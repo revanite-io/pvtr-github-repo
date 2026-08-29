@@ -40,6 +40,28 @@ func TestGenerateSingleURL(t *testing.T) {
 	}
 }
 
+func TestAcceptsLegacyMaturityLevelSpelling(t *testing.T) {
+	legacy := strings.NewReplacer(
+		"maturity-1", "Maturity Level 1",
+		"maturity-2", "Maturity Level 2",
+	).Replace(minimalResultsYAML())
+	filePath := writeResultsFile(t, legacy)
+
+	urls, err := GenerateFromFile(filePath, Options{Badge: "baseline-1", IncludeJustifications: boolOption(true)})
+	if err != nil {
+		t.Fatalf("GenerateFromFile returned error: %v", err)
+	}
+	if len(urls) != 1 {
+		t.Fatalf("expected 1 URL, got %d", len(urls))
+	}
+	if !strings.Contains(urls[0], "osps_ac_01_01_status=Met") {
+		t.Fatalf("expected legacy-spelled level 1 criterion in URL: %s", urls[0])
+	}
+	if strings.Contains(urls[0], "osps_do_03_01") {
+		t.Fatalf("did not expect level 2 criterion in baseline-1 URL: %s", urls[0])
+	}
+}
+
 func TestGenerateMultipleURLsAboveDefaultLengthLimit(t *testing.T) {
 	const proposalCount = 28
 	filePath := writeResultsFile(t, longResultsYAML(28))
@@ -236,20 +258,20 @@ evaluation-suites:
               result: Passed
               message: MFA required
               applicability:
-                - Maturity Level 1
-                - Maturity Level 2
+                - maturity-1
+                - maturity-2
             - requirement:
                 entry-id: OSPS-DO-03.01
               result: Failed
               message: Missing provenance
               applicability:
-                - Maturity Level 2
+                - maturity-2
             - requirement:
                 entry-id: OSPS-DO-04.01
               result: NeedsReview
               message: Requires manual review
               applicability:
-                - Maturity Level 1
+                - maturity-1
 `
 }
 
@@ -268,7 +290,7 @@ evaluation-suites:
               result: NeedsReview
               message: Requires manual review
               applicability:
-                - Maturity Level 1
+                - maturity-1
 `
 }
 
@@ -287,7 +309,7 @@ func notApplicableResultsYAML() string {
 		"              result: NotApplicable\n" +
 		"              message: Repository has no releases\n" +
 		"              applicability:\n" +
-		"                - Maturity Level 1\n"
+		"                - maturity-1\n"
 }
 
 func urlJustificationResultsYAML() string {
@@ -305,7 +327,7 @@ func urlJustificationResultsYAML() string {
 		"              result: Passed\n" +
 		"              message: \"Evidence: https://example.com/evidence?check=branch-protection&source=scanner\"\n" +
 		"              applicability:\n" +
-		"                - Maturity Level 1\n"
+		"                - maturity-1\n"
 }
 
 func unicodeJustificationResultsYAML() string {
@@ -323,7 +345,7 @@ func unicodeJustificationResultsYAML() string {
 		"              result: Passed\n" +
 		fmt.Sprintf("              message: \"%s\"\n", strings.Repeat("a", 239)+"é"+strings.Repeat("b", 40)) +
 		"              applicability:\n" +
-		"                - Maturity Level 1\n"
+		"                - maturity-1\n"
 }
 
 func serializedPayloadResultsYAML() string {
@@ -348,7 +370,7 @@ func serializedPayloadResultsYAML() string {
 		"              result: Passed\n" +
 		"              message: This control is enforced by GitHub\n" +
 		"              applicability:\n" +
-		"                - Maturity Level 1\n"
+		"                - maturity-1\n"
 }
 
 func longResultsYAML(count int) string {
@@ -367,7 +389,7 @@ func longResultsYAML(count int) string {
 		builder.WriteString("              result: Passed\n")
 		_, _ = fmt.Fprintf(&builder, "              message: %s\n", strings.Repeat("evidence ", 24))
 		builder.WriteString("              applicability:\n")
-		builder.WriteString("                - Maturity Level 1\n")
+		builder.WriteString("                - maturity-1\n")
 	}
 	return builder.String()
 }

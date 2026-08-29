@@ -31,6 +31,7 @@ type GraphqlRepoData struct {
 				RequiresCommitSignatures    bool
 				RequiresStatusChecks        bool
 				RequireLastPushApproval     bool
+				DismissesStaleReviews       bool
 				RequiredStatusCheckContexts []string
 			}
 

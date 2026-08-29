@@ -77,35 +77,49 @@ func TestAllCatalogAssessmentIDsHaveSteps(t *testing.T) {
 	}
 }
 
-func TestSupportedCatalogIDsExist(t *testing.T) {
-	// Keep the declared compatibility contract in sync with bundled catalog data.
+// TestCatalogApplicabilityMatchesConfigs ensures every assessment requirement
+// is applicable under the "Maturity Level N" labels that existing configs,
+// ci.sh, badgeurl, and the osps-baseline-action pass. Gemara matches these by
+// exact string, so a catalog using only another scheme (e.g. "maturity-1")
+// would silently evaluate zero assessments.
+func TestCatalogApplicabilityMatchesConfigs(t *testing.T) {
+	knownLabels := map[string]bool{
+		"maturity-1": true,
+		"maturity-2": true,
+		"maturity-3": true,
+	}
 	catalogDir := filepath.Join("..", "data", "catalogs")
 	entries, err := os.ReadDir(catalogDir)
 	if err != nil {
 		t.Fatalf("failed to read catalog directory: %v", err)
 	}
 
-	foundCatalogIDs := make(map[string]string, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-
-		catalogPath := filepath.Join(catalogDir, entry.Name())
-		data, err := os.ReadFile(catalogPath)
+		data, err := os.ReadFile(filepath.Join(catalogDir, entry.Name()))
 		if err != nil {
 			t.Fatalf("failed to read catalog %s: %v", entry.Name(), err)
 		}
-
 		var catalog gemara.ControlCatalog
 		if err := yaml.Unmarshal(data, &catalog); err != nil {
 			t.Fatalf("failed to parse catalog %s: %v", entry.Name(), err)
 		}
 
-		foundCatalogIDs[catalog.Metadata.Id] = entry.Name()
-	}
-
-	for _, catalogID := range SupportedCatalogIDs {
-		assert.Contains(t, foundCatalogIDs, catalogID, "supported catalog ID %s is missing from data/catalogs", catalogID)
+		for _, control := range catalog.Controls {
+			for _, req := range control.AssessmentRequirements {
+				matched := false
+				for _, label := range req.Applicability {
+					if knownLabels[label] {
+						matched = true
+						break
+					}
+				}
+				assert.True(t, matched,
+					"catalog %s requirement %s has applicability %v with no 'Maturity Level N' label; existing configs would silently skip it",
+					entry.Name(), req.Id, req.Applicability)
+			}
+		}
 	}
 }

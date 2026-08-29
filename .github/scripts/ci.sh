@@ -135,7 +135,7 @@ services:
       catalogs:
         - ${catalog_id}
       applicability:
-        - Maturity Level 1
+        - maturity-1
     vars:
       owner: ossf
       repo: pvtr-github-repo-scanner
