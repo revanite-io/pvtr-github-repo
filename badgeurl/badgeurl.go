@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
 
 const (
@@ -243,6 +245,11 @@ func isApplicable(applicability []string, allowedLevels map[string]struct{}) boo
 		return true
 	}
 	for _, level := range applicability {
+		// Released results files carry "Maturity Level N" while newer ones use
+		// "maturity-N"; accept both spellings via the shared alias table.
+		if alias, ok := data.MaturityLevelAliases[level]; ok {
+			level = alias
+		}
 		if _, ok := allowedLevels[level]; ok {
 			return true
 		}

@@ -40,6 +40,28 @@ func TestGenerateSingleURL(t *testing.T) {
 	}
 }
 
+func TestAcceptsLegacyMaturityLevelSpelling(t *testing.T) {
+	legacy := strings.NewReplacer(
+		"maturity-1", "Maturity Level 1",
+		"maturity-2", "Maturity Level 2",
+	).Replace(minimalResultsYAML())
+	filePath := writeResultsFile(t, legacy)
+
+	urls, err := GenerateFromFile(filePath, Options{Badge: "baseline-1", IncludeJustifications: boolOption(true)})
+	if err != nil {
+		t.Fatalf("GenerateFromFile returned error: %v", err)
+	}
+	if len(urls) != 1 {
+		t.Fatalf("expected 1 URL, got %d", len(urls))
+	}
+	if !strings.Contains(urls[0], "osps_ac_01_01_status=Met") {
+		t.Fatalf("expected legacy-spelled level 1 criterion in URL: %s", urls[0])
+	}
+	if strings.Contains(urls[0], "osps_do_03_01") {
+		t.Fatalf("did not expect level 2 criterion in baseline-1 URL: %s", urls[0])
+	}
+}
+
 func TestGenerateMultipleURLsAboveDefaultLengthLimit(t *testing.T) {
 	const proposalCount = 28
 	filePath := writeResultsFile(t, longResultsYAML(28))

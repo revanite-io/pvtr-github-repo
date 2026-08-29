@@ -11,7 +11,9 @@ var SupportedCatalogIDs = []string{
 	"osps-baseline-2026-08",
 }
 
-var maturityLevelAliases = map[string]string{
+// MaturityLevelAliases maps every spelling of an OSPS maturity level seen in
+// catalog data or released results files to the canonical maturity-N form.
+var MaturityLevelAliases = map[string]string{
 	"Maturity Level 1": "maturity-1",
 	"maturity-1":       "maturity-1",
 	"Maturity Level 2": "maturity-2",
@@ -25,7 +27,7 @@ var maturityLevelAliases = map[string]string{
 // from the original to use a single consistent applicability set.
 func normalizeApplicability(c *config.Config) {
 	for i, level := range c.Policy.Applicability {
-		if alias, ok := maturityLevelAliases[level]; ok {
+		if alias, ok := MaturityLevelAliases[level]; ok {
 			c.Policy.Applicability[i] = alias
 		}
 	}
