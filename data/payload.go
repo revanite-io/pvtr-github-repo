@@ -118,6 +118,8 @@ func Loader(config *config.Config) (payload any, err error) {
 	)
 	rest := newRestData(ghClient, httpClient, config)
 
+	normalizeApplicability(config)
+
 	g := new(errgroup.Group)
 	g.Go(func() (err error) {
 		graphql, graphqlPartial, err = getGraphqlRepoData(config, gqlClient, owner, repo)

@@ -43,10 +43,34 @@ func main() {
 		Version = fmt.Sprintf("%s-%s", Version, VersionPostfix)
 	}
 
-	orchestrator := pluginkit.EvaluationOrchestrator{
+	orchestrator, err := newOrchestrator()
+	if err != nil {
+		fmt.Printf("%v\n", err)
+		os.Exit(shared.InternalError)
+	}
+
+	runCmd := command.NewPluginCommands(
+		PluginName,
+		Version,
+		GitCommitHash,
+		BuiltAt,
+		orchestrator,
+	)
+
+	err = runCmd.Execute()
+	if err != nil {
+		os.Exit(shared.InternalError)
+	}
+}
+
+// newOrchestrator builds the orchestrator. Publisher and License
+func newOrchestrator() (*pluginkit.EvaluationOrchestrator, error) {
+	orchestrator := &pluginkit.EvaluationOrchestrator{
 		PluginName:    PluginName,
 		PluginVersion: Version,
 		PluginUri:     "https://github.com/ossf/pvtr-github-repo-scanner",
+		Publisher:     "openssf",
+		License:       "Apache-2.0",
 	}
 	orchestrator.AddLoader(data.Loader)
 	orchestrator.AddTargetBuilder(func(c *config.Config) gemara.Resource {
@@ -59,30 +83,14 @@ func main() {
 		}
 	})
 
-	err := orchestrator.AddReferenceCatalogs(dataDir, files)
-	if err != nil {
-		fmt.Printf("Error loading catalog: %v\n", err)
-		os.Exit(shared.InternalError)
+	if err := orchestrator.AddReferenceCatalogs(dataDir, files); err != nil {
+		return nil, fmt.Errorf("error loading catalog: %w", err)
 	}
 
 	orchestrator.AddRequiredVars(RequiredVars)
 
-	err = pluginkit.AddEvaluationSuiteTypedForAllCatalogs(&orchestrator, nil, evaluation_plans.AllSteps())
-	if err != nil {
-		fmt.Printf("Error adding evaluation suites: %v\n", err)
-		os.Exit(shared.InternalError)
+	if err := pluginkit.AddEvaluationSuiteTypedForAllCatalogs(orchestrator, nil, evaluation_plans.AllSteps()); err != nil {
+		return nil, fmt.Errorf("error adding evaluation suites: %w", err)
 	}
-
-	runCmd := command.NewPluginCommands(
-		PluginName,
-		Version,
-		VersionPostfix,
-		GitCommitHash,
-		&orchestrator,
-	)
-
-	err = runCmd.Execute()
-	if err != nil {
-		os.Exit(shared.InternalError)
-	}
+	return orchestrator, nil
 }
