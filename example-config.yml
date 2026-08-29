@@ -13,11 +13,11 @@ services:
     # The policy section may be set at the top level if assessing multiple services via privateer
     policy:
       catalogs:
-        - osps-baseline-2026-02 # use osps-baseline-2025-10 for the previous version
+        - osps-baseline # always the latest catalog; pin osps-baseline-2026-08, -2026-02, or -2025-10 for a specific version
       applicability:
-        - Maturity Level 1
-        # - Maturity Level 2
-        # - Maturity Level 3
+        - maturity-1
+        # - maturity-2
+        # - maturity-3
     
     # All variables are required to run the evaluation
     vars:

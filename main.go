@@ -33,12 +33,6 @@ var (
 		"repo",
 		"token",
 	}
-	// The vendored Baseline YAML carries no metadata.author.id, so declare the owner.
-	catalogNamespaces = map[string]string{
-		"osps-baseline":         "openssf",
-		"osps-baseline-2025-10": "openssf",
-		"osps-baseline-2026-02": "openssf",
-	}
 	//go:embed data/catalogs
 	files   embed.FS
 	dataDir = filepath.Join("data", "catalogs")
@@ -69,16 +63,14 @@ func main() {
 	}
 }
 
-// newOrchestrator builds the orchestrator. Publisher, License and
-// catalogNamespaces are unused at run time; `pvtr publish` reads them.
+// newOrchestrator builds the orchestrator. Publisher and License
 func newOrchestrator() (*pluginkit.EvaluationOrchestrator, error) {
 	orchestrator := &pluginkit.EvaluationOrchestrator{
-		PluginName:        PluginName,
-		PluginVersion:     Version,
-		PluginUri:         "https://github.com/ossf/pvtr-github-repo-scanner",
-		Publisher:         "openssf",
-		License:           "Apache-2.0",
-		CatalogNamespaces: catalogNamespaces,
+		PluginName:    PluginName,
+		PluginVersion: Version,
+		PluginUri:     "https://github.com/ossf/pvtr-github-repo-scanner",
+		Publisher:     "openssf",
+		License:       "Apache-2.0",
 	}
 	orchestrator.AddLoader(data.Loader)
 	orchestrator.AddTargetBuilder(func(c *config.Config) gemara.Resource {

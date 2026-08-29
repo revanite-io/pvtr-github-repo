@@ -13,6 +13,10 @@ func NotImplemented(payload data.Payload) (result gemara.Result, message string,
 	return gemara.NotRun, "Not implemented", confidence
 }
 
+func Retired(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	return gemara.NotRun, "This is a retired control identifier, logged here for visibility only", confidence
+}
+
 func GithubBuiltIn(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	return gemara.Passed, "This control is enforced by GitHub for all projects", confidence
 }
