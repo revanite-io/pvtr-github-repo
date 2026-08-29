@@ -1,3 +1,7 @@
+# IMPORTANT
+# This file's applicability-categories have been modified from the source
+# in order to normalize functionality with later catalogs beginning v2026.08.26.
+# Normalization is handled by /data/catalog_contract.go
 metadata:
   id: osps-baseline-2025-10
   title: Open Source Project Security Baseline
@@ -8,13 +12,13 @@ metadata:
   last-modified: "" 
 
   applicability-categories: #TODO: Update all applicability levels to use these IDs in a follow-up PR
-    - id: Maturity Level 1
+    - id: maturity-1 # original source: "Maturity Level 1"
       title: Maturity Level 1
       description: for any code or non-code project with any number of maintainers or users
-    - id: Maturity Level 2
+    - id: maturity-2 # original source: "Maturity Level 2"
       title: Maturity Level 2
       description: for any code project that has at least 2 maintainers and a small number of consistent users
-    - id: Maturity Level 3
+    - id: maturity-3 # original source: "Maturity Level 3"
       title: Maturity Level 3
       description: for any code project that has a large number of consistent users
 
@@ -245,9 +249,9 @@ controls:
           authoritative repository, the system MUST require the user to complete
           a multi-factor authentication process.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Enforce multi-factor authentication for the project's version
           control system, requiring collaborators to provide a second form of
@@ -309,9 +313,9 @@ controls:
           require manual permission assignment, or restrict the collaborator
           permissions to the lowest available privileges by default.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Most public version control systems are configured in this manner.
           Ensure the project's version control system always assigns the lowest
@@ -372,9 +376,9 @@ controls:
           When a direct commit is attempted on the project's primary branch,
           an enforcement mechanism MUST prevent the change from being applied.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           If the VCS is centralized, set branch protection on the primary branch
           in the project's VCS. Alternatively, use a decentralized approach,
@@ -387,9 +391,9 @@ controls:
           the version control system MUST treat this as a sensitive activity
           and require explicit confirmation of intent.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Set branch protection on the primary branch in the project's version
           control system to prevent deletion.
@@ -460,8 +464,8 @@ controls:
           CI/CD system MUST default the task's permissions to the lowest
           permissions granted in the pipeline.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Configure the project's settings to assign the lowest available
           permissions to new pipelines by default, granting additional
@@ -472,7 +476,7 @@ controls:
           code or configuration MUST only assign the minimum privileges
           necessary for the corresponding activity.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Configure the project's CI/CD pipelines to assign the lowest available
           permissions to users and services by default, elevating permissions
@@ -535,9 +539,9 @@ controls:
           When a CI/CD pipeline accepts an input parameter, that parameter MUST
           be sanitized and validated prior to use in the pipeline.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: # TODO
 
   - id: OSPS-BR-02
@@ -595,8 +599,8 @@ controls:
           When an official release is created, that release MUST be assigned a
           unique version identifier.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Assign a unique version identifier to each release produced by the
           project, following a consistent naming convention or numbering scheme.
@@ -607,7 +611,7 @@ controls:
           MUST be clearly associated with the release identifier or another
           unique identifier for the asset.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Assign a unique version identifier to each software asset produced by
           the project, following a consistent naming convention or numbering
@@ -672,9 +676,9 @@ controls:
           When the project lists a URI as an official project channel, that URI
           MUST be exclusively delivered using encrypted channels.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Configure the project's websites and version control systems to use
           encrypted channels such as SSH or HTTPS for data transmission.
@@ -685,9 +689,9 @@ controls:
           When the project lists a URI as an official distribution channel,
           that URI MUST be exclusively delivered using encrypted channels.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Configure the project's release pipeline to only fetch data from
           websites, API responses, and other services which use encrypted
@@ -776,8 +780,8 @@ controls:
           a descriptive log of functional and security
           modifications.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Ensure that all releases include a descriptive change log. It is
           recommended to ensure that the change log is human-readable and
@@ -855,8 +859,8 @@ controls:
           When a build and release pipeline ingests dependencies, it MUST
           use standardized tooling where available.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Use a common tooling for your ecosystem, such as package managers or
           dependency management tools to ingest dependencies at build time. This
@@ -920,8 +924,8 @@ controls:
           accounted for in a signed manifest including each asset's
           cryptographic hashes.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Sign all released software assets at build time with a cryptographic
           signature or attestations, such as GPG or PGP signature, Sigstore
@@ -950,14 +954,14 @@ controls:
         text: |
           The project MUST prevent the unintentional storage of unencrypted sensitive data, such as secrets and credentials, in the version control system.
         applicability:
-          - Maturity Level 1
+          - maturity-1
         recommendation: |
           Configure .gitignore or equivalent to exclude files that may contain sensitive information. Use pre-commit hooks and automated scanning tools to detect and prevent the inclusion of sensitive data in commits.
       - id: OSPS-BR-07.02
         text: |
           The project MUST define a policy for managing secrets and credentials used by the project. The policy should include guidelines for storing, accessing, and rotating secrets and credentials.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Document how secrets and credentials are managed and used within the project. This should include details on how secrets are stored (e.g., using a secrets management tool), how access is controlled, and how secrets are rotated or updated. Ensure that sensitive information is not hard-coded in the source code or stored in version control systems.
 
@@ -1026,9 +1030,9 @@ controls:
           When the project has made a release, the project documentation MUST
           include user guides for all basic functionality.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Create user guides or documentation for all basic functionality of the
           project, explaining how to install, configure, and use the project's
@@ -1097,9 +1101,9 @@ controls:
           When the project has made a release, the project documentation MUST
           include a guide for reporting defects.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           It is recommended that projects use their VCS default issue tracker.
           If an external source is used, ensure that the project documentation
@@ -1172,7 +1176,7 @@ controls:
           contain instructions to verify the integrity and authenticity of the
           release assets.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Instructions in the project should contain information about the
           technology used, the commands to run, and the expected output.
@@ -1186,7 +1190,7 @@ controls:
           contain instructions to verify the expected identity of the person or
           process authoring the software release.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           The expected identity may be in the form of key IDs used to sign,
           issuer and identity from a sigstore certificate, or other similar
@@ -1251,7 +1255,7 @@ controls:
           include a descriptive statement about the scope and duration of
           support for each release.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           In order to communicate the scope and duration of support for the
           project's released software assets, the project should have a
@@ -1317,7 +1321,7 @@ controls:
           provide a descriptive statement when releases or versions will no
           longer receive security updates.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           In order to communicate the scope and duration of support for security
           fixes, the project should have a SUPPORT.md or other documentation
@@ -1393,8 +1397,8 @@ controls:
           include a description of how the project selects, obtains, and tracks
           its dependencies.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           It is recommended to publish this information alongside the project's
           technical & design documentation on a publicly viewable resource such
@@ -1456,8 +1460,8 @@ controls:
           While active, the project documentation MUST include a list of
           project members with access to sensitive resources.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Document project participants and their roles through such artifacts
           as members.md, governance.md, maintainers.md, or similar file within
@@ -1469,8 +1473,8 @@ controls:
           While active, the project documentation MUST include descriptions of
           the roles and responsibilities for members of the project.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Document project participants and their roles through such artifacts
           as members.md, governance.md, maintainers.md, or similar file within
@@ -1513,9 +1517,9 @@ controls:
           While active, the project MUST have one or more mechanisms for public
           discussions about proposed changes and usage obstacles.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Establish one or more mechanisms for public discussions within the
           project, such as mailing lists, instant messaging, or issue trackers,
@@ -1568,9 +1572,9 @@ controls:
           While active, the project documentation MUST include an explanation
           of the contribution process.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Create a CONTRIBUTING.md or CONTRIBUTING/ directory to outline the
           contribution process including the steps for submitting changes, and
@@ -1580,8 +1584,8 @@ controls:
           While active, the project documentation MUST include a guide for code
           contributors that includes requirements for acceptable contributions.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Extend the CONTRIBUTING.md or CONTRIBUTING/ contents in the project
           documentation to outline the requirements for acceptable
@@ -1657,7 +1661,7 @@ controls:
           collaborators are reviewed prior to granting escalated permissions to
           sensitive resources.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Publish an enforceable policy in the project documentation that
           requires code collaborators to be reviewed and approved before being
@@ -1705,8 +1709,8 @@ controls:
           contributors to assert that they are legally authorized to make the
           associated contributions on every commit.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Include a DCO in the project's repository, requiring code
           contributors to assert that they are legally authorized to commit the
@@ -1759,9 +1763,9 @@ controls:
           While active, the license for the source code MUST meet the OSI Open
           Source Definition or the FSF Free Software Definition.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Add a LICENSE file to the project's repo with a license that is an
           approved license by the Open Source Initiative (OSI), or a free
@@ -1775,9 +1779,9 @@ controls:
           While active, the license for the released software assets MUST meet
           the OSI Open Source Definition or the FSF Free Software Definition.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           If a different license is included with released software assets,
           ensure it is an approved license by the Open Source Initiative (OSI),
@@ -1824,9 +1828,9 @@ controls:
           the corresponding repository's LICENSE file, COPYING file, or
           LICENSE/ directory.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Include the project's source code license in the project's LICENSE
           file, COPYING file, or LICENSE/ directory to provide visibility and
@@ -1840,9 +1844,9 @@ controls:
           file, or LICENSE/ directory alongside the corresponding release
           assets.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Include the project's released software assets license in the released
           source code, or in a LICENSE file, COPYING file, or LICENSE/ directory
@@ -1917,9 +1921,9 @@ controls:
           While active, the project's source code repository MUST be publicly
           readable at a static URL.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Use a common VCS such as GitHub, GitLab, or Bitbucket. Ensure the
           repository is publicly readable. Avoid duplication or mirroring of
@@ -1932,9 +1936,9 @@ controls:
           all changes made, who made the changes, and when the changes were
           made.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Use a common VCS such as GitHub, GitLab, or Bitbucket to maintain a
           publicly readable commit history. Avoid squashing or rewriting commits
@@ -2020,9 +2024,9 @@ controls:
           repository MUST contain a dependency list that accounts for the direct
           language dependencies.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           This may take the form of a package manager or language dependency file
           that enumerates all direct dependencies such as package.json, Gemfile,
@@ -2032,7 +2036,7 @@ controls:
           When the project has made a release, all compiled released software
           assets MUST be delivered with a software bill of materials.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           It is recommended to auto-generate SBOMs at build time using a tool
           that has been vetted for accuracy. This enables users to ingest this
@@ -2104,8 +2108,8 @@ controls:
           When a commit is made to the primary branch, any automated status
           checks for commits MUST pass or be manually bypassed.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Configure the project's version control system to require that all
           automated status checks pass or require manual acknowledgement before a
@@ -2161,9 +2165,9 @@ controls:
           While active, the project documentation MUST contain a list of any
           codebases that are considered subprojects.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Document any additional subproject code repositories produced by the
           project and compiled into a release. This documentation should include
@@ -2174,7 +2178,7 @@ controls:
           repositories, all subprojects MUST enforce security requirements that
           are as strict or stricter than the primary codebase.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Any additional subproject code repositories produced by the project
           and compiled into a release must enforce security requirements as
@@ -2218,9 +2222,9 @@ controls:
           While active, the version control system MUST NOT contain generated
           executable artifacts.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Remove generated executable artifacts in the project's version control
           system. It is recommended that any scenario where a generated
@@ -2232,9 +2236,9 @@ controls:
           While active, the version control system MUST NOT contain unreviewable
           binary artifacts.
         applicability:
-          - Maturity Level 1
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-1
+          - maturity-2
+          - maturity-3
         recommendation: |
           Do not add any unreviewable binary artifacts to the project's version
           control system. This includes executable application binaries, library
@@ -2308,8 +2312,8 @@ controls:
           run at least one automated test suite to ensure the changes meet
           expectations.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: | # give examples
           Automated tests should be run prior to every merge into the primary
           branch. The test suite should be run in a CI/CD pipeline and the
@@ -2323,7 +2327,7 @@ controls:
           While active, project's documentation MUST clearly document when and
           how tests are run.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Add a section to the contributing documentation that explains how to
           run the tests locally and how to run the tests in the CI/CD pipeline.
@@ -2335,7 +2339,7 @@ controls:
           all major changes to the software produced by the project should add
           or update tests of the functionality in an automated test suite.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Add a section to the contributing documentation that explains the
           policy for adding or updating tests. The policy should explain what
@@ -2380,7 +2384,7 @@ controls:
           control system MUST require at least one non-author human approval of the
           changes before merging.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Configure the project's version control system to require at least one
           non-author human approval of changes before merging into the release or
@@ -2464,8 +2468,8 @@ controls:
           include design documentation demonstrating all actions and actors
           within the system.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Include designs in the project documentation that explains the actions
           and actors. Actors include any subsystem or entity that can influence
@@ -2534,8 +2538,8 @@ controls:
           include descriptions of all external software interfaces of the
           released software assets.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Document all software interfaces (APIs) of the released software
           assets, explaining how users can interact with the software and what
@@ -2626,8 +2630,8 @@ controls:
           security assessment to understand the most likely and impactful
           potential security problems that could occur within the software.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Performing a security assessment informs both project members as well
           as downstream consumers that the project understands what problems
@@ -2643,7 +2647,7 @@ controls:
           attacks on critical code paths, functions, and interactions within the
           system.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Threat modeling is an activity where the project looks at the
           codebase, associated processes and infrastructure, interfaces, key
@@ -2748,8 +2752,8 @@ controls:
           include a policy for coordinated vulnerability disclosure (CVD), with a clear
           timeframe for response.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Create a SECURITY.md file at the root of the directory, outlining the
           project's policy for coordinated vulnerability disclosure. Include a
@@ -2815,7 +2819,7 @@ controls:
           While active, the project documentation MUST contain
           security contacts.
         applicability:
-          - Maturity Level 1
+          - maturity-1
         recommendation: |
           Create a security.md (or similarly-named) file that contains security
           contacts for the project.
@@ -2860,8 +2864,8 @@ controls:
           provide a means for private vulnerability reporting directly to
           the security contacts within the project.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Provide a means for security researchers to report vulnerabilities
           privately to the project. This may be a dedicated email address, a
@@ -2924,8 +2928,8 @@ controls:
           While active, the project documentation MUST
           publicly publish data about discovered vulnerabilities.
         applicability:
-          - Maturity Level 2
-          - Maturity Level 3
+          - maturity-2
+          - maturity-3
         recommendation: |
           Provide information about known vulnerabilities in a predictable
           public channel, such as a CVE entry, blog post, or other medium.
@@ -2939,7 +2943,7 @@ controls:
           in a VEX document, augmenting the vulnerability report with
           non-exploitability details.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Establish a VEX feed communicating the exploitability status of
           known vulnerabilities, including assessment details or any
@@ -3054,7 +3058,7 @@ controls:
           defines a threshold for remediation of SCA findings related to
           vulnerabilities and licenses.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Document a policy in the project that defines a threshold for
           remediation of SCA findings related to vulnerabilities and licenses.
@@ -3065,7 +3069,7 @@ controls:
           While active, the project documentation MUST include a policy to
           address SCA violations prior to any release.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Document a policy in the project to address applicable Software
           Composition Analysis results before any release, and add status checks
@@ -3078,7 +3082,7 @@ controls:
           in the event of violations, except when declared and suppressed as
           non-exploitable.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Create a status check in the project's version control system that
           runs a Software Composition Analysis tool on all changes
@@ -3191,7 +3195,7 @@ controls:
           While active, the project documentation MUST include a policy that
           defines a threshold for remediation of SAST findings.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Document a policy in the project that defines a threshold for
           remediation of Static Application Security Testing (SAST) findings.
@@ -3204,7 +3208,7 @@ controls:
           weaknesses and blocked in the event of violations except when declared
           and suppressed as non-exploitable.
         applicability:
-          - Maturity Level 3
+          - maturity-3
         recommendation: |
           Create a status check in the project's version control system that
           runs a Static Application Security Testing (SAST) tool on all changes

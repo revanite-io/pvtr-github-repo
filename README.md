@@ -4,10 +4,9 @@ This application performs automated assessments against GitHub repositories usin
 
 Many of the assessments depend upon the presence of a [Security Insights](https://github.com/ossf/security-insights) file at the root of the repository, or `./github/security-insights.yml`.
 
-
 ## Catalog Versions
 
-The scanner bundles multiple versions of the OSPS Baseline catalog. Select one in your config under `policy.catalogs`:
+The scanner bundles multiple versions of the OSPS Baseline catalog. Select one in your [Privateer config](https://privateerproj.com/getting-started/quickstart/) under `policy.catalogs`:
 
 - `osps-baseline` — always the latest bundled catalog (currently 2026-08). Use this to pick up new Baseline versions automatically.
 - See the [catalog contract](./evaluation_plans/catalog_contract.go) to review the pinnable catalog versions.
@@ -17,7 +16,7 @@ The scanner bundles multiple versions of the OSPS Baseline catalog. Select one i
 
 ## Work in Progress
 
-Every assessment requirement in the bundled catalogs has a step implementation, though some return a needs-review result pending manual verification. [Maturity Level 1](https://baseline.openssf.org) requirements are the most rigorously tested and are recommended for use. The results of these assessments are integrated into [LFX Insights](https://insights.linuxfoundation.org/project/k8s/repository/kubernetes-kubernetes/security), powering the [Security & Best Practices results](https://insights.linuxfoundation.org/docs/metrics/security/).
+Every assessment requirement in the bundled catalogs has a step implementation, though some return a needs-review result pending manual verification. [maturity-1](https://baseline.openssf.org) requirements are the most rigorously tested and are recommended for use. The results of these assessments are integrated into [LFX Insights](https://insights.linuxfoundation.org/project/k8s/repository/kubernetes-kubernetes/security), powering the [Security & Best Practices results](https://insights.linuxfoundation.org/docs/metrics/security/).
 
 ![alt text](kubernetes_insights_baseline.png)
 
