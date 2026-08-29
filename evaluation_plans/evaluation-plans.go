@@ -40,10 +40,9 @@ var (
 			build_release.CicdSanitizedInputParameters,
 		},
 		"OSPS-BR-01.02": {
-			// Retired in v2026.08.28: coverage was split
+			// Retired in v2026.10.25: coverage was split
 			// between BR-01.01 and BR-01.03
-			build_release.CicdSanitizedInputParameters,
-			build_release.CicdUntrustedCodeIsolation,
+			reusable_steps.Retired,
 		},
 		"OSPS-BR-01.03": {
 			build_release.CicdUntrustedCodeIsolation,
