@@ -281,7 +281,7 @@ func (p *Payload) GetLicenseAtRef(ref string) (RefLicense, bool, error) {
 			return entry.license, entry.found, entry.err
 		}
 	}
-	license, found, err := p.RestData.LicenseAtRef(ref)
+	license, found, err := p.LicenseAtRef(ref)
 	if p.cache != nil {
 		if p.cache.refLicenses == nil {
 			p.cache.refLicenses = make(map[string]refLicenseCacheEntry)

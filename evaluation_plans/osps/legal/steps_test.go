@@ -117,7 +117,7 @@ func withLicenseEndpoint(t *testing.T, statusCode int, spdxId, path string) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"path": %q, "license": {"spdx_id": %q}}`, path, spdxId)
+		_, _ = fmt.Fprintf(w, `{"path": %q, "license": {"spdx_id": %q}}`, path, spdxId)
 	}))
 	t.Cleanup(server.Close)
 	oldAPIBase := data.APIBase
