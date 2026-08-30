@@ -21,6 +21,7 @@ type RepositoryMetadata interface {
 	RulesetsObserved() bool
 	DefaultBranchPullRequestReviewRules() PullRequestReviewRules
 	ViewerCanAdminister() bool
+	DefaultBranchProtectedFlag() *bool
 }
 
 // PullRequestReviewRules summarizes the pull_request rules the repository's
@@ -36,10 +37,11 @@ type PullRequestReviewRules struct {
 }
 
 type GitHubRepositoryMetadata struct {
-	Releases           []ReleaseData
-	defaultBranchRules *github.BranchRules
-	ghRepo             *github.Repository
-	ghOrg              *github.Organization
+	Releases               []ReleaseData
+	defaultBranchRules     *github.BranchRules
+	defaultBranchProtected *bool
+	ghRepo                 *github.Repository
+	ghOrg                  *github.Organization
 }
 
 // RequiredStatusCheck retains the optional GitHub App pin attached to a
@@ -153,6 +155,28 @@ func (r *GitHubRepositoryMetadata) RulesetsObserved() bool {
 	return r.defaultBranchRules != nil
 }
 
+// DefaultBranchProtectedFlag returns the `protected` boolean from the REST
+// "Get a branch" endpoint, or nil when the branch fetch failed. It is true
+// when either classic branch protection or any ruleset applies, so true is a
+// weak positive (it may reflect only a deletion rule) while false proves
+// neither exists. Readable by any token, including anonymous ones — verified
+// empirically against github.com (2026-08); undocumented, so GHES may differ.
+func (r *GitHubRepositoryMetadata) DefaultBranchProtectedFlag() *bool {
+	return r.defaultBranchProtected
+}
+
+// ObservedUnprotected reports whether the scan positively observed that the
+// default branch has no protection of any kind. Unlike the admin-only
+// protection details, this negative holds for any token, so callers may fail
+// on it rather than report it as unobservable.
+func ObservedUnprotected(metadata RepositoryMetadata) bool {
+	if metadata == nil {
+		return false
+	}
+	flag := metadata.DefaultBranchProtectedFlag()
+	return flag != nil && !*flag
+}
+
 // DefaultBranchPullRequestReviewRules aggregates every applying pull_request
 // rule; see PullRequestReviewRules for the aggregation semantics.
 func (r *GitHubRepositoryMetadata) DefaultBranchPullRequestReviewRules() PullRequestReviewRules {
@@ -205,12 +229,16 @@ func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (ghRepo
 		return repository, &GitHubRepositoryMetadata{}, err
 	}
 
-	// The organization and ruleset lookups are independent of each other and hit
-	// separate endpoints, so fetch them concurrently.
-	// Errors are expected when an org or ruleset isn't in place; safe to ignore.
+	// The organization, ruleset, and branch lookups are independent of each
+	// other and hit separate endpoints, so fetch them concurrently.
+	// Org and ruleset errors are expected when an org or ruleset isn't in
+	// place; safe to ignore. A branch fetch error is not ignored so much as
+	// recorded: it leaves branchProtected nil, which consumers read as
+	// "could not look" and degrade to NeedsReview.
 	var (
-		organization *github.Organization
-		branchRules  *github.BranchRules
+		organization    *github.Organization
+		branchRules     *github.BranchRules
+		branchProtected *bool
 	)
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -225,12 +253,19 @@ func loadRepositoryMetadata(ghClient *github.Client, owner, repo string) (ghRepo
 			branchRules = rules // hoist
 		}
 	})
+	wg.Go(func() {
+		branch, _, branchErr := ghClient.Repositories.GetBranch(context.Background(), owner, repo, repository.GetDefaultBranch(), 1)
+		if branchErr == nil && branch != nil {
+			branchProtected = branch.Protected // hoist
+		}
+	})
 	wg.Wait()
 
 	return repository, &GitHubRepositoryMetadata{
-		ghRepo:             repository,
-		ghOrg:              organization,
-		defaultBranchRules: branchRules,
+		ghRepo:                 repository,
+		ghOrg:                  organization,
+		defaultBranchRules:     branchRules,
+		defaultBranchProtected: branchProtected,
 	}, nil
 }
 

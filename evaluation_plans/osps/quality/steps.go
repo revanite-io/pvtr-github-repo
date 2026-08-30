@@ -355,9 +355,15 @@ func RequiresNonAuthorApproval(payload data.Payload) (result gemara.Result, mess
 		return gemara.NeedsReview, fmt.Sprintf("The default branch requires %d non-author approving review(s), but neither last-push approval nor stale-review dismissal is enabled, so commits pushed after an approval can merge unreviewed; confirm the review process covers this gap", approvals), gemara.Medium
 	}
 
-	// No review requirement was observed anywhere. Report the ruleset gap
-	// first: it applies to any token, whereas the classic-visibility caveat
-	// below only explains the admin-only blind spot.
+	// The publicly readable branch `protected` flag being false proves no
+	// classic branch protection and no rulesets exist, so no review
+	// requirement can exist either — a confident Failed for any token.
+	if data.ObservedUnprotected(payload.RepositoryMetadata) {
+		return gemara.Failed, "Default branch has no branch protection rules or rulesets, so merging does not require a non-author approving review", gemara.High
+	}
+
+	// Nothing observed anywhere. The ruleset gap applies to any token, so
+	// report it ahead of the admin-only blind spot below.
 	if !ruleset.Observed {
 		return gemara.NeedsReview, "Repository rulesets could not be observed; manually confirm whether the default branch requires a non-author approving review", gemara.Low
 	}

@@ -1387,16 +1387,19 @@ func TestIsSignatureOrChecksumAsset(t *testing.T) {
 // that reaches for one fails loudly.
 type fakeReviewRulesMetadata struct {
 	data.RepositoryMetadata
-	rules data.PullRequestReviewRules
-	admin bool
+	rules         data.PullRequestReviewRules
+	admin         bool
+	protectedFlag *bool
 }
 
 func (f *fakeReviewRulesMetadata) DefaultBranchPullRequestReviewRules() data.PullRequestReviewRules {
 	return f.rules
 }
-func (f *fakeReviewRulesMetadata) ViewerCanAdminister() bool { return f.admin }
+func (f *fakeReviewRulesMetadata) ViewerCanAdminister() bool         { return f.admin }
+func (f *fakeReviewRulesMetadata) DefaultBranchProtectedFlag() *bool { return f.protectedFlag }
 
 func TestRequiresNonAuthorApproval(t *testing.T) {
+	unprotectedFlag := false
 	classic := func(requires bool, count int, lastPush bool) *data.GraphqlRepoData {
 		g := &data.GraphqlRepoData{}
 		g.Repository.DefaultBranchRef.BranchProtectionRule.RequiresApprovingReviews = requires
@@ -1584,6 +1587,22 @@ func TestRequiresNonAuthorApproval(t *testing.T) {
 			wantResult:     gemara.NeedsReview,
 			wantMsgPart:    "Repository rulesets could not be observed",
 			wantConfidence: gemara.Low,
+		},
+		{
+			// The publicly readable `protected` flag being false proves no
+			// protection of any kind exists, so a non-admin no longer needs
+			// to route the admin-only blind spot to a human.
+			name: "observed unprotected fails confidently for non-admin",
+			payload: data.Payload{
+				GraphqlRepoData: &data.GraphqlRepoData{},
+				RepositoryMetadata: &fakeReviewRulesMetadata{
+					rules:         data.PullRequestReviewRules{Observed: true},
+					protectedFlag: &unprotectedFlag,
+				},
+			},
+			wantResult:     gemara.Failed,
+			wantMsgPart:    "no branch protection rules or rulesets",
+			wantConfidence: gemara.High,
 		},
 	}
 
