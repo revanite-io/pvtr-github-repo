@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+
+	"github.com/ossf/pvtr-github-repo-scanner/data"
 )
 
 const (
@@ -223,15 +225,15 @@ func levelsForBadge(badge string) map[string]struct{} {
 	}
 
 	levels := map[string]struct{}{}
-	for _, level := range []string{"Maturity Level 1", "Maturity Level 2", "Maturity Level 3"} {
+	for _, level := range []string{"maturity-1", "maturity-2", "maturity-3"} {
 		levels[level] = struct{}{}
-		if badge == "baseline-1" && level == "Maturity Level 1" {
+		if badge == "baseline-1" && level == "maturity-1" {
 			break
 		}
-		if badge == "baseline-2" && level == "Maturity Level 2" {
+		if badge == "baseline-2" && level == "maturity-2" {
 			break
 		}
-		if badge == "baseline-3" && level == "Maturity Level 3" {
+		if badge == "baseline-3" && level == "maturity-3" {
 			break
 		}
 	}
@@ -243,6 +245,11 @@ func isApplicable(applicability []string, allowedLevels map[string]struct{}) boo
 		return true
 	}
 	for _, level := range applicability {
+		// Released results files carry "Maturity Level N" while newer ones use
+		// "maturity-N"; accept both spellings via the shared alias table.
+		if alias, ok := data.MaturityLevelAliases[level]; ok {
+			level = alias
+		}
 		if _, ok := allowedLevels[level]; ok {
 			return true
 		}

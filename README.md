@@ -1,12 +1,22 @@
 # Privateer Plugin for GitHub Repositories
 
-This application performs automated assessments against GitHub repositories using controls defined in the [Open Source Project Security Baseline v2025.02.25](https://baseline.openssf.org). The application consumes the OSPS Baseline controls using [Gemara](https://github.com/gemaraproj/go-gemara) layer 2 and produces results of the automated assessments using layer 4.
+This application performs automated assessments against GitHub repositories using controls defined in the [Open Source Project Security Baseline](https://baseline.openssf.org). The application consumes the OSPS Baseline controls using [Gemara](https://github.com/gemaraproj/go-gemara) layer 2 and produces results of the automated assessments using layer 4.
 
 Many of the assessments depend upon the presence of a [Security Insights](https://github.com/ossf/security-insights) file at the root of the repository, or `./github/security-insights.yml`.
 
+## Catalog Versions
+
+The scanner bundles multiple versions of the OSPS Baseline catalog. Select one in your [Privateer config](https://privateerproj.com/getting-started/quickstart/) under `policy.catalogs`:
+
+- `osps-baseline` — always the latest bundled catalog (currently 2026-08). Use this to pick up new Baseline versions automatically.
+- See the [catalog contract](./evaluation_plans/catalog_contract.go) to review the pinnable catalog versions.
+
+> [!NOTE]
+> Pinning catalog versions does not carry the same risks as software version pinning. Every release of the baseline is manually copied into this plugin. The content is used to tag steps to assessment requirements, then elevate their prose into the evaluation log.
+
 ## Work in Progress
 
-Currently 43 control requirements across OSPS Baselines levels 1-3 are covered, with 9 not yet implemented. [Maturity Level 1](https://baseline.openssf.org/versions/2025-02-25.html#level-1) requirements are the most rigorously tested and are recommended for use. The results of these layer 1 assessments are integrated into [LFX Insights](https://insights.linuxfoundation.org/project/k8s/repository/kubernetes-kubernetes/security), powering the [Security & Best Practices results](https://insights.linuxfoundation.org/docs/metrics/security/).
+Every assessment requirement in the bundled catalogs has a step implementation, though some return a needs-review result pending manual verification. [maturity-1](https://baseline.openssf.org) requirements are the most rigorously tested and are recommended for use. The results of these assessments are integrated into [LFX Insights](https://insights.linuxfoundation.org/project/k8s/repository/kubernetes-kubernetes/security), powering the [Security & Best Practices results](https://insights.linuxfoundation.org/docs/metrics/security/).
 
 ![alt text](kubernetes_insights_baseline.png)
 
