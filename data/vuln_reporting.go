@@ -3,6 +3,8 @@ package data
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
 )
 
 // PrivateVulnReporting captures the repository's private-vulnerability-reporting
@@ -52,41 +54,44 @@ type privateVulnReportingResponse struct {
 // returns when the setting is unavailable for a repository — leaves Known false
 // so callers treat the status as unknown rather than a confirmed "disabled".
 // The 404 is non-transient (see withRetry), so it costs a single round trip.
-func (r *RestData) getPrivateVulnReporting() {
+func (r *RestData) getPrivateVulnReporting() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/private-vulnerability-reporting", APIBase, r.owner, r.repo)
 	body, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
-		return
+		if isExpectedAbsence(err, http.StatusNotFound) {
+			return nil
+		}
+		return err
 	}
 	var parsed privateVulnReportingResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return
+		return fmt.Errorf("failed to decode response: %w", err)
 	}
 	r.PrivateVulnReporting = PrivateVulnReporting{Enabled: parsed.Enabled, Known: true}
+	return nil
 }
 
 // loadSecurityPolicy locates SECURITY.md and, when present, fetches its content.
 // Presence alone is answered from already-cached directory listings; the content
 // fetch is the only added API call, and it happens only when the file exists so
 // that its body can back the SECURITY.md contact fallback in OSPS-VM-02.
-func (r *RestData) loadSecurityPolicy() {
+func (r *RestData) loadSecurityPolicy() error {
 	path := r.checkFile("security.md")
 	if path == "" {
-		return
+		return nil
 	}
 	r.SecurityPolicy.Present = true
 
 	file, err := r.getSourceFile(r.owner, r.repo, path)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve SECURITY.md content: %s", err.Error()))
-		return
+		return fmt.Errorf("failed to retrieve SECURITY.md content: %w", err)
 	}
 	content, err := file.GetContent()
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("failed to decode SECURITY.md content: %s", err.Error()))
-		return
+		return fmt.Errorf("failed to decode SECURITY.md content: %w", err)
 	}
 	r.SecurityPolicy.Content = content
+	return nil
 }
 
 // securityAdvisory is the subset of a repository security advisory returned by
@@ -107,15 +112,18 @@ type securityAdvisory struct {
 // published". The endpoint is paginated; a project with published advisories
 // needs only one to satisfy the check, so a single (first-page) request is
 // sufficient to answer "are there any?".
-func (r *RestData) getSecurityAdvisories() {
+func (r *RestData) getSecurityAdvisories() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/security-advisories?state=published&per_page=100", APIBase, r.owner, r.repo)
 	body, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
-		return
+		if isExpectedAbsence(err, http.StatusForbidden, http.StatusNotFound) {
+			return nil
+		}
+		return err
 	}
 	var parsed []securityAdvisory
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return
+		return fmt.Errorf("failed to decode response: %w", err)
 	}
 	count := 0
 	for _, advisory := range parsed {
@@ -126,4 +134,23 @@ func (r *RestData) getSecurityAdvisories() {
 	// Only the first page (per_page=100) is fetched; a full page means the true
 	// total may be higher, so the count is reported as a lower bound.
 	r.SecurityAdvisories = SecurityAdvisories{Count: count, Known: true, CountIsLowerBound: len(parsed) >= 100}
+	return nil
+}
+
+// isExpectedAbsence reports whether err is the API answering that an optional
+// feature is not available for this repository (rather than the request
+// failing). MakeApiCall formats non-200 responses as "unexpected response:
+// <code> <text>", so matching the status text inside the error message is
+// sufficient to classify the response.
+func isExpectedAbsence(err error, codes ...int) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, code := range codes {
+		if strings.Contains(msg, fmt.Sprintf("%d", code)) {
+			return true
+		}
+	}
+	return false
 }

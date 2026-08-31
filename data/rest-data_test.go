@@ -576,6 +576,6 @@ func TestGetWorkflowPermissionsInaccessibleLeavesUnobserved(t *testing.T) {
 		repo:       "test-repo",
 		HttpClient: server.Client(),
 	}
-	require.Error(t, rest.getWorkflowPermissions())
+	require.NoError(t, rest.getWorkflowPermissions(), "a 403 from the admin-only permissions endpoints is an expected absence, not a setup failure")
 	assert.False(t, rest.WorkflowPermissionsObserved, "insufficient token permissions must leave the observed flag false so the workflow-file heuristic applies")
 }

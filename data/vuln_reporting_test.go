@@ -47,8 +47,11 @@ func TestGetPrivateVulnReporting(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			payload := NewPayloadWithHTTPMock(Payload{}, []byte(test.body), test.statusCode, test.httpErr)
-			payload.getPrivateVulnReporting()
+			err := payload.getPrivateVulnReporting()
 
+			if test.wantKnown {
+				assert.NoError(t, err)
+			}
 			assert.Equal(t, test.wantEnabled, payload.PrivateVulnReporting.Enabled)
 			assert.Equal(t, test.wantKnown, payload.PrivateVulnReporting.Known)
 		})
@@ -109,8 +112,11 @@ func TestGetSecurityAdvisories(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			payload := NewPayloadWithHTTPMock(Payload{}, []byte(test.body), test.statusCode, test.httpErr)
-			payload.getSecurityAdvisories()
+			err := payload.getSecurityAdvisories()
 
+			if test.wantKnown {
+				assert.NoError(t, err)
+			}
 			assert.Equal(t, test.wantCount, payload.SecurityAdvisories.Count)
 			assert.Equal(t, test.wantKnown, payload.SecurityAdvisories.Known)
 			assert.Equal(t, test.wantLowerBnd, payload.SecurityAdvisories.CountIsLowerBound)

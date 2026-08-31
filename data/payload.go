@@ -124,7 +124,13 @@ func Loader(config *config.Config) (payload any, err error) {
 		return err
 	})
 	g.Go(func() error {
-		return rest.Setup()
+		// Setup reports which REST data domains failed to load (#42). Each
+		// domain degrades independently (checks fall back to NeedsReview on
+		// missing data), so the failures are logged rather than aborting the scan.
+		if err := rest.Setup(); err != nil {
+			config.Logger.Warn(fmt.Sprintf("rest data setup completed with errors: %s", err.Error()))
+		}
+		return nil
 	})
 	g.Go(func() (err error) {
 		isCodeRepo, err = rest.IsCodeRepo()

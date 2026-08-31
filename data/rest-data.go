@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -74,35 +75,56 @@ type WorkflowPermissions struct {
 
 var APIBase = "https://api.github.com"
 
+// Setup fetches every REST-backed data domain and returns any failures joined
+// together (#42). Each domain degrades independently (checks fall back to
+// NeedsReview on missing data), so the caller can log the error and continue
+// the scan rather than aborting. Expected absences — the 403/404 an optional
+// feature returns when it is not available for a repository — are not failures
+// and are handled inside each fetcher.
 func (r *RestData) Setup() error {
-	// owner/repo/token are resolved by newRestData; Setup is only ever
-	// reached through it, so no fallback resolution is needed here.
+	contentsErr := r.getRepoContents()
 
-	r.getRepoContents()
-
-	// Errors are expected when one of these are not in place; safe to ignore
+	var insightsErr, policyErr, workflowErr, vulnReportingErr, advisoriesErr error
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		// Both loaders probe repository contents via checkFile, which writes the
 		// shared .github listing into the contents cache; running them in the same
 		// goroutine keeps that write single-threaded while reusing the cached probe.
-		r.loadSecurityInsights()
-		r.loadSecurityPolicy()
+		insightsErr = r.loadSecurityInsights()
+		policyErr = r.loadSecurityPolicy()
 	})
 	wg.Go(func() {
-		_ = r.getWorkflowPermissions()
+		workflowErr = r.getWorkflowPermissions()
 	})
 	wg.Go(func() {
 		r.ReleasesError = r.getReleases()
 	})
 	wg.Go(func() {
-		r.getPrivateVulnReporting()
+		vulnReportingErr = r.getPrivateVulnReporting()
 	})
 	wg.Go(func() {
-		r.getSecurityAdvisories()
+		advisoriesErr = r.getSecurityAdvisories()
 	})
 	wg.Wait()
-	return nil
+
+	return errors.Join(
+		wrapErr("repository contents", contentsErr),
+		wrapErr("security insights", insightsErr),
+		wrapErr("security policy", policyErr),
+		wrapErr("workflow permissions", workflowErr),
+		wrapErr("releases", r.ReleasesError),
+		wrapErr("private vulnerability reporting", vulnReportingErr),
+		wrapErr("security advisories", advisoriesErr),
+	)
+}
+
+// wrapErr prefixes err with the data domain it came from, so the joined error
+// Setup returns names each failed fetch. A nil err stays nil for errors.Join.
+func wrapErr(domain string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", domain, err)
 }
 
 func (r *RestData) MakeApiCall(endpoint string, isGithub bool) (body []byte, err error) {
@@ -396,17 +418,19 @@ func parseMarkdownHeadings(content []byte) []string {
 	return headings
 }
 
-func (r *RestData) loadSecurityInsights() {
+func (r *RestData) loadSecurityInsights() error {
+	var readErr error
 	filepath := r.checkFile(si.SecurityInsightsFilename)
 	if filepath != "" {
 		insights, err := si.Read(r.owner, r.repo, filepath)
 		r.Insights = insights
 		if err != nil {
-			r.Config.Logger.Error(fmt.Sprintf("failed to read security insights file: %s", err.Error()))
 			r.InsightsError = true
+			readErr = fmt.Errorf("failed to read security insights file: %w", err)
 		}
 	}
 	r.ensureInsightsInitialized()
+	return readErr
 }
 
 func (r *RestData) ensureInsightsInitialized() {
@@ -430,20 +454,29 @@ func (r *RestData) ensureInsightsInitialized() {
 	}
 }
 
-func (r *RestData) getRepoContents() {
+// logger returns the configured logger, or a no-op logger when none is wired
+// (as in tests that build RestData directly).
+func (r *RestData) logger() hclog.Logger {
+	if r.Config != nil && r.Config.Logger != nil {
+		return r.Config.Logger
+	}
+	return hclog.NewNullLogger()
+}
+
+func (r *RestData) getRepoContents() error {
 	_, content, _, err := r.ghClient.Repositories.GetContents(context.Background(), r.owner, r.repo, "", nil)
 	if err != nil {
-		r.Config.Logger.Error(fmt.Sprintf("failed to retrieve top-level repo contents via GitHub API: %s", err.Error()))
-		return
+		return fmt.Errorf("failed to retrieve top-level repo contents: %w", err)
 	}
 	r.contentsObserved = true
 	r.contents.Content = content
 	if len(r.contents.Content) == 0 {
-		r.Config.Logger.Error("no contents found at the top level of the repository")
-		return
+		r.logger().Warn("no contents found at the top level of the repository")
+		return nil
 	}
 	r.contents.SubContent = make(map[string]RepoContent)
-	r.Config.Logger.Trace(fmt.Sprintf("found %d top-level objects from GitHub API", len(r.contents.Content)))
+	r.logger().Trace(fmt.Sprintf("found %d top-level objects from GitHub API", len(r.contents.Content)))
+	return nil
 }
 
 // getSubdirContents fetches contents of a directory, caching the result by full
@@ -527,6 +560,9 @@ func (r *RestData) getWorkflowPermissions() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/permissions", APIBase, r.owner, r.repo)
 	responseData, err := r.MakeApiCall(endpoint, true)
 	if err != nil {
+		if isExpectedAbsence(err, http.StatusForbidden, http.StatusNotFound) {
+			return nil
+		}
 		return err
 	}
 	var actionsData struct {
@@ -540,6 +576,9 @@ func (r *RestData) getWorkflowPermissions() error {
 	endpoint = fmt.Sprintf("%s/repos/%s/%s/actions/permissions/workflow", APIBase, r.owner, r.repo)
 	responseData, err = r.MakeApiCall(endpoint, true)
 	if err != nil {
+		if isExpectedAbsence(err, http.StatusForbidden, http.StatusNotFound) {
+			return nil
+		}
 		return err
 	}
 	if err := json.Unmarshal(responseData, &r.WorkflowPermissions); err != nil {
