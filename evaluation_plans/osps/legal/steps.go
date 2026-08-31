@@ -2,11 +2,14 @@ package legal
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/ossf/pvtr-github-repo-scanner/data"
+	"github.com/ossf/pvtr-github-repo-scanner/evaluation_plans/osps/build_release"
 )
 
 type LicenseList struct {
@@ -83,21 +86,6 @@ var rootLicenseFiles = []string{
 	"LICENSE.txt",
 }
 
-// isLicenseFileName reports whether a filename is a conventional standalone
-// license file: an exact well-known name (case-insensitive) or a per-license
-// LICENSE-* file.
-func isLicenseFileName(name string) bool {
-	if strings.HasPrefix(strings.ToLower(name), licenseFilePrefix) {
-		return true
-	}
-	for _, known := range rootLicenseFiles {
-		if strings.EqualFold(name, known) {
-			return true
-		}
-	}
-	return false
-}
-
 // findRootLicenseFile returns the name of a license file present in the
 // repository root tree, or "" if none is found. The repository root is itself a
 // well-known location, so a conventionally-named file there is independent
@@ -110,8 +98,13 @@ func findRootLicenseFile(payload data.Payload) string {
 		if entry.Type != "blob" {
 			continue
 		}
-		if isLicenseFileName(entry.Name) {
+		if strings.HasPrefix(strings.ToLower(entry.Name), licenseFilePrefix) {
 			return entry.Name
+		}
+		for _, name := range rootLicenseFiles {
+			if strings.EqualFold(entry.Name, name) {
+				return entry.Name
+			}
 		}
 	}
 	return ""
@@ -127,25 +120,42 @@ func FoundLicense(payload data.Payload) (result gemara.Result, message string, c
 	return gemara.Failed, "License was not found in a well known location via the GitHub API", gemara.Medium
 }
 
-// latestPublishedRelease returns the most recent non-draft release. GitHub
-// lists releases newest-first, so the first non-draft entry is the latest
-// published one. Draft releases are not published software and must not affect
-// the assessment, even when an authenticated caller can observe them.
+// latestPublishedRelease returns the most recently published non-draft,
+// non-prerelease release. GitHub's /releases listing is ordered by creation
+// time, not publish time, and can include prereleases, so this selects
+// explicitly by parsed PublishedAt rather than trusting list order or taking
+// the first non-draft entry.
 func latestPublishedRelease(releases []data.ReleaseData) (data.ReleaseData, bool) {
+	var latest data.ReleaseData
+	var latestTime time.Time
+	found := false
 	for _, release := range releases {
-		if !release.Draft {
-			return release, true
+		if release.Draft || release.Prerelease {
+			continue
+		}
+		published, err := time.Parse(time.RFC3339, release.PublishedAt)
+		if err != nil {
+			// Unparsable or missing timestamp; it can't be compared against
+			// candidates, so it can't be selected as "latest".
+			continue
+		}
+		if !found || published.After(latestTime) {
+			latest = release
+			latestTime = published
+			found = true
 		}
 	}
-	return data.ReleaseData{}, false
+	return latest, found
 }
 
 // licenseAssets returns the names of release assets that look like standalone
-// license files attached at the top level of the release.
+// license files attached at the top level of the release. It reuses
+// build_release's exact-match classifier so the same asset is never
+// classified as a license file by one control and a real artifact by another.
 func licenseAssets(release data.ReleaseData) []string {
 	var names []string
 	for _, asset := range release.Assets {
-		if isLicenseFileName(asset.Name) {
+		if build_release.IsLicenseAssetName(asset.Name) {
 			names = append(names, asset.Name)
 		}
 	}
@@ -168,14 +178,16 @@ func releaseLabel(release data.ReleaseData) string {
 // project's current licensing posture. Two release-time hazards drive the
 // design (see ossf/pvtr-github-repo-scanner#70):
 //
-//  1. A license file attached directly to the release can supersede whatever
-//     ships inside the source archives. Its content is not observable here, so
-//     its presence downgrades the result to NeedsReview rather than passing on
-//     source evidence alone.
-//  2. The license can be modified or removed at the release tag while the
+//  1. The license can be modified or removed at the release tag while the
 //     default branch still shows an approved one. GitHub's auto-generated
 //     source archives contain the tree at the tag, so the authoritative
-//     evidence is the license GitHub detects at that tag, not at HEAD.
+//     evidence is the license GitHub detects at that tag, not at HEAD. This is
+//     checked first and, when conclusive, decides the result outright.
+//  2. A license file attached directly to the release can supersede whatever
+//     ships inside the source archives, but its content is not observable
+//     here. It is treated as corroborating evidence, not a blocker: it never
+//     downgrades a tag-level Pass or Fail, and only tips an otherwise
+//     inconclusive result toward NeedsReview rather than Failed.
 //
 // Default-branch evidence is used only as a lower-confidence fallback when the
 // tag-level lookup is unavailable.
@@ -186,15 +198,11 @@ func ReleasesLicensed(payload data.Payload) (result gemara.Result, message strin
 	if payload.ReleasesError != nil {
 		return gemara.NeedsReview, fmt.Sprintf("Release data could not be retrieved: %v. Review the released assets for license coverage", payload.ReleasesError), gemara.Low
 	}
-
 	latest, ok := latestPublishedRelease(payload.Releases)
 	if !ok {
 		return gemara.NotApplicable, "No releases found", gemara.High
 	}
-
-	if assets := licenseAssets(latest); len(assets) > 0 {
-		return gemara.NeedsReview, fmt.Sprintf("Release %q attaches standalone license file(s) as release assets (%s), which may supersede the license in the released source code; manual review is required to confirm they match an approved license", releaseLabel(latest), strings.Join(assets, ", ")), gemara.High
-	}
+	assets := licenseAssets(latest)
 
 	if latest.TagName != "" {
 		license, found, err := payload.GetLicenseAtRef(latest.TagName)
@@ -204,17 +212,39 @@ func ReleasesLicensed(payload data.Payload) (result gemara.Result, message strin
 		case err == nil && found:
 			return gemara.Passed, fmt.Sprintf("License file %q is present in the released source code at tag %q, but GitHub could not identify the license type", license.Path, latest.TagName), gemara.Medium
 		case err == nil:
+			// GitHub found no license file at the tag. That reading alone is
+			// ambiguous: a 404 from this endpoint means the same thing whether
+			// the tag genuinely ships no recognized license file or the tag no
+			// longer resolves to a commit at all (deleted or re-pointed after
+			// the release was published), so the ref's resolvability is
+			// checked before treating this as a real absence.
+			exists, refErr := payload.RestData.RefExists(latest.TagName)
+			switch {
+			case refErr != nil:
+				return gemara.NeedsReview, fmt.Sprintf("Could not confirm tag %q still resolves to a commit; review the released source code for license coverage", latest.TagName), gemara.Low
+			case !exists:
+				return gemara.NeedsReview, fmt.Sprintf("Tag %q no longer resolves to a commit, so its released source code could not be checked directly; manual review is required", latest.TagName), gemara.Low
+			}
+			if len(assets) > 0 {
+				return gemara.NeedsReview, fmt.Sprintf("No license was found in the released source code at tag %q, but release %q attaches standalone license file(s) as assets (%s); manual review is required to confirm they cover the release", latest.TagName, releaseLabel(latest), strings.Join(assets, ", ")), gemara.Medium
+			}
 			if payload.GraphqlRepoData != nil && payload.Repository.LicenseInfo.Url != "" {
 				// The tamper/removal case #70 exists to catch: HEAD is
 				// licensed, but the tree actually shipped is not.
-				return gemara.Failed, fmt.Sprintf("A license exists on the default branch, but none was found in the released source code at tag %q", latest.TagName), gemara.High
+				return gemara.Failed, fmt.Sprintf("A license exists on the default branch, but none was found in the released source code at tag %q", latest.TagName), gemara.Medium
 			}
-			return gemara.Failed, fmt.Sprintf("No license was found in the released source code at tag %q", latest.TagName), gemara.High
+			return gemara.Failed, fmt.Sprintf("No license was found in the released source code at tag %q", latest.TagName), gemara.Medium
+		case errors.Is(err, data.ErrRateLimited):
+			return gemara.NeedsReview, fmt.Sprintf("Could not check the released source code at tag %q for a license: the request was rate limited. Review the released assets for license coverage", latest.TagName), gemara.Low
 		default:
 			if payload.Config != nil && payload.Config.Logger != nil {
 				payload.Config.Logger.Warn(fmt.Sprintf("could not fetch license at release tag %q, falling back to default-branch evidence: %s", latest.TagName, err.Error()))
 			}
 		}
+	}
+
+	if len(assets) > 0 {
+		return gemara.NeedsReview, fmt.Sprintf("Release %q attaches standalone license file(s) as release assets (%s); the released source code could not be checked directly to confirm they match, so manual review is required", releaseLabel(latest), strings.Join(assets, ", ")), gemara.Medium
 	}
 
 	// Fallback: the released tree could not be checked directly (no tag name,

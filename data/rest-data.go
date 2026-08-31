@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -55,12 +56,20 @@ type RepoContent struct {
 }
 
 type ReleaseData struct {
-	Id      int            `json:"id"`
-	Name    string         `json:"name"`
-	TagName string         `json:"tag_name"`
-	URL     string         `json:"url"`
-	Draft   bool           `json:"draft"`
-	Assets  []ReleaseAsset `json:"assets"`
+	Id      int    `json:"id"`
+	Name    string `json:"name"`
+	TagName string `json:"tag_name"`
+	URL     string `json:"url"`
+	Draft   bool   `json:"draft"`
+	// Prerelease is GitHub's own flag for a release marked as not
+	// production-ready; it must be excluded from "latest published release"
+	// selection alongside drafts.
+	Prerelease bool `json:"prerelease"`
+	// PublishedAt is an RFC3339 timestamp. The /releases listing endpoint is
+	// ordered by creation time, not publish time, so selecting "the latest"
+	// release requires comparing this field rather than trusting list order.
+	PublishedAt string         `json:"published_at"`
+	Assets      []ReleaseAsset `json:"assets"`
 }
 
 type ReleaseAsset struct {
@@ -534,6 +543,67 @@ type RefLicense struct {
 	Path string
 }
 
+// ErrRefUnresolvable is returned by RefExists when GitHub reports no commit
+// at the given ref (a deleted or re-pointed tag). Distinguishing this from
+// "ref exists but has no license file" matters because a 404 from the
+// license-at-ref endpoint means the same thing in both cases.
+var ErrRefUnresolvable = errors.New("ref does not resolve to a commit")
+
+// ErrRateLimited is returned when GitHub responds 403, which the retry layer
+// treats as permanent rather than transient. A caller basing a verdict on a
+// missing signal should treat this differently from "the signal is absent",
+// since a rate-limited scan cannot observe the signal at all.
+var ErrRateLimited = errors.New("request was rate limited (403)")
+
+// RefExists reports whether ref resolves to a commit. It is used to
+// disambiguate a 404 from the license-at-ref endpoint: GitHub returns the same
+// 404 whether the ref has no recognized license file or the ref itself no
+// longer resolves (e.g. a tag deleted or force-moved after a release was
+// published), and only the latter should be reported as ambiguous rather than
+// "no license found".
+func (r *RestData) RefExists(ref string) (bool, error) {
+	var logger hclog.Logger
+	if r.Config != nil {
+		logger = r.Config.Logger
+	}
+	if logger == nil {
+		logger = hclog.NewNullLogger()
+	}
+	if r.HttpClient == nil {
+		r.HttpClient = &http.Client{}
+	}
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/commits/%s", APIBase, r.owner, r.repo, url.QueryEscape(ref))
+	var exists bool
+	err := withRetry(logger, fmt.Sprintf("GET %s", endpoint), func() error {
+		request, err := http.NewRequest("GET", endpoint, nil)
+		if err != nil {
+			return err
+		}
+		request.Header.Set("Authorization", "Bearer "+r.token)
+		response, err := r.HttpClient.Do(request)
+		if err != nil {
+			return fmt.Errorf("error making http call: %s", err.Error())
+		}
+		defer func() { _ = response.Body.Close() }()
+		switch {
+		case response.StatusCode == http.StatusNotFound:
+			exists = false
+			return nil
+		case response.StatusCode == http.StatusForbidden:
+			return ErrRateLimited
+		case response.StatusCode != http.StatusOK:
+			return fmt.Errorf("unexpected response: %s", response.Status)
+		default:
+			exists = true
+			return nil
+		}
+	})
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // LicenseAtRef fetches the license GitHub detects for the repository at the
 // given git ref (typically a release tag). GitHub's auto-generated release
 // archives contain the tree at the tag, so this observes the license actually
@@ -542,6 +612,9 @@ type RefLicense struct {
 // A 404 means GitHub found no license file at that ref; it is reported as
 // found=false with a nil error, distinct from request failures. MakeApiCall is
 // not used here because its uniform non-200 error cannot make that distinction.
+// A 403 is reported as ErrRateLimited rather than a generic error, since a
+// caller basing a verdict on this lookup's absence needs to tell "checked and
+// found nothing" apart from "could not check".
 func (r *RestData) LicenseAtRef(ref string) (license RefLicense, found bool, err error) {
 	var logger hclog.Logger
 	if r.Config != nil {
@@ -553,7 +626,6 @@ func (r *RestData) LicenseAtRef(ref string) (license RefLicense, found bool, err
 	if r.HttpClient == nil {
 		r.HttpClient = &http.Client{}
 	}
-
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/license?ref=%s", APIBase, r.owner, r.repo, url.QueryEscape(ref))
 	err = withRetry(logger, fmt.Sprintf("GET %s", endpoint), func() error {
 		request, err := http.NewRequest("GET", endpoint, nil)
@@ -570,6 +642,9 @@ func (r *RestData) LicenseAtRef(ref string) (license RefLicense, found bool, err
 			// No license file exists at this ref. That is an observation about
 			// the release, not a request failure.
 			return nil
+		}
+		if response.StatusCode == http.StatusForbidden {
+			return ErrRateLimited
 		}
 		if response.StatusCode != http.StatusOK {
 			return fmt.Errorf("unexpected response: %s", response.Status)

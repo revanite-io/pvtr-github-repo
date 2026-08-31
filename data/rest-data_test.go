@@ -634,7 +634,21 @@ func TestLicenseAtRef(t *testing.T) {
 		assert.Equal(t, RefLicense{}, license)
 	})
 
-	t.Run("non-404 failure is an error", func(t *testing.T) {
+	t.Run("403 is reported as ErrRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+		assert.False(t, found)
+	})
+
+	t.Run("non-404/403 failure is an error", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -679,15 +693,63 @@ func TestGetLicenseAtRefCachesPerRef(t *testing.T) {
 		RestData: &RestData{HttpClient: server.Client()},
 		cache:    &payloadCache{},
 	}
+
 	for i := 0; i < 2; i++ {
 		license, found, err := payload.GetLicenseAtRef("v1.0.0")
 		require.NoError(t, err)
 		assert.True(t, found)
 		assert.Equal(t, "MIT", license.SpdxId)
 	}
-	assert.Equal(t, 1, calls, "LE-02.02 and LE-03.02 read the same ref; the lookup must be cached")
+	assert.Equal(t, 1, calls, "repeated lookups of the same ref must be cached")
 
 	_, _, err := payload.GetLicenseAtRef("v2.0.0")
 	require.NoError(t, err)
 	assert.Equal(t, 2, calls, "a different ref is a different lookup")
+}
+
+func TestRefExists(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	t.Run("ref resolves", func(t *testing.T) {
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{owner: "test-owner", repo: "test-repo", HttpClient: server.Client()}
+		exists, err := rest.RefExists("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, exists)
+		assert.Equal(t, "/repos/test-owner/test-repo/commits/v1.0.0", gotPath)
+	})
+
+	t.Run("ref does not resolve", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		exists, err := rest.RefExists("deleted-tag")
+		require.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("403 is reported as ErrRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, err := rest.RefExists("v1.0.0")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+	})
 }
