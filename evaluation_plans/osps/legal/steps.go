@@ -218,7 +218,7 @@ func ReleasesLicensed(payload data.Payload) (result gemara.Result, message strin
 			// longer resolves to a commit at all (deleted or re-pointed after
 			// the release was published), so the ref's resolvability is
 			// checked before treating this as a real absence.
-			exists, refErr := payload.RestData.RefExists(latest.TagName)
+			exists, refErr := payload.RefExists(latest.TagName)
 			switch {
 			case refErr != nil:
 				return gemara.NeedsReview, fmt.Sprintf("Could not confirm tag %q still resolves to a commit; review the released source code for license coverage", latest.TagName), gemara.Low
