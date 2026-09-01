@@ -801,10 +801,36 @@ func TestWorkflowEvidenceSource(t *testing.T) {
 		workflowEvidenceSource(data.Payload{}, ".github/workflows/release.yml"))
 }
 
-func TestWorkflowJobPermissionsPrompt(t *testing.T) {
+// TestWorkflowJobPermissionsPromptMatchesGolden asserts the step sends the exact
+// prompt pinned by testdata/workflow_job_permissions_prompt.golden. The golden
+// is the same file, unchanged, that pinned the prompt before it moved into the
+// catalog, so this asserts wiring, requirement ID, and wording together against
+// a fixture the assembly code cannot influence.
+func TestWorkflowJobPermissionsPromptMatchesGolden(t *testing.T) {
+	originalFactory := newAIClientFromConfig
+	originalLoader := loadWorkflowFiles
+	t.Cleanup(func() {
+		newAIClientFromConfig = originalFactory
+		loadWorkflowFiles = originalLoader
+	})
+
+	scoped := data.WorkflowFile{
+		Name: "release.yml",
+		Path: ".github/workflows/release.yml",
+		Content: "on: [push]\njobs:\n  release:\n    runs-on: ubuntu-latest\n" +
+			"    permissions:\n      contents: write\n    steps:\n      - run: gh release create v1.0.0",
+	}
+	loadWorkflowFiles = func(data.Payload) ([]data.WorkflowFile, error) {
+		return []data.WorkflowFile{scoped}, nil
+	}
+	client := &accessControlAIClient{response: accessControlAIVerdict(`{"result":"needs_review","confidence":"low","message":"m","explanation":"e","citations":[]}`)}
+	newAIClientFromConfig = func(sdkconfig.Config) (sdkai.Client, error) { return client, nil }
+
+	WorkflowJobPermissionsLeastPrivilege(data.Payload{Config: &sdkconfig.Config{}})
+
 	want, err := os.ReadFile("testdata/workflow_job_permissions_prompt.golden")
 	assert.NoError(t, err)
-	assert.Equal(t, workflowJobPermissionsPrompt, string(want))
+	assert.Equal(t, strings.TrimSuffix(string(want), "\n"), client.prompt)
 }
 
 func TestEvaluateWorkflowJobPermissions(t *testing.T) {

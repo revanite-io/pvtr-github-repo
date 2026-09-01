@@ -1030,23 +1030,62 @@ func TestDocumentsTestMaintenancePolicy(t *testing.T) {
 	})
 }
 
-func TestTestExecutionDocumentationPrompt(t *testing.T) {
-	want, err := os.ReadFile("testdata/test_execution_documentation_prompt.golden")
-	if err != nil {
-		t.Fatalf("read golden prompt: %v", err)
+// TestTestExecutionDocumentationPromptMatchesGolden asserts the step sends the
+// exact prompt pinned by testdata/test_execution_documentation_prompt.golden.
+// The golden is the same file, unchanged, that pinned the prompt before it moved
+// into the catalog, so this asserts wiring, requirement ID, and wording together
+// against a fixture the assembly code cannot influence.
+func TestTestExecutionDocumentationPromptMatchesGolden(t *testing.T) {
+	originalFactory := newAIClientFromConfig
+	originalLoader := loadTestExecutionDocumentationEvidence
+	t.Cleanup(func() {
+		newAIClientFromConfig = originalFactory
+		loadTestExecutionDocumentationEvidence = originalLoader
+	})
+
+	loadTestExecutionDocumentationEvidence = func(data.Payload) (string, []string, error) {
+		return "README\nRun `go test ./...` before opening a PR.", []string{"/README"}, nil
 	}
-	if testExecutionDocumentationPrompt != strings.TrimSuffix(string(want), "\n") {
-		t.Fatal("testExecutionDocumentationPrompt does not match its golden file")
-	}
+	client := &recordingAIClient{}
+	newAIClientFromConfig = stubAIFactory(client, nil)
+
+	TestExecutionDocumentation(data.Payload{Config: &sdkconfig.Config{}})
+
+	assertPromptMatchesGolden(t, "testdata/test_execution_documentation_prompt.golden", client.prompt)
 }
 
-func TestDocumentsTestMaintenancePolicyPrompt(t *testing.T) {
-	want, err := os.ReadFile("testdata/documents_test_maintenance_policy_prompt.golden")
+// TestDocumentsTestMaintenancePolicyPromptMatchesGolden asserts the step sends
+// the exact prompt pinned by
+// testdata/documents_test_maintenance_policy_prompt.golden. See
+// TestTestExecutionDocumentationPromptMatchesGolden.
+func TestDocumentsTestMaintenancePolicyPromptMatchesGolden(t *testing.T) {
+	originalFactory := newAIClientFromConfig
+	originalLoader := loadDocumentsTestMaintenancePolicyEvidence
+	t.Cleanup(func() {
+		newAIClientFromConfig = originalFactory
+		loadDocumentsTestMaintenancePolicyEvidence = originalLoader
+	})
+
+	loadDocumentsTestMaintenancePolicyEvidence = func(data.Payload) (string, []string, error) {
+		return "CONTRIBUTING\nMajor changes must add or update automated tests.", []string{"/CONTRIBUTING"}, nil
+	}
+	client := &recordingAIClient{}
+	newAIClientFromConfig = stubAIFactory(client, nil)
+
+	DocumentsTestMaintenancePolicy(data.Payload{Config: &sdkconfig.Config{}})
+
+	assertPromptMatchesGolden(t, "testdata/documents_test_maintenance_policy_prompt.golden", client.prompt)
+}
+
+func assertPromptMatchesGolden(t *testing.T, goldenPath, got string) {
+	t.Helper()
+
+	want, err := os.ReadFile(goldenPath)
 	if err != nil {
 		t.Fatalf("read golden prompt: %v", err)
 	}
-	if documentsTestMaintenancePolicyPrompt != strings.TrimSuffix(string(want), "\n") {
-		t.Fatal("documentsTestMaintenancePolicyPrompt does not match its golden file")
+	if got != strings.TrimSuffix(string(want), "\n") {
+		t.Fatalf("step prompt does not match %s:\n got: %q\nwant: %q", goldenPath, got, want)
 	}
 }
 
