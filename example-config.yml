@@ -19,9 +19,23 @@ services:
         # - maturity-2
         # - maturity-3
     
-    # All variables are required to run the evaluation
+    # The owner, repo, and token variables are required to run the evaluation
     vars:
       owner: <github org or user name>
       repo: <github repo name>
       token: <classic token with permissions repo + admin:org>
 
+      # AI-assisted checks are disabled unless these settings are present.
+      # Store the API key in an environment variable or CI secret.
+      # Secrets in repository files are not detected or redacted.
+      # See docs/ai-assisted-checks.md.
+
+      # --- Required to enable AI ---
+      # ai_provider: openai        # openai or anthropic
+      # ai_model: gpt-4o-mini      # model name, as your provider spells it
+      # The API key is also required; expose it as PVTR_AI_API_KEY.
+
+      # --- Optional (defaults shown) ---
+      # ai_base_url: https://api.openai.com/v1  # proxy, gateway, or self-hosted
+      # ai_timeout: 30s                         # how long to wait for one answer
+      # ai_max_tokens: 1024                     # longest answer to allow

@@ -37,6 +37,29 @@ If the binaries and the config files are in different directories specify the co
 
 You may have to adjust the plugin name in the config.yaml file to match them.
 
+## AI-Assisted Checks
+
+Some requirements cannot be answered by checking for a file or setting. AI can
+assess these requirements when a deterministic check cannot. AI is optional and
+never replaces the deterministic checks.
+
+Add `ai_provider` and `ai_model` to the service's `vars` in `config.yml`, then
+set the API key:
+
+```sh
+export PVTR_AI_API_KEY='<your-api-key>'
+```
+
+The scanner supports OpenAI and Anthropic. AI-assisted results include the
+`[AI-Assisted]` prefix and a confidence level. Provider errors and invalid
+responses produce `Needs Review`; the scan continues.
+
+> **The scanner does not detect or redact secrets in repository files before
+> sending those files to the provider or storing them in AI evidence.**
+
+See [AI-Assisted Checks](docs/ai-assisted-checks.md) for configuration,
+security guidance, supported checks, and result details.
+
 ## Docker Usage
 
 ```sh
