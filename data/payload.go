@@ -62,6 +62,16 @@ type payloadCache struct {
 	documentation       []DocumentationFile
 	documentationErr    error
 	documentationLoaded bool
+	// refLicenses caches LicenseAtRef lookups by ref. More than one control
+	// evaluates the latest release's license, so without this the same
+	// endpoint would be hit once per control.
+	refLicenses map[string]refLicenseCacheEntry
+}
+
+type refLicenseCacheEntry struct {
+	license RefLicense
+	found   bool
+	err     error
 }
 
 // AddEvidence, GetEvidence, and ClearEvidence implement gemara.HasEvidence.
@@ -124,7 +134,13 @@ func Loader(config *config.Config) (payload any, err error) {
 		return err
 	})
 	g.Go(func() error {
-		return rest.Setup()
+		// Setup reports which REST data domains failed to load (#42). Each
+		// domain degrades independently (checks fall back to NeedsReview on
+		// missing data), so the failures are logged rather than aborting the scan.
+		if err := rest.Setup(); err != nil {
+			config.Logger.Warn(fmt.Sprintf("rest data setup completed with errors: %s", err.Error()))
+		}
+		return nil
 	})
 	g.Go(func() (err error) {
 		isCodeRepo, err = rest.IsCodeRepo()
@@ -274,4 +290,29 @@ func (p *Payload) GetDocumentationFiles() ([]DocumentationFile, error) {
 	p.cache.documentationErr = err
 	p.cache.documentationLoaded = true
 	return files, err
+}
+
+// GetLicenseAtRef returns the license GitHub detects at the given git ref,
+// fetched once per payload per ref. Errors are cached deliberately, like
+// GetDocumentationFiles: more than one control reads the same ref, and a
+// lookup that just failed should surface the same evidence to all of them
+// rather than being retried within one run. A payload without a cache (as
+// built directly in tests) simply calls through uncached.
+func (p *Payload) GetLicenseAtRef(ref string) (RefLicense, bool, error) {
+	if p.RestData == nil {
+		return RefLicense{}, false, fmt.Errorf("payload missing required repository data")
+	}
+	if p.cache != nil {
+		if entry, ok := p.cache.refLicenses[ref]; ok {
+			return entry.license, entry.found, entry.err
+		}
+	}
+	license, found, err := p.LicenseAtRef(ref)
+	if p.cache != nil {
+		if p.cache.refLicenses == nil {
+			p.cache.refLicenses = make(map[string]refLicenseCacheEntry)
+		}
+		p.cache.refLicenses[ref] = refLicenseCacheEntry{license: license, found: found, err: err}
+	}
+	return license, found, err
 }
