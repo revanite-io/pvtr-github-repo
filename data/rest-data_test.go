@@ -589,16 +589,16 @@ func TestSetupPropagatesDomainErrors(t *testing.T) {
 	defer func() { APIBase = oldAPIBase }()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/repos/test-owner/test-repo/actions/permissions":
+		switch r.URL.Path {
+		case "/repos/test-owner/test-repo/actions/permissions":
 			// The domain this test injects a real failure into.
 			http.Error(w, `{"message": "internal error"}`, http.StatusInternalServerError)
-		case r.URL.Path == "/repos/test-owner/test-repo/private-vulnerability-reporting":
+		case "/repos/test-owner/test-repo/private-vulnerability-reporting":
 			// Expected absence: must not appear in the joined error.
 			http.Error(w, `{"message": "Not Found"}`, http.StatusNotFound)
-		case r.URL.Path == "/repos/test-owner/test-repo/releases":
+		case "/repos/test-owner/test-repo/releases":
 			_, _ = w.Write([]byte(`[]`))
-		case r.URL.Path == "/repos/test-owner/test-repo/security-advisories":
+		case "/repos/test-owner/test-repo/security-advisories":
 			_, _ = w.Write([]byte(`[]`))
 		default:
 			http.Error(w, `{"message": "Not Found"}`, http.StatusNotFound)
