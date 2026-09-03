@@ -506,16 +506,33 @@ var releaseAssetCompanionSuffixes = []string{
 
 // releaseAssetCompanionNames are exact (lowercased) asset names that accompany
 // a release without identifying a specific artifact: standard documentation
-// files, common split-license names, and the one manifest name the shared
-// checksum classifier's markers do not cover. This map matches exactly so a
-// real artifact such as license-manager.zip is not exempted; note the shared
-// checksum markers it sits alongside are substring-matched, so a name like
+// files and the one manifest name the shared checksum classifier's markers do
+// not cover. Standalone license files are a separate, exported set below
+// (licenseAssetNames) so other controls can reuse the same exact-match
+// classification. This map matches exactly so a real artifact such as
+// readme-generator.zip is not exempted; note the shared checksum markers it
+// sits alongside are substring-matched, so a name like
 // checksums-generator-1.0.zip is exempted through that path regardless.
 var releaseAssetCompanionNames = map[string]bool{
 	"md5sums": true,
+	"readme":  true, "readme.txt": true, "readme.md": true,
+}
+
+// licenseAssetNames are exact (lowercased) asset names recognized as
+// standalone license files attached to a release. Exported via
+// IsLicenseAssetName so other controls that need to detect a license-shaped
+// release asset test the identical set rather than approximating it with a
+// prefix match, which would flag real artifacts like
+// license-checker_1.0_linux_amd64.tar.gz.
+var licenseAssetNames = map[string]bool{
 	"license": true, "license.txt": true, "license.md": true,
 	"license-mit": true, "license-apache": true,
-	"readme": true, "readme.txt": true, "readme.md": true,
+}
+
+// IsLicenseAssetName reports whether name (matched case-insensitively)
+// is a conventional standalone license file name for a release asset.
+func IsLicenseAssetName(name string) bool {
+	return licenseAssetNames[strings.ToLower(name)]
 }
 
 // isReleaseAssetCompanion reports whether a lowercased asset name is a
@@ -529,7 +546,7 @@ func isReleaseAssetCompanion(lowerName string) bool {
 		reusable_steps.HasSBOMExtension(lowerName) {
 		return true
 	}
-	if releaseAssetCompanionNames[lowerName] {
+	if releaseAssetCompanionNames[lowerName] || licenseAssetNames[lowerName] {
 		return true
 	}
 	for _, suffix := range releaseAssetCompanionSuffixes {

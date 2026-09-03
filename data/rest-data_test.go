@@ -579,3 +579,177 @@ func TestGetWorkflowPermissionsInaccessibleLeavesUnobserved(t *testing.T) {
 	require.Error(t, rest.getWorkflowPermissions())
 	assert.False(t, rest.WorkflowPermissionsObserved, "insufficient token permissions must leave the observed flag false so the workflow-file heuristic applies")
 }
+
+func TestLicenseAtRef(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	t.Run("license found at ref", func(t *testing.T) {
+		var gotRef, gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			gotRef = r.URL.Query().Get("ref")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"path": "LICENSE", "license": {"spdx_id": "MIT"}}`))
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{owner: "test-owner", repo: "test-repo", HttpClient: server.Client()}
+		license, found, err := rest.LicenseAtRef("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, RefLicense{SpdxId: "MIT", Path: "LICENSE"}, license)
+		assert.Equal(t, "/repos/test-owner/test-repo/license", gotPath)
+		assert.Equal(t, "v1.0.0", gotRef)
+	})
+
+	t.Run("ref is query-escaped", func(t *testing.T) {
+		var gotRawQuery string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotRawQuery = r.URL.RawQuery
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"path": "LICENSE", "license": {"spdx_id": "MIT"}}`))
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, _, err := rest.LicenseAtRef("release/v1 beta")
+		require.NoError(t, err)
+		assert.Equal(t, "ref=release%2Fv1+beta", gotRawQuery)
+	})
+
+	t.Run("404 means no license at ref, not an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		license, found, err := rest.LicenseAtRef("v1.0.0")
+		require.NoError(t, err)
+		assert.False(t, found)
+		assert.Equal(t, RefLicense{}, license)
+	})
+
+	t.Run("403 is reported as ErrRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+		assert.False(t, found)
+	})
+
+	t.Run("non-404/403 failure is an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.False(t, found)
+	})
+
+	t.Run("decode failure is an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not-json"))
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to decode license data")
+		assert.False(t, found)
+	})
+}
+
+func TestGetLicenseAtRefCachesPerRef(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"path": "LICENSE", "license": {"spdx_id": "MIT"}}`))
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	payload := Payload{
+		RestData: &RestData{HttpClient: server.Client()},
+		cache:    &payloadCache{},
+	}
+
+	for i := 0; i < 2; i++ {
+		license, found, err := payload.GetLicenseAtRef("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, "MIT", license.SpdxId)
+	}
+	assert.Equal(t, 1, calls, "repeated lookups of the same ref must be cached")
+
+	_, _, err := payload.GetLicenseAtRef("v2.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls, "a different ref is a different lookup")
+}
+
+func TestRefExists(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	t.Run("ref resolves", func(t *testing.T) {
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{owner: "test-owner", repo: "test-repo", HttpClient: server.Client()}
+		exists, err := rest.RefExists("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, exists)
+		assert.Equal(t, "/repos/test-owner/test-repo/commits/v1.0.0", gotPath)
+	})
+
+	t.Run("ref does not resolve", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		exists, err := rest.RefExists("deleted-tag")
+		require.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("403 is reported as ErrRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, err := rest.RefExists("v1.0.0")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+	})
+}

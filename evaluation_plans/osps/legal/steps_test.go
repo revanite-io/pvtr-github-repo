@@ -2,6 +2,9 @@ package legal
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gemaraproj/go-gemara"
@@ -104,77 +107,292 @@ func TestFoundLicense(t *testing.T) {
 	}
 }
 
-func TestReleasesLicensed(t *testing.T) {
-	tests := []struct {
-		name            string
-		payload         data.Payload
-		expectedResult  gemara.Result
-		expectedMessage string
-	}{
-		{
-			name: "No releases found",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Releases: []data.ReleaseData{},
-				},
-			},
-			expectedResult:  gemara.NotApplicable,
-			expectedMessage: "No releases found",
-		},
-		{
-			name: "No licenses found",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Releases: []data.ReleaseData{
-						{
-							Name: "v1.0.0",
-						},
-					},
-				},
-				GraphqlRepoData: &data.GraphqlRepoData{},
-			},
-			expectedResult:  gemara.Failed,
-			expectedMessage: "License was not found in a well known location via the GitHub API",
-		},
-		{
-			name: "Has releases and license",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Releases: []data.ReleaseData{
-						{
-							Name: "v1.0.0",
-						},
-					},
-				},
-				GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
-			},
-			expectedResult:  gemara.Passed,
-			expectedMessage: "GitHub releases include the license(s) in the released source code.",
-		},
-		{
-			name: "Release with unclassified root license file",
-			payload: data.Payload{
-				RestData: &data.RestData{
-					Releases: []data.ReleaseData{
-						{
-							Name: "v1.0.0",
-						},
-					},
-				},
-				GraphqlRepoData: stubGraphqlRepoWithTree("", treeEntry{name: "LICENSE"}),
-			},
-			expectedResult:  gemara.Passed,
-			expectedMessage: `License file "LICENSE" found in the repository root; GitHub could not identify the license type`,
-		},
-	}
+// withLicenseEndpoint points data.APIBase at a stub license endpoint for the
+// duration of the test. statusCode 404 simulates "no license at the ref";
+// 200 responds with the given SPDX id and path; anything else is a hard error.
+// Requests to /commits/<ref> (the ref-resolvability check) always answer 200,
+// i.e. "the ref resolves", unless overridden by refExistsStatus.
+func withLicenseEndpoint(t *testing.T, statusCode int, spdxId, path string) {
+	withLicenseAndRefEndpoint(t, statusCode, spdxId, path, http.StatusOK)
+}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			result, message, _ := ReleasesLicensed(test.payload)
-			assert.Equal(t, test.expectedResult, result)
-			assert.Equal(t, test.expectedMessage, message)
-		})
+func withLicenseAndRefEndpoint(t *testing.T, licenseStatus int, spdxId, path string, refExistsStatus int) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/commits/") {
+			w.WriteHeader(refExistsStatus)
+			return
+		}
+		if licenseStatus != http.StatusOK {
+			w.WriteHeader(licenseStatus)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"path": %q, "license": {"spdx_id": %q}}`, path, spdxId)
+	}))
+	t.Cleanup(server.Close)
+	oldAPIBase := data.APIBase
+	data.APIBase = server.URL
+	t.Cleanup(func() { data.APIBase = oldAPIBase })
+}
+
+// restDataWithReleases builds a RestData carrying the given releases and a
+// working HTTP client for tag-level license lookups.
+func restDataWithReleases(releases ...data.ReleaseData) *data.RestData {
+	return &data.RestData{
+		Releases:   releases,
+		HttpClient: http.DefaultClient,
 	}
+}
+
+func TestReleasesLicensed(t *testing.T) {
+	t.Run("no RestData", func(t *testing.T) {
+		result, message, confidence := ReleasesLicensed(data.Payload{})
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, "Release data is unavailable; review the released assets for license coverage", message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("release fetch failed", func(t *testing.T) {
+		payload := data.Payload{
+			RestData: &data.RestData{ReleasesError: fmt.Errorf("boom")},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, "Release data could not be retrieved: boom. Review the released assets for license coverage", message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("no releases found", func(t *testing.T) {
+		payload := data.Payload{RestData: &data.RestData{}}
+		result, message, _ := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NotApplicable, result)
+		assert.Equal(t, "No releases found", message)
+	})
+
+	t.Run("draft releases do not count as published", func(t *testing.T) {
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{TagName: "v1.0.0", Draft: true, PublishedAt: "2026-01-01T00:00:00Z"}),
+		}
+		result, message, _ := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NotApplicable, result)
+		assert.Equal(t, "No releases found", message)
+	})
+
+	t.Run("prereleases do not count as published", func(t *testing.T) {
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{TagName: "v1.0.0-rc1", Prerelease: true, PublishedAt: "2026-01-01T00:00:00Z"}),
+		}
+		result, message, _ := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NotApplicable, result)
+		assert.Equal(t, "No releases found", message)
+	})
+
+	t.Run("only the most recently published release is considered, regardless of list order", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusOK, "MIT", "LICENSE")
+		payload := data.Payload{
+			RestData: restDataWithReleases(
+				data.ReleaseData{TagName: "v2.0.0-rc1", Prerelease: true, PublishedAt: "2026-03-01T00:00:00Z"},
+				data.ReleaseData{TagName: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"},
+				data.ReleaseData{TagName: "v1.1.0", PublishedAt: "2026-02-01T00:00:00Z"},
+			),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Passed, result)
+		assert.Equal(t, `GitHub identifies license MIT at "LICENSE" in the released source code at tag "v1.1.0"; the auto-generated release archives include it`, message)
+		assert.Equal(t, gemara.High, confidence)
+	})
+
+	t.Run("license identified at the release tag passes regardless of an attached license asset", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusOK, "Apache-2.0", "LICENSE")
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{
+				TagName:     "v1.0.0",
+				PublishedAt: "2026-01-01T00:00:00Z",
+				Assets:      []data.ReleaseAsset{{Name: "LICENSE.txt"}},
+			}),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Passed, result)
+		assert.Equal(t, `GitHub identifies license Apache-2.0 at "LICENSE" in the released source code at tag "v1.0.0"; the auto-generated release archives include it`, message)
+		assert.Equal(t, gemara.High, confidence)
+	})
+
+	t.Run("unidentified license at the release tag", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusOK, "NOASSERTION", "COPYING")
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{TagName: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Passed, result)
+		assert.Equal(t, `License file "COPYING" is present in the released source code at tag "v1.0.0", but GitHub could not identify the license type`, message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("no license at tag, but a license asset is attached needs review", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusNotFound, "", "")
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{
+				TagName:     "v1.0.0",
+				PublishedAt: "2026-01-01T00:00:00Z",
+				Assets: []data.ReleaseAsset{
+					{Name: "scanner-linux-amd64.tar.gz"},
+					{Name: "LICENSE.txt"},
+					{Name: "LICENSE-MIT"},
+				},
+			}),
+			GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, `No license was found in the released source code at tag "v1.0.0", but release "v1.0.0" attaches standalone license file(s) as assets (LICENSE.txt, LICENSE-MIT); manual review is required to confirm they cover the release`, message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("release asset name that merely contains 'license-' is not misclassified as a license file", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusNotFound, "", "")
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{
+				TagName:     "v1.0.0",
+				PublishedAt: "2026-01-01T00:00:00Z",
+				Assets:      []data.ReleaseAsset{{Name: "license-checker_1.0_linux_amd64.tar.gz"}},
+			}),
+			GraphqlRepoData: &data.GraphqlRepoData{},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Failed, result)
+		assert.Equal(t, `No license was found in the released source code at tag "v1.0.0"`, message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("license on default branch but missing at the release tag", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusNotFound, "", "")
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{TagName: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Failed, result)
+		assert.Equal(t, `A license exists on the default branch, but none was found in the released source code at tag "v1.0.0"`, message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("no license anywhere at the release tag", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusNotFound, "", "")
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{TagName: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: &data.GraphqlRepoData{},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Failed, result)
+		assert.Equal(t, `No license was found in the released source code at tag "v1.0.0"`, message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("tag no longer resolves to a commit needs review, not Failed", func(t *testing.T) {
+		withLicenseAndRefEndpoint(t, http.StatusNotFound, "", "", http.StatusNotFound)
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{TagName: "deleted-tag", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: &data.GraphqlRepoData{},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, `Tag "deleted-tag" no longer resolves to a commit, so its released source code could not be checked directly; manual review is required`, message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("rate limited tag lookup needs review, does not fall back to default-branch evidence", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusForbidden, "", "")
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{TagName: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, `Could not check the released source code at tag "v1.0.0" for a license: the request was denied (rate limited or insufficient permission). Review the released assets for license coverage`, message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("generic tag lookup failure needs review, does not fall back to default-branch evidence", func(t *testing.T) {
+		// Regression guard: a tag-level lookup failure must never fall
+		// through to a Passed verdict on (potentially stale) default-branch
+		// evidence, whether the failure is a 403 or anything else — #70
+		// exists to catch exactly the case where HEAD still looks licensed
+		// but the tag does not.
+		withLicenseEndpoint(t, http.StatusInternalServerError, "", "")
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{TagName: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, `Could not check the released source code at tag "v1.0.0" for a license: the request could not be completed. Review the released assets for license coverage`, message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("generic tag lookup failure with an attached license asset still needs review, not a corroborated pass", func(t *testing.T) {
+		withLicenseEndpoint(t, http.StatusInternalServerError, "", "")
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{
+				TagName:     "v1.0.0",
+				PublishedAt: "2026-01-01T00:00:00Z",
+				Assets:      []data.ReleaseAsset{{Name: "LICENSE.txt"}},
+			}),
+			GraphqlRepoData: &data.GraphqlRepoData{},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, `Could not check the released source code at tag "v1.0.0" for a license (the request could not be completed); release "v1.0.0" attaches standalone license file(s) as assets (LICENSE.txt), but that could not be confirmed either, so manual review is required`, message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("release without a tag name falls back to default-branch license", func(t *testing.T) {
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{Name: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: stubGraphqlRepo("https://api.github.com/licenses/mit"),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Passed, result)
+		assert.Equal(t, "A license was found on the default branch; the released source code could not be checked directly, so this is default-branch evidence only", message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("release without a tag name falls back to unclassified root license file", func(t *testing.T) {
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{Name: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: stubGraphqlRepoWithTree("", treeEntry{name: "LICENSE"}),
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Passed, result)
+		assert.Equal(t, `License file "LICENSE" found in the repository root; the released source code could not be checked directly, so this is default-branch evidence only`, message)
+		assert.Equal(t, gemara.Low, confidence)
+	})
+
+	t.Run("release without a tag name and no license evidence anywhere fails", func(t *testing.T) {
+		payload := data.Payload{
+			RestData:        restDataWithReleases(data.ReleaseData{Name: "v1.0.0", PublishedAt: "2026-01-01T00:00:00Z"}),
+			GraphqlRepoData: &data.GraphqlRepoData{},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.Failed, result)
+		assert.Equal(t, "License was not found in a well known location via the GitHub API", message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
+
+	t.Run("release without a tag name but with an attached license asset needs review", func(t *testing.T) {
+		payload := data.Payload{
+			RestData: restDataWithReleases(data.ReleaseData{
+				Name:        "v1.0.0",
+				PublishedAt: "2026-01-01T00:00:00Z",
+				Assets:      []data.ReleaseAsset{{Name: "LICENSE.txt"}},
+			}),
+			GraphqlRepoData: &data.GraphqlRepoData{},
+		}
+		result, message, confidence := ReleasesLicensed(payload)
+		assert.Equal(t, gemara.NeedsReview, result)
+		assert.Equal(t, `Release "v1.0.0" attaches standalone license file(s) as release assets (LICENSE.txt); the released source code could not be checked directly to confirm they match, so manual review is required`, message)
+		assert.Equal(t, gemara.Medium, confidence)
+	})
 }
 
 func TestGetLicenseList(t *testing.T) {
