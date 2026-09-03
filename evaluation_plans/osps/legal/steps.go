@@ -189,8 +189,11 @@ func releaseLabel(release data.ReleaseData) string {
 //     downgrades a tag-level Pass or Fail, and only tips an otherwise
 //     inconclusive result toward NeedsReview rather than Failed.
 //
-// Default-branch evidence is used only as a lower-confidence fallback when the
-// tag-level lookup is unavailable.
+// Default-branch evidence is used only as a lower-confidence fallback when
+// there is no tag name to check directly. A tag-level lookup that fails
+// outright (rather than resolving to found/not-found) is not treated as
+// "unavailable" in that sense — see the default case below — because #70's
+// whole premise is that HEAD can look licensed while the tag is not.
 func ReleasesLicensed(payload data.Payload) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
 	if payload.RestData == nil {
 		return gemara.NeedsReview, "Release data is unavailable; review the released assets for license coverage", gemara.Low
@@ -218,7 +221,7 @@ func ReleasesLicensed(payload data.Payload) (result gemara.Result, message strin
 			// longer resolves to a commit at all (deleted or re-pointed after
 			// the release was published), so the ref's resolvability is
 			// checked before treating this as a real absence.
-			exists, refErr := payload.RefExists(latest.TagName)
+			exists, refErr := payload.RestData.RefExists(latest.TagName)
 			switch {
 			case refErr != nil:
 				return gemara.NeedsReview, fmt.Sprintf("Could not confirm tag %q still resolves to a commit; review the released source code for license coverage", latest.TagName), gemara.Low
@@ -234,12 +237,30 @@ func ReleasesLicensed(payload data.Payload) (result gemara.Result, message strin
 				return gemara.Failed, fmt.Sprintf("A license exists on the default branch, but none was found in the released source code at tag %q", latest.TagName), gemara.Medium
 			}
 			return gemara.Failed, fmt.Sprintf("No license was found in the released source code at tag %q", latest.TagName), gemara.Medium
-		case errors.Is(err, data.ErrRateLimited):
-			return gemara.NeedsReview, fmt.Sprintf("Could not check the released source code at tag %q for a license: the request was rate limited. Review the released assets for license coverage", latest.TagName), gemara.Low
 		default:
+			// Any failure other than "checked and found nothing" — a network
+			// error, a rate-limited/permission-denied 403, a 5xx from GitHub —
+			// means the released tree could not be checked directly at all.
+			// #70 exists specifically to catch a tag whose license was
+			// tampered with or removed while HEAD still looks licensed, so
+			// falling back to HEAD evidence here would silently defeat that
+			// check exactly when it matters most (e.g. mid rate-limited bulk
+			// scan). This gets the same disposition as a failed /releases
+			// fetch: NeedsReview, never a fallback Pass.
 			if payload.Config != nil && payload.Config.Logger != nil {
-				payload.Config.Logger.Warn(fmt.Sprintf("could not fetch license at release tag %q, falling back to default-branch evidence: %s", latest.TagName, err.Error()))
+				payload.Config.Logger.Warn(fmt.Sprintf("could not check the released source code at tag %q for a license: %s", latest.TagName, err.Error()))
 			}
+			detail := "the request could not be completed"
+			if errors.Is(err, data.ErrRateLimited) {
+				// 403 covers both rate-limit exhaustion and a token that
+				// simply lacks permission; the disposition is the same
+				// either way, so the wording doesn't overclaim which one it was.
+				detail = "the request was denied (rate limited or insufficient permission)"
+			}
+			if len(assets) > 0 {
+				return gemara.NeedsReview, fmt.Sprintf("Could not check the released source code at tag %q for a license (%s); release %q attaches standalone license file(s) as assets (%s), but that could not be confirmed either, so manual review is required", latest.TagName, detail, releaseLabel(latest), strings.Join(assets, ", ")), gemara.Low
+			}
+			return gemara.NeedsReview, fmt.Sprintf("Could not check the released source code at tag %q for a license: %s. Review the released assets for license coverage", latest.TagName, detail), gemara.Low
 		}
 	}
 
@@ -247,9 +268,10 @@ func ReleasesLicensed(payload data.Payload) (result gemara.Result, message strin
 		return gemara.NeedsReview, fmt.Sprintf("Release %q attaches standalone license file(s) as release assets (%s); the released source code could not be checked directly to confirm they match, so manual review is required", releaseLabel(latest), strings.Join(assets, ", ")), gemara.Medium
 	}
 
-	// Fallback: the released tree could not be checked directly (no tag name,
-	// or the tag-level lookup failed), so the default branch stands in as a
-	// weaker proxy for what the release archives contain.
+	// Fallback: the release has no tag name, so there is no ref to check
+	// directly, and the default branch stands in as a weaker proxy for what
+	// the release archives contain. A tag-level lookup failure no longer
+	// reaches this point — see the default case above.
 	if payload.GraphqlRepoData != nil && payload.Repository.LicenseInfo.Url != "" {
 		return gemara.Passed, "A license was found on the default branch; the released source code could not be checked directly, so this is default-branch evidence only", gemara.Medium
 	}
