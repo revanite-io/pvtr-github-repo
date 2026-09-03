@@ -579,3 +579,229 @@ func TestGetWorkflowPermissionsInaccessibleLeavesUnobserved(t *testing.T) {
 	require.NoError(t, rest.getWorkflowPermissions(), "a 403 from the admin-only permissions endpoints is an expected absence, not a setup failure")
 	assert.False(t, rest.WorkflowPermissionsObserved, "insufficient token permissions must leave the observed flag false so the workflow-file heuristic applies")
 }
+
+// TestSetupPropagatesDomainErrors locks in the behavior #42 exists to add:
+// a real (non-expected-absence) failure in one data domain must surface in
+// Setup's returned error, named by domain, without being swallowed and
+// without stopping the other domains from completing successfully.
+func TestSetupPropagatesDomainErrors(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/test-owner/test-repo/actions/permissions":
+			// The domain this test injects a real failure into.
+			http.Error(w, `{"message": "internal error"}`, http.StatusInternalServerError)
+		case r.URL.Path == "/repos/test-owner/test-repo/private-vulnerability-reporting":
+			// Expected absence: must not appear in the joined error.
+			http.Error(w, `{"message": "Not Found"}`, http.StatusNotFound)
+		case r.URL.Path == "/repos/test-owner/test-repo/releases":
+			_, _ = w.Write([]byte(`[]`))
+		case r.URL.Path == "/repos/test-owner/test-repo/security-advisories":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			http.Error(w, `{"message": "Not Found"}`, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	mockClient := mock.NewMockedHTTPClient(
+		mock.WithRequestMatch(mock.GetReposContentsByOwnerByRepoByPath, []*github.RepositoryContent{}),
+	)
+	ghClient := github.NewClient(mockClient)
+
+	rest := &RestData{
+		owner:      "test-owner",
+		repo:       "test-repo",
+		ghClient:   ghClient,
+		HttpClient: server.Client(),
+		Config:     &config.Config{Logger: hclog.NewNullLogger()},
+	}
+
+	err := rest.Setup()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "workflow permissions", "the joined error must name the domain that actually failed")
+	assert.NotContains(t, err.Error(), "private vulnerability reporting", "an expected absence (404) must not be reported as a failure")
+	assert.NotContains(t, err.Error(), "releases", "a domain that succeeded must not appear in the joined error")
+	assert.NotContains(t, err.Error(), "security advisories", "a domain that succeeded must not appear in the joined error")
+
+	assert.False(t, rest.WorkflowPermissionsObserved, "the failed domain must leave its data unobserved")
+	assert.False(t, rest.PrivateVulnReporting.Known, "an expected absence still leaves Known false")
+	assert.NoError(t, rest.ReleasesError, "a domain that succeeded must not carry an error")
+}
+
+func TestLicenseAtRef(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	t.Run("license found at ref", func(t *testing.T) {
+		var gotRef, gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			gotRef = r.URL.Query().Get("ref")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"path": "LICENSE", "license": {"spdx_id": "MIT"}}`))
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{owner: "test-owner", repo: "test-repo", HttpClient: server.Client()}
+		license, found, err := rest.LicenseAtRef("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, RefLicense{SpdxId: "MIT", Path: "LICENSE"}, license)
+		assert.Equal(t, "/repos/test-owner/test-repo/license", gotPath)
+		assert.Equal(t, "v1.0.0", gotRef)
+	})
+
+	t.Run("ref is query-escaped", func(t *testing.T) {
+		var gotRawQuery string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotRawQuery = r.URL.RawQuery
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"path": "LICENSE", "license": {"spdx_id": "MIT"}}`))
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, _, err := rest.LicenseAtRef("release/v1 beta")
+		require.NoError(t, err)
+		assert.Equal(t, "ref=release%2Fv1+beta", gotRawQuery)
+	})
+
+	t.Run("404 means no license at ref, not an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		license, found, err := rest.LicenseAtRef("v1.0.0")
+		require.NoError(t, err)
+		assert.False(t, found)
+		assert.Equal(t, RefLicense{}, license)
+	})
+
+	t.Run("403 is reported as ErrRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+		assert.False(t, found)
+	})
+
+	t.Run("non-404/403 failure is an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.False(t, found)
+	})
+
+	t.Run("decode failure is an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not-json"))
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, found, err := rest.LicenseAtRef("v1.0.0")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to decode license data")
+		assert.False(t, found)
+	})
+}
+
+func TestGetLicenseAtRefCachesPerRef(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"path": "LICENSE", "license": {"spdx_id": "MIT"}}`))
+	}))
+	defer server.Close()
+	APIBase = server.URL
+
+	payload := Payload{
+		RestData: &RestData{HttpClient: server.Client()},
+		cache:    &payloadCache{},
+	}
+
+	for i := 0; i < 2; i++ {
+		license, found, err := payload.GetLicenseAtRef("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, "MIT", license.SpdxId)
+	}
+	assert.Equal(t, 1, calls, "repeated lookups of the same ref must be cached")
+
+	_, _, err := payload.GetLicenseAtRef("v2.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls, "a different ref is a different lookup")
+}
+
+func TestRefExists(t *testing.T) {
+	oldAPIBase := APIBase
+	defer func() { APIBase = oldAPIBase }()
+
+	t.Run("ref resolves", func(t *testing.T) {
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{owner: "test-owner", repo: "test-repo", HttpClient: server.Client()}
+		exists, err := rest.RefExists("v1.0.0")
+		require.NoError(t, err)
+		assert.True(t, exists)
+		assert.Equal(t, "/repos/test-owner/test-repo/commits/v1.0.0", gotPath)
+	})
+
+	t.Run("ref does not resolve", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		exists, err := rest.RefExists("deleted-tag")
+		require.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("403 is reported as ErrRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		APIBase = server.URL
+
+		rest := &RestData{HttpClient: server.Client()}
+		_, err := rest.RefExists("v1.0.0")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+	})
+}

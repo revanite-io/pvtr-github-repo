@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 // PrivateVulnReporting captures the repository's private-vulnerability-reporting
@@ -50,10 +49,11 @@ type privateVulnReportingResponse struct {
 }
 
 // getPrivateVulnReporting queries the private-vulnerability-reporting endpoint
-// and records the result on RestData. Any failure — including the 404 GitHub
-// returns when the setting is unavailable for a repository — leaves Known false
-// so callers treat the status as unknown rather than a confirmed "disabled".
-// The 404 is non-transient (see withRetry), so it costs a single round trip.
+// and records the result on RestData. The 404 GitHub returns when the setting
+// is unavailable for a repository is an expected absence, not a failure, and
+// leaves Known false so callers treat the status as unknown rather than a
+// confirmed "disabled". The 404 is non-transient (see withRetry), so it costs
+// a single round trip.
 func (r *RestData) getPrivateVulnReporting() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/private-vulnerability-reporting", APIBase, r.owner, r.repo)
 	body, err := r.MakeApiCall(endpoint, true)
@@ -84,10 +84,12 @@ func (r *RestData) loadSecurityPolicy() error {
 
 	file, err := r.getSourceFile(r.owner, r.repo, path)
 	if err != nil {
+		r.logger().Error(fmt.Sprintf("failed to retrieve SECURITY.md content: %s", err.Error()))
 		return fmt.Errorf("failed to retrieve SECURITY.md content: %w", err)
 	}
 	content, err := file.GetContent()
 	if err != nil {
+		r.logger().Error(fmt.Sprintf("failed to decode SECURITY.md content: %s", err.Error()))
 		return fmt.Errorf("failed to decode SECURITY.md content: %w", err)
 	}
 	r.SecurityPolicy.Content = content
@@ -106,12 +108,12 @@ type securityAdvisory struct {
 // GitHub Security Advisory (GHSA) is public evidence that the project publishes
 // data about discovered vulnerabilities (OSPS-VM-04.01).
 //
-// Any failure — including the 403/404 GitHub returns when the advisory database
-// is unavailable for a repository or the token lacks access — leaves Known false
-// so callers treat the status as unknown rather than a confirmed "none
-// published". The endpoint is paginated; a project with published advisories
-// needs only one to satisfy the check, so a single (first-page) request is
-// sufficient to answer "are there any?".
+// The 403/404 GitHub returns when the advisory database is unavailable for a
+// repository or the token lacks access is an expected absence, not a
+// failure, and leaves Known false so callers treat the status as unknown
+// rather than a confirmed "none published". The endpoint is paginated; a
+// project with published advisories needs only one to satisfy the check, so
+// a single (first-page) request is sufficient to answer "are there any?".
 func (r *RestData) getSecurityAdvisories() error {
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/security-advisories?state=published&per_page=100", APIBase, r.owner, r.repo)
 	body, err := r.MakeApiCall(endpoint, true)
@@ -135,22 +137,4 @@ func (r *RestData) getSecurityAdvisories() error {
 	// total may be higher, so the count is reported as a lower bound.
 	r.SecurityAdvisories = SecurityAdvisories{Count: count, Known: true, CountIsLowerBound: len(parsed) >= 100}
 	return nil
-}
-
-// isExpectedAbsence reports whether err is the API answering that an optional
-// feature is not available for this repository (rather than the request
-// failing). MakeApiCall formats non-200 responses as "unexpected response:
-// <code> <text>", so matching the status text inside the error message is
-// sufficient to classify the response.
-func isExpectedAbsence(err error, codes ...int) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	for _, code := range codes {
-		if strings.Contains(msg, fmt.Sprintf("%d", code)) {
-			return true
-		}
-	}
-	return false
 }
