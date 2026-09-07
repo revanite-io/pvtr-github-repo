@@ -6,36 +6,34 @@ import (
 )
 
 // TypedStep is the signature every step in this plugin uses: it receives a
-// fully-typed data.Payload instead of an untyped any. The SDK adapts it to
-// gemara.AssessmentStep at registration time (see
-// pluginkit.AddEvaluationSuiteTypedForAllCatalogs in main.go), performing the
-// payload type assertion that used to live in a per-step VerifyPayload guard.
+// fully-typed data.Payload instead of an untyped any. The SDK's typed
+// registration helpers (pluginkit.AddEvaluationSuiteTyped and
+// ...TypedForAllCatalogs) adapt it to gemara.AssessmentStep and perform the
+// payload type assertion once, so steps need no payload guard of their own.
 //
-// Registration must go through the SDK's typed helper rather than a local
-// adapter: adapting here would capture every step into one closure literal,
-// collapsing all steps to a single symbol and erasing their names from the
-// benchmark report and evaluation log.
+// Always register through those helpers. Wrapping a TypedStep in a local
+// closure erases its function name from the benchmark report and evaluation
+// log; see pluginkit.FuncName for why.
 type TypedStep func(data.Payload) (gemara.Result, string, gemara.ConfidenceLevel)
 
-// AllSteps merges all step maps into a single map for registration with the SDK.
-// Assessment IDs are unique across catalogs (e.g., OSPS-* vs CRA-*), so the
-// catalog YAML naturally filters to the correct subset at evaluation time.
-// To add a new catalog family, define its step map and include it here.
+// AllSteps merges every step map in this package into one map, keyed by
+// assessment ID, for registration against all loaded catalogs.
 //
-// A single shared map is safe across catalog versions because the OSPS
-// maintenance policy (https://github.com/ossf/security-baseline/blob/main/docs/maintenance.md#identifiers)
-// guarantees that substantive changes to a control result in a new identifier.
-// This means implementations for a given assessment ID will not diverge between
-// versions, so all versions can share the same step function for the same key.
+// One merged map is safe to register against every catalog: the SDK looks up
+// steps by the requirement IDs a catalog declares, so IDs it does not declare
+// are never run. It is also safe across OSPS Baseline versions, because the
+// maintenance policy
+// (https://github.com/ossf/security-baseline/blob/main/docs/maintenance.md#identifiers)
+// gives a control a new identifier whenever its meaning changes substantially,
+// so one implementation per ID holds for every version.
 //
-// Every family merged here must consume data.Payload; a family taking a
-// different payload type needs its own registration call.
+// Every map merged here must take data.Payload; steps that consume a different
+// payload type need their own registration call.
 func AllSteps() map[string][]TypedStep {
 	merged := make(map[string][]TypedStep, len(OSPS))
 	for id, steps := range OSPS {
 		merged[id] = append(merged[id], steps...)
 	}
-	// Add additional catalog step maps here, e.g.:
-	// for id, steps := range CRA { merged[id] = append(merged[id], steps...) }
+	// Merge additional step maps here.
 	return merged
 }
